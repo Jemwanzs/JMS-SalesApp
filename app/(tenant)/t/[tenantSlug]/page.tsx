@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { signOutAction } from "@/features/auth/actions/sign-out";
+import { SalesVisibilityBadge } from "@/features/sales/components/sales-visibility-badge";
 import { Button } from "@/components/ui/button";
 
 /**
@@ -31,6 +32,9 @@ export default async function TenantHomePage({
         the rest of the onboarding wizard land in the next development
         phases.
       </p>
+      <div className="mt-4">
+        <SalesVisibilityBadge />
+      </div>
       <form action={signOutAction} className="mt-6">
         <Button type="submit" variant="outline">
           Log out

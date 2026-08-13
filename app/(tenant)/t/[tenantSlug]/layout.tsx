@@ -1,6 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 
 import { Logo } from "@/components/shared/logo";
+import { TenantProvider } from "@/hooks/tenant-context";
+import { getMyPermissions } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -10,6 +12,11 @@ import { createClient } from "@/lib/supabase/server";
  * docs/02-system-architecture.md) — RLS already prevents any data leakage
  * even if this check were skipped, but failing fast here gives a much
  * better UX than a page full of empty, RLS-filtered queries.
+ *
+ * Also where the signed-in user's permission set is resolved once
+ * (getMyPermissions, backed by the same SQL function RLS policies use —
+ * see docs/06-roles-permissions.md) and handed to TenantProvider so
+ * usePermission()/useTenant() work in every client component underneath.
  *
  * This is a minimal placeholder shell (no bottom nav, no PWA chrome yet —
  * that's Phase 1f) so Phase 1c's sign-up -> tenant -> login loop has
@@ -54,14 +61,25 @@ export default async function TenantLayout({
     redirect("/no-tenant");
   }
 
+  const permissions = await getMyPermissions(tenant.id);
+
   return (
-    <div className="flex min-h-screen w-full justify-center bg-muted/30">
-      <div className="flex w-full max-w-[430px] flex-col bg-background">
-        <div className="border-b px-6 py-4">
-          <Logo />
+    <TenantProvider
+      value={{
+        tenantId: tenant.id,
+        tenantSlug: tenant.slug,
+        tenantName: tenant.name,
+        permissions,
+      }}
+    >
+      <div className="flex min-h-screen w-full justify-center bg-muted/30">
+        <div className="flex w-full max-w-[430px] flex-col bg-background">
+          <div className="border-b px-6 py-4">
+            <Logo />
+          </div>
+          {children}
         </div>
-        {children}
       </div>
-    </div>
+    </TenantProvider>
   );
 }
