@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 
+import { Logo } from "@/components/shared/logo";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -56,6 +57,9 @@ export default async function TenantLayout({
   return (
     <div className="flex min-h-screen w-full justify-center bg-muted/30">
       <div className="flex w-full max-w-[430px] flex-col bg-background">
+        <div className="border-b px-6 py-4">
+          <Logo />
+        </div>
         {children}
       </div>
     </div>
