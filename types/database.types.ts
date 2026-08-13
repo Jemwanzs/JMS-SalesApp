@@ -48,6 +48,7 @@ export interface Database {
           logo_url: string | null;
           business_type: string | null;
           website: string | null;
+          country: string | null;
           anniversary_date: string | null;
           billing_owner_profile_id: string | null;
           created_at: string;
