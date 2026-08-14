@@ -15,6 +15,11 @@ The core operating interface never stretches into a traditional desktop dashboar
 
 Minimal, fast, mobile-native, touch-friendly, professional, consistent, low cognitive load. Generous spacing, large tap targets, bottom sheets, cards, skeleton loaders, minimal long forms, sticky CTAs, meaningful empty states (spec §118–120).
 
+## Typography & colour
+
+- **Typeface**: Google Outfit, self-hosted via `next/font/google` (downloaded at build time, served from the app's own origin — no runtime font-CDN request, no CSP concerns). Set as `--font-sans` in `app/layout.tsx`, consumed globally through `app/globals.css`'s `@theme inline` mapping. Geist Mono remains the monospace face for tabular/numeric contexts (sale amounts, timestamps).
+- **Background**: warm cream (`#FAF3E6` light / `#1B1611` dark) is the default page background everywhere (`--background` in `app/globals.css`), with white (`#FFFFFF` light / `#242019` dark) card/popover surfaces lifted on top of it. The desktop letterbox surround (outside the mobile-width column, see above) uses a deeper warm neutral (`--muted`, `#EFE6D3` light / `#2A241C` dark) rather than a cold grey, so it reads as one coherent warm palette rather than two clashing tones. Everything else (text, borders, the brand green accent from the logo) stays neutral/unchanged — this was a deliberately scoped background-only pass, not a full re-theme.
+
 ## Primary navigation (bottom nav, persistent)
 
 ```

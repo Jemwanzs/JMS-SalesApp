@@ -9,7 +9,7 @@ import { Logo } from "@/components/shared/logo";
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen w-full justify-center bg-muted/30">
-      <div className="flex w-full max-w-[430px] flex-col px-6 py-12">
+      <div className="flex w-full max-w-[430px] flex-col bg-background px-6 py-12">
         <Logo className="mb-10" />
         <div className="flex flex-1 flex-col justify-center">{children}</div>
       </div>
