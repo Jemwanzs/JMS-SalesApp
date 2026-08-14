@@ -21,10 +21,56 @@ import type { Database } from "@/types/database.types";
 export class PlatformAdminService {
   constructor(private readonly supabase: SupabaseClient<Database>) {}
 
-  async isPlatformAdmin(_profileId: string): Promise<boolean> {
-    throw new Error(
-      "PlatformAdminService.isPlatformAdmin: not yet implemented (Phase 1g)"
-    );
+  async isPlatformAdmin(profileId: string): Promise<boolean> {
+    const { data, error } = await this.supabase
+      .from("platform_admins")
+      .select("id")
+      .eq("profile_id", profileId)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`PlatformAdminService.isPlatformAdmin: ${error.message}`);
+    }
+
+    return Boolean(data);
+  }
+
+  /**
+   * Foundation-level KPIs only (tenant/user counts) — the full Phase 7
+   * dashboard (revenue, renewals, failed payments, usage analytics) needs
+   * the billing tables Phase 6 introduces. Real counts now rather than
+   * placeholders, since tenants/tenant_memberships already exist for real.
+   */
+  async getDashboardKpis(): Promise<{
+    totalTenants: number;
+    activeTenants: number;
+    suspendedTenants: number;
+    totalUsers: number;
+  }> {
+    const [
+      { count: totalTenants },
+      { count: activeTenants },
+      { count: suspendedTenants },
+      { count: totalUsers },
+    ] = await Promise.all([
+      this.supabase.from("tenants").select("id", { count: "exact", head: true }),
+      this.supabase
+        .from("tenants")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "active"),
+      this.supabase
+        .from("tenants")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "suspended"),
+      this.supabase.from("profiles").select("id", { count: "exact", head: true }),
+    ]);
+
+    return {
+      totalTenants: totalTenants ?? 0,
+      activeTenants: activeTenants ?? 0,
+      suspendedTenants: suspendedTenants ?? 0,
+      totalUsers: totalUsers ?? 0,
+    };
   }
 
   async startImpersonation(_input: {

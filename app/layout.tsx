@@ -3,6 +3,7 @@ import { Geist_Mono, Outfit } from "next/font/google";
 import "./globals.css";
 
 import { ServiceWorkerRegistration } from "@/components/shared/service-worker-registration";
+import { Toaster } from "@/components/ui/sonner";
 
 // Self-hosted via next/font (downloaded at build time, served from our
 // own origin) -- no external font CDN request at runtime. Variable name
@@ -40,6 +41,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full flex flex-col">
         {children}
+        <Toaster />
         <ServiceWorkerRegistration />
       </body>
     </html>

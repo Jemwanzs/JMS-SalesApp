@@ -13,6 +13,10 @@
 
 export type TenantStatus = "active" | "suspended" | "cancelled";
 export type MembershipStatus = "active" | "invited" | "disabled";
+export type PlatformAdminRole = "super_admin" | "support" | "billing_ops";
+export type ProductStatus = "active" | "inactive" | "archived";
+export type BusinessDayStatus = "scheduled" | "open" | "closing" | "closed" | "reopened";
+export type SaleStatus = "open" | "locked" | "corrected" | "voided";
 
 export interface Database {
   public: {
@@ -189,6 +193,125 @@ export interface Database {
         Update: Partial<
           Database["public"]["Tables"]["user_role_assignments"]["Row"]
         >;
+        Relationships: [];
+      };
+      platform_admins: {
+        Row: {
+          id: string;
+          profile_id: string;
+          role: PlatformAdminRole;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["platform_admins"]["Row"]> & {
+          profile_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["platform_admins"]["Row"]>;
+        Relationships: [];
+      };
+      products: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          location_id: string | null;
+          sku: string | null;
+          name: string;
+          description: string | null;
+          expected_price: number | null;
+          show_expected_price: boolean;
+          image_url: string | null;
+          display_order: number;
+          status: ProductStatus;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["products"]["Row"]> & {
+          tenant_id: string;
+          name: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["products"]["Row"]>;
+        Relationships: [];
+      };
+      product_images: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          product_id: string;
+          storage_path: string;
+          width: number | null;
+          height: number | null;
+          is_primary: boolean;
+          created_at: string;
+        };
+        Insert: Partial<
+          Database["public"]["Tables"]["product_images"]["Row"]
+        > & { tenant_id: string; product_id: string; storage_path: string };
+        Update: Partial<Database["public"]["Tables"]["product_images"]["Row"]>;
+        Relationships: [];
+      };
+      business_days: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          location_id: string;
+          business_date: string;
+          status: BusinessDayStatus;
+          scheduled_open_time: string | null;
+          scheduled_close_time: string | null;
+          opened_at: string | null;
+          opened_by: string | null;
+          closed_at: string | null;
+          closed_by: string | null;
+          opening_reason: string | null;
+          closing_reason: string | null;
+          reopened_at: string | null;
+          reopened_by: string | null;
+          reopen_expires_at: string | null;
+          aggregates: Record<string, unknown>;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<
+          Database["public"]["Tables"]["business_days"]["Row"]
+        > & { tenant_id: string; location_id: string; business_date: string };
+        Update: Partial<Database["public"]["Tables"]["business_days"]["Row"]>;
+        Relationships: [];
+      };
+      sales: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          location_id: string;
+          business_day_id: string;
+          product_id: string;
+          sale_number: string | null;
+          barcode_reference: string | null;
+          product_name_snapshot: string;
+          product_image_snapshot: string | null;
+          expected_price_snapshot: number | null;
+          actual_amount: number;
+          quantity: number | null;
+          notes: string | null;
+          recorded_by: string;
+          sale_date: string;
+          sale_time: string;
+          status: SaleStatus;
+          idempotency_key: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["sales"]["Row"]> & {
+          tenant_id: string;
+          location_id: string;
+          business_day_id: string;
+          product_id: string;
+          product_name_snapshot: string;
+          actual_amount: number;
+          recorded_by: string;
+          sale_date: string;
+          idempotency_key: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["sales"]["Row"]>;
         Relationships: [];
       };
     };
