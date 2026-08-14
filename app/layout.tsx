@@ -1,6 +1,8 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist_Mono, Outfit } from "next/font/google";
 import "./globals.css";
+
+import { ServiceWorkerRegistration } from "@/components/shared/service-worker-registration";
 
 // Self-hosted via next/font (downloaded at build time, served from our
 // own origin) -- no external font CDN request at runtime. Variable name
@@ -24,13 +26,22 @@ export const metadata: Metadata = {
     "Mobile-first, multi-tenant sales records & analytics platform.",
 };
 
+export const viewport: Viewport = {
+  themeColor: "#10786A",
+  width: "device-width",
+  initialScale: 1,
+};
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
       className={`${outfit.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+        <ServiceWorkerRegistration />
+      </body>
     </html>
   );
 }

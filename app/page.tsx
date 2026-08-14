@@ -22,5 +22,5 @@ export default async function RootPage() {
 
   const slug = await resolveActiveTenantSlug(supabase, user.id);
 
-  redirect(slug ? `/t/${slug}` : "/no-tenant");
+  redirect(slug ? `/t/${slug}/sales` : "/no-tenant");
 }

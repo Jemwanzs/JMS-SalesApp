@@ -18,9 +18,10 @@ import { createClient } from "@/lib/supabase/server";
  * see docs/06-roles-permissions.md) and handed to TenantProvider so
  * usePermission()/useTenant() work in every client component underneath.
  *
- * This is a minimal placeholder shell (no bottom nav, no PWA chrome yet —
- * that's Phase 1f) so Phase 1c's sign-up -> tenant -> login loop has
- * somewhere real to land and be verified end-to-end.
+ * The header (logo) lives here since it's constant across every
+ * dashboard route; the persistent bottom nav lives one level down in
+ * (dashboard)/layout.tsx, since /t/[tenantSlug] itself is never
+ * rendered directly (it redirects into /sales — see page.tsx).
  */
 export default async function TenantLayout({
   children,

@@ -41,5 +41,5 @@ export async function signInAction(
 
   const slug = await resolveActiveTenantSlug(supabase, userId);
 
-  redirect(slug ? `/t/${slug}` : "/no-tenant");
+  redirect(slug ? `/t/${slug}/sales` : "/no-tenant");
 }
