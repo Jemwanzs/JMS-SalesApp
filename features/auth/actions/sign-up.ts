@@ -78,5 +78,5 @@ export async function signUpAction(
     redirect("/verify-email");
   }
 
-  redirect(`/t/${tenant.slug}/sales`);
+  redirect(`/t/${tenant.slug}/onboarding`);
 }

@@ -116,6 +116,22 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["locations"]["Row"]>;
         Relationships: [];
       };
+      location_hours: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          location_id: string;
+          day_of_week: number;
+          open_time: string | null;
+          close_time: string | null;
+          closed_all_day: boolean;
+        };
+        Insert: Partial<
+          Database["public"]["Tables"]["location_hours"]["Row"]
+        > & { tenant_id: string; location_id: string; day_of_week: number };
+        Update: Partial<Database["public"]["Tables"]["location_hours"]["Row"]>;
+        Relationships: [];
+      };
       permissions: {
         Row: {
           id: string;

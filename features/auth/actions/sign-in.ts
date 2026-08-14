@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 
 import { AuthService } from "@/services/AuthService";
 import { createClient } from "@/lib/supabase/server";
-import { resolveActiveTenantSlug } from "@/lib/tenant/resolve-active-tenant";
+import { resolveActiveTenant } from "@/lib/tenant/resolve-active-tenant";
 import { firstIssuePerField } from "@/lib/utils/form-errors";
 import { loginSchema, type LoginInput } from "@/validations/auth";
 
@@ -39,7 +39,15 @@ export async function signInAction(
     return { error: err instanceof Error ? err.message : "Sign in failed" };
   }
 
-  const slug = await resolveActiveTenantSlug(supabase, userId);
+  const tenant = await resolveActiveTenant(supabase, userId);
 
-  redirect(slug ? `/t/${slug}/sales` : "/no-tenant");
+  if (!tenant) {
+    redirect("/no-tenant");
+  }
+
+  redirect(
+    tenant.needsOnboarding
+      ? `/t/${tenant.slug}/onboarding`
+      : `/t/${tenant.slug}/sales`
+  );
 }

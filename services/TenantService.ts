@@ -112,6 +112,125 @@ export class TenantService {
     throw new Error("TenantService.getSetting: not yet implemented (Phase 1d)");
   }
 
+  /**
+   * Onboarding wizard Step 1 (spec S10). Runs on the RLS-respecting
+   * client — unlike createTenant's bootstrap, the caller here already
+   * holds settings.manage via their Tenant Administrator role, so no
+   * service-role escape hatch is needed.
+   */
+  async updateBusinessDetails(
+    tenantId: string,
+    input: {
+      businessType: string;
+      website: string | null;
+      anniversaryDate: string | null;
+      currency: string;
+      timezone: string;
+    }
+  ): Promise<void> {
+    const { error } = await this.supabase
+      .from("tenants")
+      .update({
+        business_type: input.businessType,
+        website: input.website,
+        anniversary_date: input.anniversaryDate,
+        currency: input.currency,
+        timezone: input.timezone,
+      })
+      .eq("id", tenantId);
+
+    if (error) {
+      throw new Error(
+        `TenantService.updateBusinessDetails: ${error.message}`
+      );
+    }
+  }
+
+  /**
+   * Onboarding wizard Step 2 (spec S10): creates the tenant's first
+   * location if one doesn't exist yet, or updates it if it does — Phase
+   * 1 is single-location per tenant in practice even though the schema
+   * supports many (docs/04-multi-tenancy.md), so "the primary location"
+   * is a safe simplification for the wizard specifically.
+   */
+  async upsertPrimaryLocation(
+    tenantId: string,
+    input: { name: string; address: string }
+  ): Promise<{ locationId: string }> {
+    const { data: existing } = await this.supabase
+      .from("locations")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (existing) {
+      const { error } = await this.supabase
+        .from("locations")
+        .update({ name: input.name, address: input.address })
+        .eq("id", existing.id);
+
+      if (error) {
+        throw new Error(`TenantService.upsertPrimaryLocation: ${error.message}`);
+      }
+
+      return { locationId: existing.id };
+    }
+
+    const { data: created, error } = await this.supabase
+      .from("locations")
+      .insert({ tenant_id: tenantId, name: input.name, address: input.address })
+      .select("id")
+      .single();
+
+    if (error || !created) {
+      throw new Error(
+        `TenantService.upsertPrimaryLocation: ${error?.message}`
+      );
+    }
+
+    return { locationId: created.id };
+  }
+
+  /** Onboarding wizard Step 2's hours grid — replaces all 7 rows. */
+  async setLocationHours(
+    tenantId: string,
+    locationId: string,
+    hours: {
+      dayOfWeek: number;
+      openTime: string;
+      closeTime: string;
+      closedAllDay: boolean;
+    }[]
+  ): Promise<void> {
+    const { error: deleteError } = await this.supabase
+      .from("location_hours")
+      .delete()
+      .eq("location_id", locationId);
+
+    if (deleteError) {
+      throw new Error(`TenantService.setLocationHours: ${deleteError.message}`);
+    }
+
+    const { error: insertError } = await this.supabase
+      .from("location_hours")
+      .insert(
+        hours.map((h) => ({
+          tenant_id: tenantId,
+          location_id: locationId,
+          day_of_week: h.dayOfWeek,
+          open_time: h.closedAllDay ? null : h.openTime,
+          close_time: h.closedAllDay ? null : h.closeTime,
+          closed_all_day: h.closedAllDay,
+        }))
+      );
+
+    if (insertError) {
+      throw new Error(`TenantService.setLocationHours: ${insertError.message}`);
+    }
+  }
+
   private async generateUniqueSlug(name: string): Promise<string> {
     const base = slugify(name) || "business";
 
