@@ -42,6 +42,16 @@ export interface AutoRelockResult {
   relocked: boolean;
 }
 
+export type ReportJobStatus = "pending" | "running" | "completed" | "failed";
+
+export interface BusinessDaySweepResult {
+  scheduled: number;
+  opened: number;
+  closed: number;
+  relocked: number;
+  ranAt: string;
+}
+
 export interface Database {
   public: {
     Views: Record<string, never>;
@@ -158,6 +168,25 @@ export interface Database {
           Database["public"]["Tables"]["location_hours"]["Row"]
         > & { tenant_id: string; location_id: string; day_of_week: number };
         Update: Partial<Database["public"]["Tables"]["location_hours"]["Row"]>;
+        Relationships: [];
+      };
+      special_hours: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          location_id: string;
+          date: string;
+          is_closed: boolean;
+          open_time: string | null;
+          close_time: string | null;
+          reason: string | null;
+        };
+        Insert: Partial<Database["public"]["Tables"]["special_hours"]["Row"]> & {
+          tenant_id: string;
+          location_id: string;
+          date: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["special_hours"]["Row"]>;
         Relationships: [];
       };
       permissions: {
@@ -389,6 +418,27 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["sale_corrections"]["Row"]>;
         Relationships: [];
       };
+      report_jobs: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          report_id: string | null;
+          job_type: string;
+          payload: Record<string, unknown>;
+          scheduled_for: string;
+          status: ReportJobStatus;
+          attempts: number;
+          last_error: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["report_jobs"]["Row"]> & {
+          tenant_id: string;
+          job_type: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["report_jobs"]["Row"]>;
+        Relationships: [];
+      };
     };
     Functions: {
       void_sale: {
@@ -416,6 +466,10 @@ export interface Database {
       auto_relock_expired_business_day: {
         Args: { p_business_day_id: string };
         Returns: AutoRelockResult;
+      };
+      run_business_day_sweep: {
+        Args: Record<string, never>;
+        Returns: BusinessDaySweepResult;
       };
       is_tenant_member: {
         Args: { p_tenant_id: string };
