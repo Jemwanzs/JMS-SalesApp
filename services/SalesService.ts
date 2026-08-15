@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { Database } from "@/types/database.types";
+import type { Database, SaleStatus, VoidOrCorrectResult } from "@/types/database.types";
 
 /**
  * SalesService — the highest-risk correctness surface in the app. Owns:
@@ -14,10 +14,13 @@ import type { Database } from "@/types/database.types";
  * actual_amount is always the TOTAL charged, not a unit price — quantity
  * is informational only (docs/08-sales-engine.md's decision log).
  *
- * Edit-window enforcement and VOID/CORRECT/REVERSE corrections are
- * Phase 2e/2g (need the approval engine) — not implemented here, and
- * deliberately not possible via any other path either: sales has no
- * UPDATE/DELETE RLS policy at all yet (migration 0005).
+ * voidSale/correctSale never touch `sales` directly — `sales` still has
+ * NO UPDATE/DELETE RLS policy at all (migration 0005's invariant holds).
+ * Both delegate to the void_sale/correct_sale SECURITY DEFINER Postgres
+ * functions (migration 0006), which enforce permission + edit-window +
+ * approval-routing in one place and are the ONLY code path that can ever
+ * change a sale's status post-insert. REVERSE is not implemented — a
+ * documented future increment, not silently dropped.
  */
 export interface RecordSaleInput {
   tenantId: string;
@@ -38,6 +41,17 @@ export interface RecordedSale {
   actualAmount: number;
   saleTime: string;
   replayed: boolean;
+}
+
+export interface SaleListItem {
+  id: string;
+  saleNumber: string | null;
+  productNameSnapshot: string;
+  actualAmount: number;
+  quantity: number | null;
+  status: SaleStatus;
+  saleTime: string;
+  recordedBy: string;
 }
 
 export class SalesService {
@@ -120,8 +134,78 @@ export class SalesService {
     return { ...toRecordedSale(existing), replayed: true };
   }
 
-  async voidSale(_saleId: string, _reason: string) {
-    throw new Error("SalesService.voidSale: not yet implemented (Phase 2e)");
+  async voidSale(saleId: string, reason: string): Promise<VoidOrCorrectResult> {
+    const { data, error } = await this.supabase.rpc("void_sale", {
+      p_sale_id: saleId,
+      p_reason: reason,
+    });
+
+    if (error || !data) {
+      throw new Error(`SalesService.voidSale: ${error?.message}`);
+    }
+
+    return data;
+  }
+
+  async correctSale(input: {
+    saleId: string;
+    newAmount: number;
+    newQuantity?: number | null;
+    newNotes?: string | null;
+    reason: string;
+  }): Promise<VoidOrCorrectResult> {
+    const { data, error } = await this.supabase.rpc("correct_sale", {
+      p_sale_id: input.saleId,
+      p_new_amount: input.newAmount,
+      p_new_quantity: input.newQuantity ?? null,
+      p_new_notes: input.newNotes ?? null,
+      p_reason: input.reason,
+    });
+
+    if (error || !data) {
+      throw new Error(`SalesService.correctSale: ${error?.message}`);
+    }
+
+    return data;
+  }
+
+  /**
+   * RLS (sales_select, migration 0005) already restricts the returned rows
+   * to "all sales" or "just my own" depending on the caller's
+   * sales.view_all/sales.view_own grants -- no separate filter needed here,
+   * the same query works correctly for either permission level.
+   */
+  async listRecent(
+    tenantId: string,
+    opts: { locationId?: string; limit?: number } = {}
+  ): Promise<SaleListItem[]> {
+    let query = this.supabase
+      .from("sales")
+      .select("id, sale_number, product_name_snapshot, actual_amount, quantity, status, sale_time, recorded_by")
+      .eq("tenant_id", tenantId)
+      .order("sale_time", { ascending: false })
+      .limit(opts.limit ?? 50);
+
+    if (opts.locationId) {
+      query = query.eq("location_id", opts.locationId);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      throw new Error(`SalesService.listRecent: ${error.message}`);
+    }
+
+    return (data ?? []).map((row) => ({
+      id: row.id,
+      saleNumber: row.sale_number,
+      productNameSnapshot: row.product_name_snapshot,
+      actualAmount: row.actual_amount,
+      quantity: row.quantity,
+      status: row.status,
+      saleTime: row.sale_time,
+      recordedBy: row.recorded_by,
+    }));
   }
 }
 

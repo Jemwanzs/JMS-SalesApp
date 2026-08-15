@@ -7,23 +7,29 @@ import {
   LogOut,
   Package,
   Settings,
+  ShieldCheck,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { signOutAction } from "@/features/auth/actions/sign-out";
 import { Button } from "@/components/ui/button";
+import { can } from "@/lib/permissions/can";
+import { createClient } from "@/lib/supabase/server";
 
 /**
  * The "More" menu (spec S12): Products, Sales History, Notifications,
- * Settings, Help, Logout. Products now links to the real page (Phase
- * 2a); the rest are real destinations from later phases (Sales
- * History: 2i, Notifications: 13-notifications.md, Settings: Phase 4)
- * shown as disabled rather than omitted so the full menu shape stays
- * visible.
+ * Settings, Help, Logout. Products (2a) and Sales History (2i, void/
+ * correct actions from 2e) now link to real pages; the rest are real
+ * destinations from later phases (Notifications: 13-notifications.md,
+ * Settings: Phase 4) shown as disabled rather than omitted so the full
+ * menu shape stays visible. Approvals (2g) is appended conditionally,
+ * only for users who actually hold approvals.manage -- unlike the
+ * others it isn't meant to be visible-but-disabled for everyone, since
+ * most users will never have anything to review.
  */
 const MENU_ITEMS: { label: string; icon: LucideIcon; href?: string }[] = [
   { label: "Products", icon: Package, href: "products" },
-  { label: "Sales History", icon: History },
+  { label: "Sales History", icon: History, href: "sales-history" },
   { label: "Notifications", icon: Bell },
   { label: "Settings", icon: Settings },
   { label: "Help", icon: CircleHelp },
@@ -35,13 +41,28 @@ export default async function MorePage({
   params: Promise<{ tenantSlug: string }>;
 }) {
   const { tenantSlug } = await params;
+  const supabase = await createClient();
+
+  const { data: tenant } = await supabase
+    .from("tenants")
+    .select("id")
+    .eq("slug", tenantSlug)
+    .single();
+
+  const canManageApprovals = tenant
+    ? await can("approvals.manage", { tenantId: tenant.id })
+    : false;
+
+  const menuItems = canManageApprovals
+    ? [...MENU_ITEMS, { label: "Approvals", icon: ShieldCheck, href: "approvals" }]
+    : MENU_ITEMS;
 
   return (
     <div className="flex flex-1 flex-col p-6">
       <h1 className="mb-4 text-xl font-semibold">More</h1>
 
       <div className="divide-y rounded-lg border">
-        {MENU_ITEMS.map(({ label, icon: Icon, href }) =>
+        {menuItems.map(({ label, icon: Icon, href }) =>
           href ? (
             <Link
               key={label}

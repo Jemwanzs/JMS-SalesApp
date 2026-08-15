@@ -17,6 +17,20 @@ export type PlatformAdminRole = "super_admin" | "support" | "billing_ops";
 export type ProductStatus = "active" | "inactive" | "archived";
 export type BusinessDayStatus = "scheduled" | "open" | "closing" | "closed" | "reopened";
 export type SaleStatus = "open" | "locked" | "corrected" | "voided";
+export type ApprovalRequestStatus = "pending" | "approved" | "rejected" | "expired" | "auto_approved";
+export type SaleCorrectionType = "void" | "correct";
+
+export interface VoidOrCorrectResult {
+  status: "voided" | "corrected" | "pending_approval";
+  approvalRequestId?: string;
+  replacementSaleId?: string;
+}
+
+export interface ResolveApprovalResult {
+  status: "approved" | "rejected";
+  type?: string;
+  replacementSaleId?: string;
+}
 
 export interface Database {
   public: {
@@ -314,8 +328,76 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["sales"]["Row"]>;
         Relationships: [];
       };
+      approval_requests: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          type: string;
+          requested_by: string;
+          request_payload: Record<string, unknown>;
+          status: ApprovalRequestStatus;
+          reviewed_by: string | null;
+          reviewed_at: string | null;
+          review_notes: string | null;
+          resolution_payload: Record<string, unknown> | null;
+          expires_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["approval_requests"]["Row"]> & {
+          tenant_id: string;
+          type: string;
+          requested_by: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["approval_requests"]["Row"]>;
+        Relationships: [];
+      };
+      sale_corrections: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          sale_id: string;
+          correction_type: SaleCorrectionType;
+          old_values: Record<string, unknown>;
+          new_values: Record<string, unknown> | null;
+          reason: string;
+          requested_by: string;
+          approved_by: string | null;
+          approval_request_id: string | null;
+          replacement_sale_id: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["sale_corrections"]["Row"]> & {
+          tenant_id: string;
+          sale_id: string;
+          correction_type: SaleCorrectionType;
+          old_values: Record<string, unknown>;
+          reason: string;
+          requested_by: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["sale_corrections"]["Row"]>;
+        Relationships: [];
+      };
     };
     Functions: {
+      void_sale: {
+        Args: { p_sale_id: string; p_reason: string };
+        Returns: VoidOrCorrectResult;
+      };
+      correct_sale: {
+        Args: {
+          p_sale_id: string;
+          p_new_amount: number;
+          p_new_quantity: number | null;
+          p_new_notes: string | null;
+          p_reason: string;
+        };
+        Returns: VoidOrCorrectResult;
+      };
+      resolve_approval_request: {
+        Args: { p_id: string; p_decision: "approved" | "rejected"; p_notes: string | null };
+        Returns: ResolveApprovalResult;
+      };
       is_tenant_member: {
         Args: { p_tenant_id: string };
         Returns: boolean;

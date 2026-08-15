@@ -1,61 +1,66 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { Database } from "@/types/database.types";
+import type { Database, ResolveApprovalResult } from "@/types/database.types";
 
 /**
- * ApprovalService — the generic approval engine reused by historical sale
- * corrections, business-day reopen, temporary location access, and
- * sensitive exports (and any future consumer). Contains zero domain
- * knowledge of what "approving" any given request type actually does —
- * each consuming feature registers a handler in the dispatch map below,
- * and approve() invokes the matching handler inside the same transaction
- * that flips status -> approved. See docs/19-security-checklist.md §5 for
- * the full design and docs/03-database-schema.md for the
- * approval_requests table shape.
+ * ApprovalService — the generic approval-request lifecycle. Requests
+ * themselves are always created by the domain functions that need review
+ * (void_sale/correct_sale today, migration 0006) — this service only
+ * lists and resolves them. See docs/19-security-checklist.md §5.
  *
- * When a tenant doesn't require human approval for a given type, this
- * still writes an approval_requests row immediately marked approved with
- * auto_approved: true in resolution_payload — the audit trail and
- * dispatch path are identical either way, no branching downstream.
- *
- * Not yet implemented — Phase 2g (v1, wired to sale corrections).
+ * resolve() delegates to the resolve_approval_request SECURITY DEFINER
+ * function, which dispatches by `type` to apply the underlying action —
+ * ApprovalService itself never knows how to apply a "sale_void" vs a
+ * "sale_correction"; that dispatch logic lives once, in SQL, so it can
+ * never drift from what void_sale/correct_sale themselves do.
  */
-export type ApprovalRequestType =
-  | "sale_historical_correction"
-  | "business_day_reopen"
-  | "temporary_location_access"
-  | "sensitive_export";
-
-export interface ApprovalHandler {
-  onApproved(payload: Record<string, unknown>): Promise<void>;
+export interface PendingApprovalRequest {
+  id: string;
+  type: string;
+  requestedBy: string;
+  requestPayload: Record<string, unknown>;
+  createdAt: string;
 }
 
 export class ApprovalService {
-  private readonly handlers = new Map<ApprovalRequestType, ApprovalHandler>();
-
   constructor(private readonly supabase: SupabaseClient<Database>) {}
 
-  registerHandler(type: ApprovalRequestType, handler: ApprovalHandler): void {
-    this.handlers.set(type, handler);
+  async listPending(tenantId: string): Promise<PendingApprovalRequest[]> {
+    const { data, error } = await this.supabase
+      .from("approval_requests")
+      .select("id, type, requested_by, request_payload, created_at")
+      .eq("tenant_id", tenantId)
+      .eq("status", "pending")
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      throw new Error(`ApprovalService.listPending: ${error.message}`);
+    }
+
+    return (data ?? []).map((row) => ({
+      id: row.id,
+      type: row.type,
+      requestedBy: row.requested_by,
+      requestPayload: row.request_payload,
+      createdAt: row.created_at,
+    }));
   }
 
-  async createRequest(_input: {
-    tenantId: string;
-    type: ApprovalRequestType;
-    requestedBy: string;
-    payload: Record<string, unknown>;
-    expiresInMinutes?: number;
-  }) {
-    throw new Error(
-      "ApprovalService.createRequest: not yet implemented (Phase 2g)"
-    );
-  }
+  async resolve(
+    id: string,
+    decision: "approved" | "rejected",
+    notes?: string | null
+  ): Promise<ResolveApprovalResult> {
+    const { data, error } = await this.supabase.rpc("resolve_approval_request", {
+      p_id: id,
+      p_decision: decision,
+      p_notes: notes ?? null,
+    });
 
-  async approve(_requestId: string, _reviewerId: string, _notes?: string) {
-    throw new Error("ApprovalService.approve: not yet implemented (Phase 2g)");
-  }
+    if (error || !data) {
+      throw new Error(`ApprovalService.resolve: ${error?.message}`);
+    }
 
-  async reject(_requestId: string, _reviewerId: string, _notes?: string) {
-    throw new Error("ApprovalService.reject: not yet implemented (Phase 2g)");
+    return data;
   }
 }
