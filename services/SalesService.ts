@@ -178,10 +178,23 @@ export class SalesService {
    * to "all sales" or "just my own" depending on the caller's
    * sales.view_all/sales.view_own grants -- no separate filter needed here,
    * the same query works correctly for either permission level.
+   *
+   * `search` matches sale_number or the snapshotted product name (not a
+   * live join to `products`, since a sale's own snapshot is what the user
+   * is actually looking at in history -- consistent with 2d's "sales keep
+   * their own snapshot regardless" decision). `dateFrom`/`dateTo` are
+   * inclusive `sale_date` bounds (YYYY-MM-DD), matching the composite
+   * `(tenant_id, sale_date)` index already in migration 0005.
    */
   async listRecent(
     tenantId: string,
-    opts: { locationId?: string; limit?: number } = {}
+    opts: {
+      locationId?: string;
+      limit?: number;
+      search?: string;
+      dateFrom?: string;
+      dateTo?: string;
+    } = {}
   ): Promise<SaleListItem[]> {
     let query = this.supabase
       .from("sales")
@@ -192,6 +205,19 @@ export class SalesService {
 
     if (opts.locationId) {
       query = query.eq("location_id", opts.locationId);
+    }
+
+    if (opts.dateFrom) {
+      query = query.gte("sale_date", opts.dateFrom);
+    }
+
+    if (opts.dateTo) {
+      query = query.lte("sale_date", opts.dateTo);
+    }
+
+    if (opts.search) {
+      const escaped = opts.search.replace(/[%_]/g, (c) => `\\${c}`);
+      query = query.or(`sale_number.ilike.%${escaped}%,product_name_snapshot.ilike.%${escaped}%`);
     }
 
     const { data, error } = await query;

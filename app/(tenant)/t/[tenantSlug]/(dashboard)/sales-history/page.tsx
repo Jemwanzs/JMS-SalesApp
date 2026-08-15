@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { SaleHistoryFilters } from "@/features/sales/components/sale-history-filters";
 import { SaleHistoryList } from "@/features/sales/components/sale-history-list";
 import { SalesService } from "@/services/SalesService";
 import { can } from "@/lib/permissions/can";
@@ -15,13 +16,24 @@ export const metadata: Metadata = {
  * see to "all sales" or "just my own" depending on the caller's
  * sales.view_all/sales.view_own grant -- SalesService.listRecent() doesn't
  * need to re-derive that.
+ *
+ * Date-range/search filters (`from`/`to`/`q`) live as URL search params
+ * (SaleHistoryFilters pushes them), so the filtered list is a real
+ * server-rendered query against SalesService.listRecent() rather than a
+ * client-side filter over an already-truncated page. Unfiltered default
+ * stays capped at 100 rows same as before; a filtered query raises the
+ * cap to 500 since a narrowed date range/search is exactly when someone
+ * wants more than the last 100 rows (e.g. exporting a month's CSV).
  */
 export default async function SalesHistoryPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ tenantSlug: string }>;
+  searchParams: Promise<{ from?: string; to?: string; q?: string }>;
 }) {
   const { tenantSlug } = await params;
+  const { from, to, q } = await searchParams;
   const supabase = await createClient();
 
   const {
@@ -35,9 +47,15 @@ export default async function SalesHistoryPage({
     .single();
 
   const tenantId = tenant!.id;
+  const hasFilters = Boolean(from || to || q);
 
   const [sales, canVoid, canEditWindow, canCorrectHistorical] = await Promise.all([
-    new SalesService(supabase).listRecent(tenantId, { limit: 100 }),
+    new SalesService(supabase).listRecent(tenantId, {
+      limit: hasFilters ? 500 : 100,
+      dateFrom: from,
+      dateTo: to,
+      search: q,
+    }),
     can("sales.void", { tenantId }),
     can("sales.edit_window", { tenantId }),
     can("sales.correct_historical", { tenantId }),
@@ -46,6 +64,7 @@ export default async function SalesHistoryPage({
   return (
     <div className="flex flex-1 flex-col p-6">
       <h1 className="mb-4 text-xl font-semibold">Sales History</h1>
+      <SaleHistoryFilters />
       <SaleHistoryList
         sales={sales}
         tenantSlug={tenantSlug}
