@@ -58,7 +58,7 @@ export function ProductGrid({
             onClick={() => setSelected(product)}
             className="flex flex-col items-start overflow-hidden rounded-lg border text-left transition-colors hover:bg-muted"
           >
-            <div className="flex aspect-square w-full items-center justify-center bg-muted">
+            <div className="flex h-24 w-full items-center justify-center bg-muted">
               {product.imageUrl ? (
                 <Image
                   src={product.imageUrl}

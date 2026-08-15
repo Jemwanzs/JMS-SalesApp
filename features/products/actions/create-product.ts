@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { ProductService } from "@/services/ProductService";
+import { assertCan } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { firstIssuePerField } from "@/lib/utils/form-errors";
 import { createProductSchema, type CreateProductInput } from "@/validations/product";
@@ -33,6 +34,11 @@ export async function createProductAction(
     };
   }
 
+  // System-generated, not user-typed -- no Zod message needed for these,
+  // just a fallback to "not provided" behavior if absent.
+  const id = formData.get("id");
+  const imageStoragePath = formData.get("imageStoragePath");
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -45,10 +51,14 @@ export async function createProductAction(
   const productService = new ProductService(supabase);
 
   try {
+    await assertCan("products.create", { tenantId });
+
     await productService.create(tenantId, {
+      id: typeof id === "string" && id ? id : undefined,
       name: parsed.data.name,
       expectedPrice: Number(parsed.data.expectedPrice),
       imageUrl: parsed.data.imageUrl || null,
+      imageStoragePath: typeof imageStoragePath === "string" && imageStoragePath ? imageStoragePath : null,
       createdBy: user.id,
     });
   } catch (err) {

@@ -16,3 +16,32 @@ export const createProductSchema = z.object({
 });
 
 export type CreateProductInput = z.infer<typeof createProductSchema>;
+
+export const updateProductSchema = z.object({
+  productId: z.uuid(),
+  name: z.string().trim().min(1, "Product name is required"),
+  description: z.string().trim().max(1000).optional(),
+  expectedPrice: z
+    .string()
+    .refine(
+      (v) => v !== "" && !Number.isNaN(Number(v)) && Number(v) >= 0,
+      "Price must be 0 or more"
+    ),
+});
+
+export type UpdateProductInput = z.infer<typeof updateProductSchema>;
+
+export const setProductStatusSchema = z.object({
+  productId: z.uuid(),
+  status: z.enum(["active", "inactive"]),
+});
+
+export type SetProductStatusInput = z.infer<typeof setProductStatusSchema>;
+
+export const setProductImageSchema = z.object({
+  productId: z.uuid(),
+  storagePath: z.string().trim().min(1),
+  imageUrl: z.url(),
+});
+
+export type SetProductImageInput = z.infer<typeof setProductImageSchema>;

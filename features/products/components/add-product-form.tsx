@@ -1,10 +1,14 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 
 import { createProductAction } from "@/features/products/actions/create-product";
+import {
+  ProductImageUpload,
+  type ProductImageValue,
+} from "@/features/products/components/product-image-upload";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -25,6 +29,11 @@ export function AddProductForm({
   tenantSlug: string;
 }) {
   const [isPending, startTransition] = useTransition();
+  // Pre-generated so an image can be uploaded to its final Storage path
+  // (tenant_id/products/{productId}/...) before the product row exists --
+  // see product-image-upload.tsx and ProductService.create's optional `id`.
+  const [productId, setProductId] = useState(() => crypto.randomUUID());
+  const [image, setImage] = useState<ProductImageValue | null>(null);
 
   const form = useForm<CreateProductInput>({
     resolver: zodResolver(createProductSchema),
@@ -33,9 +42,11 @@ export function AddProductForm({
 
   function onSubmit(values: CreateProductInput) {
     const formData = new FormData();
+    formData.set("id", productId);
     formData.set("name", values.name);
     formData.set("expectedPrice", values.expectedPrice);
-    formData.set("imageUrl", values.imageUrl);
+    formData.set("imageUrl", image?.url ?? "");
+    formData.set("imageStoragePath", image?.storagePath ?? "");
 
     startTransition(async () => {
       const result = await createProductAction(tenantId, tenantSlug, {}, formData);
@@ -49,6 +60,8 @@ export function AddProductForm({
 
       if (result.success) {
         form.reset({ name: "", expectedPrice: "0", imageUrl: "" });
+        setImage(null);
+        setProductId(crypto.randomUUID());
       }
     });
   }
@@ -56,6 +69,13 @@ export function AddProductForm({
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
+        <ProductImageUpload
+          tenantId={tenantId}
+          productId={productId}
+          value={image}
+          onChange={setImage}
+        />
+
         <div className="grid grid-cols-2 gap-3">
           <FormField
             control={form.control}
@@ -78,19 +98,6 @@ export function AddProductForm({
                 <FormLabel>Expected price</FormLabel>
                 <FormControl>
                   <Input type="number" min="0" step="0.01" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="imageUrl"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Image URL (optional)</FormLabel>
-                <FormControl>
-                  <Input placeholder="https://" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
