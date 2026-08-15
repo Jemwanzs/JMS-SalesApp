@@ -19,6 +19,8 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { createProductSchema, type CreateProductInput } from "@/validations/product";
 
 export function AddProductForm({
@@ -34,6 +36,7 @@ export function AddProductForm({
   // see product-image-upload.tsx and ProductService.create's optional `id`.
   const [productId, setProductId] = useState(() => crypto.randomUUID());
   const [image, setImage] = useState<ProductImageValue | null>(null);
+  const [showNameInPhotoView, setShowNameInPhotoView] = useState(true);
 
   const form = useForm<CreateProductInput>({
     resolver: zodResolver(createProductSchema),
@@ -47,6 +50,7 @@ export function AddProductForm({
     formData.set("expectedPrice", values.expectedPrice);
     formData.set("imageUrl", image?.url ?? "");
     formData.set("imageStoragePath", image?.storagePath ?? "");
+    formData.set("showNameInPhotoView", String(showNameInPhotoView));
 
     startTransition(async () => {
       const result = await createProductAction(tenantId, tenantSlug, {}, formData);
@@ -62,6 +66,7 @@ export function AddProductForm({
         form.reset({ name: "", expectedPrice: "0", imageUrl: "" });
         setImage(null);
         setProductId(crypto.randomUUID());
+        setShowNameInPhotoView(true);
       }
     });
   }
@@ -102,6 +107,16 @@ export function AddProductForm({
                 <FormMessage />
               </FormItem>
             )}
+          />
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <Label htmlFor="add-show-name-in-photo" className="font-normal">
+            Show product name when photo is viewed enlarged
+          </Label>
+          <Switch
+            id="add-show-name-in-photo"
+            checked={showNameInPhotoView}
+            onCheckedChange={setShowNameInPhotoView}
           />
         </div>
         <Button type="submit" disabled={isPending} className="w-full">

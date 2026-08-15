@@ -33,6 +33,14 @@ export async function updateProductAction(
     };
   }
 
+  // Checkbox-style booleans: read directly rather than through Zod (same
+  // reasoning as create-product.ts). The caller always resends the
+  // product's current showExpectedPrice unchanged (no UI control for it
+  // yet) so an edit never silently resets it -- only showNameInPhotoView
+  // has an actual toggle in the edit dialog.
+  const showExpectedPrice = formData.get("showExpectedPrice") === "true";
+  const showNameInPhotoView = formData.get("showNameInPhotoView") === "true";
+
   const supabase = await createClient();
   const productService = new ProductService(supabase);
 
@@ -43,6 +51,8 @@ export async function updateProductAction(
       name: parsed.data.name,
       description: parsed.data.description || null,
       expectedPrice: Number(parsed.data.expectedPrice),
+      showExpectedPrice,
+      showNameInPhotoView,
     });
 
     revalidatePath(`/t/${tenantSlug}/products`);

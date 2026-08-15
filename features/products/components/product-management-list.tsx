@@ -1,12 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import Image from "next/image";
 import { toast } from "sonner";
 
 import { archiveProductAction } from "@/features/products/actions/archive-product";
 import { setProductStatusAction } from "@/features/products/actions/set-product-status";
 import { EditProductDialog } from "@/features/products/components/edit-product-dialog";
+import { ProductPhotoThumbnail } from "@/features/products/components/product-photo-viewer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { Product } from "@/services/ProductService";
@@ -80,20 +80,12 @@ export function ProductManagementList({
     <div className="mt-6 divide-y rounded-lg border">
       {items.map((product) => (
         <div key={product.id} className="flex items-center gap-3 p-3">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted">
-            {product.imageUrl ? (
-              <Image
-                src={product.imageUrl}
-                alt={product.name}
-                width={48}
-                height={48}
-                className="h-full w-full object-cover"
-                unoptimized
-              />
-            ) : (
-              <span className="text-base">🛒</span>
-            )}
-          </div>
+          <ProductPhotoThumbnail
+            imageUrl={product.imageUrl}
+            productName={product.name}
+            showName={product.showNameInPhotoView}
+            className="border"
+          />
 
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">

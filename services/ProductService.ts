@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, ProductStatus } from "@/types/database.types";
 
 const PRODUCT_SELECT =
-  "id, name, description, expected_price, show_expected_price, image_url, display_order, status";
+  "id, name, description, expected_price, show_expected_price, show_name_in_photo_view, image_url, display_order, status";
 const IMAGE_BUCKET = "product-images";
 
 /**
@@ -28,6 +28,7 @@ export interface CreateProductInput {
   description?: string | null;
   expectedPrice?: number | null;
   showExpectedPrice?: boolean;
+  showNameInPhotoView?: boolean;
   imageUrl?: string | null;
   imageStoragePath?: string | null;
   createdBy: string;
@@ -38,6 +39,7 @@ export interface UpdateProductInput {
   description?: string | null;
   expectedPrice?: number | null;
   showExpectedPrice?: boolean;
+  showNameInPhotoView?: boolean;
 }
 
 export interface Product {
@@ -46,6 +48,7 @@ export interface Product {
   description: string | null;
   expectedPrice: number | null;
   showExpectedPrice: boolean;
+  showNameInPhotoView: boolean;
   imageUrl: string | null;
   displayOrder: number;
   status: ProductStatus;
@@ -72,6 +75,7 @@ export class ProductService {
         description: input.description ?? null,
         expected_price: input.expectedPrice ?? null,
         show_expected_price: input.showExpectedPrice ?? true,
+        show_name_in_photo_view: input.showNameInPhotoView ?? true,
         image_url: input.imageUrl ?? null,
         display_order: (maxOrder?.display_order ?? -1) + 1,
         created_by: input.createdBy,
@@ -107,6 +111,7 @@ export class ProductService {
         description: input.description ?? null,
         expected_price: input.expectedPrice ?? null,
         show_expected_price: input.showExpectedPrice ?? true,
+        show_name_in_photo_view: input.showNameInPhotoView ?? true,
       })
       .eq("tenant_id", tenantId)
       .eq("id", productId)
@@ -268,6 +273,7 @@ function toProduct(row: {
   description: string | null;
   expected_price: number | null;
   show_expected_price: boolean;
+  show_name_in_photo_view: boolean;
   image_url: string | null;
   display_order: number;
   status: ProductStatus;
@@ -278,6 +284,7 @@ function toProduct(row: {
     description: row.description,
     expectedPrice: row.expected_price,
     showExpectedPrice: row.show_expected_price,
+    showNameInPhotoView: row.show_name_in_photo_view,
     imageUrl: row.image_url,
     displayOrder: row.display_order,
     status: row.status,

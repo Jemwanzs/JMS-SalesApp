@@ -32,6 +32,16 @@ export interface ResolveApprovalResult {
   replacementSaleId?: string;
 }
 
+export interface ReopenBusinessDayResult {
+  status: "reopened" | "pending_approval";
+  approvalRequestId?: string;
+}
+
+export interface AutoRelockResult {
+  status: BusinessDayStatus;
+  relocked: boolean;
+}
+
 export interface Database {
   public: {
     Views: Record<string, never>;
@@ -232,6 +242,7 @@ export interface Database {
           description: string | null;
           expected_price: number | null;
           show_expected_price: boolean;
+          show_name_in_photo_view: boolean;
           image_url: string | null;
           display_order: number;
           status: ProductStatus;
@@ -397,6 +408,14 @@ export interface Database {
       resolve_approval_request: {
         Args: { p_id: string; p_decision: "approved" | "rejected"; p_notes: string | null };
         Returns: ResolveApprovalResult;
+      };
+      reopen_business_day: {
+        Args: { p_business_day_id: string; p_reason: string; p_until: string };
+        Returns: ReopenBusinessDayResult;
+      };
+      auto_relock_expired_business_day: {
+        Args: { p_business_day_id: string };
+        Returns: AutoRelockResult;
       };
       is_tenant_member: {
         Args: { p_tenant_id: string };

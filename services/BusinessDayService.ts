@@ -1,14 +1,28 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { BusinessDayStatus, Database } from "@/types/database.types";
+import type {
+  AutoRelockResult,
+  BusinessDayStatus,
+  Database,
+  ReopenBusinessDayResult,
+} from "@/types/database.types";
+
+const BUSINESS_DAY_SELECT = "id, business_date, status, opened_at, closed_at, reopen_expires_at, aggregates";
 
 /**
  * BusinessDayService — owns the SCHEDULED -> OPEN -> CLOSED state
- * machine. See docs/09-business-day-engine.md.
+ * machine, plus CLOSED -> REOPENED -> CLOSED. See docs/09-business-day-engine.md.
  *
- * Manual open/close only in this increment — pg_cron auto open/close
- * (Phase 2f) and the MFA-gated reopen flow (Phase 2h, needs the
- * approval engine) are later work, not implemented here.
+ * Manual open/close/reopen only — pg_cron auto open/close (Phase 2f) is
+ * later work. Reopen (Phase 2h) is scoped per an explicit decision: reason
+ * + optional approval (via the 2g engine), no MFA yet (Phase 4). The
+ * bounded reopen window auto-relocks LAZILY — every getTodayBusinessDay()
+ * call checks whether a "reopened" day's window has expired and, if so,
+ * calls the auto_relock_expired_business_day() SQL function (migration
+ * 0009) before returning — rather than waiting for 2f's pg_cron sweep to
+ * exist. This is load-bearing correctness, not a stopgap: once 2f lands,
+ * its sweep can call the same function proactively for timeliness, but
+ * nothing here needs to change.
  */
 export interface BusinessDay {
   id: string;
@@ -16,6 +30,7 @@ export interface BusinessDay {
   status: BusinessDayStatus;
   openedAt: string | null;
   closedAt: string | null;
+  reopenExpiresAt: string | null;
   aggregates: Record<string, unknown>;
 }
 
@@ -60,7 +75,7 @@ export class BusinessDayService {
 
     const { data, error } = await this.supabase
       .from("business_days")
-      .select("id, business_date, status, opened_at, closed_at, aggregates")
+      .select(BUSINESS_DAY_SELECT)
       .eq("tenant_id", tenantId)
       .eq("location_id", locationId)
       .eq("business_date", businessDate)
@@ -70,7 +85,45 @@ export class BusinessDayService {
       throw new Error(`BusinessDayService.getTodayBusinessDay: ${error.message}`);
     }
 
-    return data ? toBusinessDay(data) : null;
+    if (!data) {
+      return null;
+    }
+
+    if (
+      data.status === "reopened" &&
+      data.reopen_expires_at &&
+      new Date(data.reopen_expires_at) <= new Date()
+    ) {
+      const { data: relockResult, error: relockError } = await this.supabase.rpc(
+        "auto_relock_expired_business_day",
+        { p_business_day_id: data.id }
+      );
+
+      if (relockError) {
+        throw new Error(`BusinessDayService.getTodayBusinessDay: ${relockError.message}`);
+      }
+
+      if ((relockResult as AutoRelockResult | null)?.relocked) {
+        // Re-fetch rather than patching `data` locally -- the relock
+        // recomputed `aggregates` in the database (to include any sales
+        // recorded during the reopened window), and returning the
+        // pre-relock `data` here would silently show stale figures even
+        // though the row itself is correct.
+        const { data: refetched, error: refetchError } = await this.supabase
+          .from("business_days")
+          .select(BUSINESS_DAY_SELECT)
+          .eq("id", data.id)
+          .single();
+
+        if (refetchError || !refetched) {
+          throw new Error(`BusinessDayService.getTodayBusinessDay: ${refetchError?.message}`);
+        }
+
+        return toBusinessDay(refetched);
+      }
+    }
+
+    return toBusinessDay(data);
   }
 
   async openDay(
@@ -100,7 +153,7 @@ export class BusinessDayService {
           .from("business_days")
           .update(payload)
           .eq("id", existing.id)
-          .select("id, business_date, status, opened_at, closed_at, aggregates")
+          .select(BUSINESS_DAY_SELECT)
           .single()
       : await this.supabase
           .from("business_days")
@@ -110,7 +163,7 @@ export class BusinessDayService {
             business_date: businessDate,
             ...payload,
           })
-          .select("id, business_date, status, opened_at, closed_at, aggregates")
+          .select(BUSINESS_DAY_SELECT)
           .single();
 
     if (error || !data) {
@@ -144,7 +197,7 @@ export class BusinessDayService {
         aggregates: { grossSales, transactionCount },
       })
       .eq("id", businessDayId)
-      .select("id, business_date, status, opened_at, closed_at, aggregates")
+      .select(BUSINESS_DAY_SELECT)
       .single();
 
     if (error || !data) {
@@ -154,10 +207,22 @@ export class BusinessDayService {
     return toBusinessDay(data);
   }
 
-  async reopenDay(_businessDayId: string, _reason: string, _untilMinutes: number) {
-    throw new Error(
-      "BusinessDayService.reopenDay: not yet implemented (Phase 2h, needs the approval engine)"
-    );
+  async reopenDay(
+    businessDayId: string,
+    reason: string,
+    until: Date
+  ): Promise<ReopenBusinessDayResult> {
+    const { data, error } = await this.supabase.rpc("reopen_business_day", {
+      p_business_day_id: businessDayId,
+      p_reason: reason,
+      p_until: until.toISOString(),
+    });
+
+    if (error || !data) {
+      throw new Error(`BusinessDayService.reopenDay: ${error?.message}`);
+    }
+
+    return data;
   }
 }
 
@@ -167,6 +232,7 @@ function toBusinessDay(row: {
   status: BusinessDayStatus;
   opened_at: string | null;
   closed_at: string | null;
+  reopen_expires_at: string | null;
   aggregates: Record<string, unknown>;
 }): BusinessDay {
   return {
@@ -175,6 +241,7 @@ function toBusinessDay(row: {
     status: row.status,
     openedAt: row.opened_at,
     closedAt: row.closed_at,
+    reopenExpiresAt: row.reopen_expires_at,
     aggregates: row.aggregates,
   };
 }

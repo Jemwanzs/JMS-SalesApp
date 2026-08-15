@@ -68,7 +68,11 @@ export class SalesService {
       throw new Error(`SalesService.recordSale: business day not found`);
     }
 
-    if (businessDay.status !== "open") {
+    // "reopened" is a temporary, time-boxed re-open of a closed day
+    // (Phase 2h) — sales can be captured during it same as "open"; it
+    // auto-relocks to "closed" once its window expires (see
+    // BusinessDayService.getTodayBusinessDay).
+    if (businessDay.status !== "open" && businessDay.status !== "reopened") {
       throw new Error(
         `SalesService.recordSale: business day is "${businessDay.status}", not open`
       );

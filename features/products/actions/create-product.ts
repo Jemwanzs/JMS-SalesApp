@@ -38,6 +38,9 @@ export async function createProductAction(
   // just a fallback to "not provided" behavior if absent.
   const id = formData.get("id");
   const imageStoragePath = formData.get("imageStoragePath");
+  // Checkbox-style boolean: present ("true") when on, absent when off --
+  // read directly rather than through Zod, same reasoning as id/imageStoragePath above.
+  const showNameInPhotoView = formData.get("showNameInPhotoView") === "true";
 
   const supabase = await createClient();
   const {
@@ -59,6 +62,7 @@ export async function createProductAction(
       expectedPrice: Number(parsed.data.expectedPrice),
       imageUrl: parsed.data.imageUrl || null,
       imageStoragePath: typeof imageStoragePath === "string" && imageStoragePath ? imageStoragePath : null,
+      showNameInPhotoView,
       createdBy: user.id,
     });
   } catch (err) {

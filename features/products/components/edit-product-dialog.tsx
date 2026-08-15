@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import type { Product } from "@/services/ProductService";
 
 export function EditProductDialog({
@@ -43,6 +44,7 @@ export function EditProductDialog({
   const [image, setImage] = useState<ProductImageValue | null>(
     product.imageUrl ? { url: product.imageUrl, storagePath: "" } : null
   );
+  const [showNameInPhotoView, setShowNameInPhotoView] = useState(product.showNameInPhotoView);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -68,6 +70,8 @@ export function EditProductDialog({
     formData.set("name", name);
     formData.set("description", description);
     formData.set("expectedPrice", expectedPrice);
+    formData.set("showExpectedPrice", String(product.showExpectedPrice));
+    formData.set("showNameInPhotoView", String(showNameInPhotoView));
 
     startTransition(async () => {
       const result = await updateProductAction(tenantId, tenantSlug, {}, formData);
@@ -125,6 +129,16 @@ export function EditProductDialog({
               step="0.01"
               value={expectedPrice}
               onChange={(e) => setExpectedPrice(e.target.value)}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <Label htmlFor="edit-show-name-in-photo" className="font-normal">
+              Show product name when photo is viewed enlarged
+            </Label>
+            <Switch
+              id="edit-show-name-in-photo"
+              checked={showNameInPhotoView}
+              onCheckedChange={setShowNameInPhotoView}
             />
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}

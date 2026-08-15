@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import Image from "next/image";
 import { toast } from "sonner";
 
 import { RecordSaleSheet } from "@/features/sales/components/record-sale-sheet";
+import { ProductPhotoThumbnail } from "@/features/products/components/product-photo-viewer";
 import type { Product } from "@/services/ProductService";
 import type { RecordSaleState } from "@/features/sales/actions/record-sale";
 
@@ -52,27 +52,29 @@ export function ProductGrid({
     <>
       <div className="grid grid-cols-2 gap-3 p-4">
         {products.map((product) => (
-          <button
+          <div
             key={product.id}
-            type="button"
+            role="button"
+            tabIndex={0}
             onClick={() => setSelected(product)}
-            className="flex flex-col items-start overflow-hidden rounded-lg border text-left transition-colors hover:bg-muted"
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setSelected(product);
+              }
+            }}
+            className="flex cursor-pointer flex-col items-center gap-1.5 rounded-lg border p-2 text-center transition-colors hover:bg-muted"
           >
-            <div className="flex h-24 w-full items-center justify-center bg-muted">
-              {product.imageUrl ? (
-                <Image
-                  src={product.imageUrl}
-                  alt={product.name}
-                  width={200}
-                  height={200}
-                  className="h-full w-full object-cover"
-                  unoptimized
-                />
-              ) : (
-                <span className="text-2xl">🛒</span>
-              )}
-            </div>
-            <div className="w-full p-2">
+            {/* ProductPhotoThumbnail's own "view photo" button is a
+                sibling target inside this div, not nested in another
+                button -- see product-photo-viewer.tsx's stopPropagation
+                note. */}
+            <ProductPhotoThumbnail
+              imageUrl={product.imageUrl}
+              productName={product.name}
+              showName={product.showNameInPhotoView}
+            />
+            <div className="w-full">
               <p className="truncate text-sm font-medium">{product.name}</p>
               {product.showExpectedPrice && product.expectedPrice !== null && (
                 <p className="text-xs text-muted-foreground tabular-nums">
@@ -80,7 +82,7 @@ export function ProductGrid({
                 </p>
               )}
             </div>
-          </button>
+          </div>
         ))}
       </div>
 

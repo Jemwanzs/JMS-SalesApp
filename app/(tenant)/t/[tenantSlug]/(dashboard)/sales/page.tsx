@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { OpenBusinessDayButton } from "@/features/sales/components/open-business-day-button";
 import { ProductGrid } from "@/features/sales/components/product-grid";
+import { ReopenBusinessDayDialog } from "@/features/sales/components/reopen-business-day-dialog";
 import { SalesVisibilityBadge } from "@/features/sales/components/sales-visibility-badge";
 import { BusinessDayService } from "@/services/BusinessDayService";
 import { ProductService } from "@/services/ProductService";
@@ -17,6 +18,12 @@ export const metadata: Metadata = {
  * 2d make this real: a business day must be open before any sale can be
  * recorded (docs/09-business-day-engine.md), and the product grid +
  * record-sale sheet are the actual capture flow, not a placeholder.
+ *
+ * "reopened" (Phase 2h) is treated the same as "open" for capture
+ * purposes -- it auto-relocks to "closed" once its window expires (see
+ * BusinessDayService.getTodayBusinessDay's lazy check), so by the time
+ * this page ever sees status "reopened" it's still genuinely within
+ * that window.
  */
 export default async function SalesPage({
   params,
@@ -59,7 +66,9 @@ export default async function SalesPage({
     day: "numeric",
   });
 
+  const canCapture = businessDay?.status === "open" || businessDay?.status === "reopened";
   const canOpenDay = await can("business_day.open", { tenantId: tenant!.id });
+  const canReopenDay = await can("business_day.reopen", { tenantId: tenant!.id });
 
   return (
     <div className="flex flex-1 flex-col p-6">
@@ -70,7 +79,17 @@ export default async function SalesPage({
         <SalesVisibilityBadge />
       </div>
 
-      {businessDay?.status === "open" ? (
+      {businessDay?.status === "reopened" && businessDay.reopenExpiresAt && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Reopened until{" "}
+          {new Date(businessDay.reopenExpiresAt).toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
+        </p>
+      )}
+
+      {canCapture && businessDay ? (
         <SalesCaptureBody
           tenantId={tenant!.id}
           tenantSlug={tenantSlug}
@@ -80,21 +99,35 @@ export default async function SalesPage({
         />
       ) : (
         <div className="mt-8 flex flex-1 flex-col items-center justify-center rounded-lg border border-dashed p-8 text-center">
-          <p className="text-lg font-medium">Business day not open</p>
-          <p className="mt-2 max-w-[28ch] text-sm text-muted-foreground">
-            {canOpenDay
-              ? "Open the business day to start recording sales."
-              : "Ask an administrator to open today's business day."}
+          <p className="text-lg font-medium">
+            {businessDay?.status === "closed" ? "Business day is closed" : "Business day not open"}
           </p>
-          {canOpenDay && (
-            <div className="mt-4 w-full max-w-[240px]">
-              <OpenBusinessDayButton
-                tenantId={tenant!.id}
-                tenantSlug={tenantSlug}
-                locationId={location.id}
-              />
-            </div>
-          )}
+          <p className="mt-2 max-w-[28ch] text-sm text-muted-foreground">
+            {businessDay?.status === "closed"
+              ? canReopenDay
+                ? "Reopen it to add a sale that was missed."
+                : "Ask an administrator to reopen today's business day."
+              : canOpenDay
+                ? "Open the business day to start recording sales."
+                : "Ask an administrator to open today's business day."}
+          </p>
+          <div className="mt-4 w-full max-w-[240px]">
+            {businessDay?.status === "closed"
+              ? canReopenDay && (
+                  <ReopenBusinessDayDialog
+                    businessDayId={businessDay.id}
+                    tenantId={tenant!.id}
+                    tenantSlug={tenantSlug}
+                  />
+                )
+              : canOpenDay && (
+                  <OpenBusinessDayButton
+                    tenantId={tenant!.id}
+                    tenantSlug={tenantSlug}
+                    locationId={location.id}
+                  />
+                )}
+          </div>
         </div>
       )}
     </div>
