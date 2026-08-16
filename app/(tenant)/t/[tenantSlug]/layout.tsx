@@ -74,7 +74,17 @@ export default async function TenantLayout({
       }}
     >
       <div className="flex min-h-screen w-full justify-center bg-muted/30">
-        <div className="flex w-full max-w-[430px] flex-col bg-background">
+        {/* id + contain-layout: on a wide (desktop) viewport this is the
+            ~430px mobile shell, but a portaled Sheet/Dialog's `fixed`
+            positioning is normally relative to the whole browser
+            viewport, not this column -- `contain: layout` makes this div
+            a containing block for fixed/absolute descendants too (see
+            components/ui/{sheet,dialog}.tsx, which portal into
+            #app-shell instead of <body> for exactly this reason), so a
+            bottom sheet or centered dialog stays within the mobile
+            column on desktop instead of spanning/centering on the full
+            browser window. */}
+        <div id="app-shell" className="relative flex w-full max-w-[430px] flex-col contain-layout bg-background">
           <div className="border-b px-6 py-4">
             <Logo />
           </div>
