@@ -22,6 +22,10 @@ import type { Database } from "@/types/database.types";
  *     default roles, before any role_permissions exist for that tenant to
  *     grant the creator anything — see the note atop
  *     supabase/migrations/0001_core_tenancy_and_rbac.sql)
+ *   - UserService.inviteUser (looking up whether an email already has a
+ *     profile crosses tenant boundaries, which profiles_select RLS
+ *     deliberately blocks for an ordinary tenant admin's RLS-respecting
+ *     client — see UserService's own header comment)
  *
  * Every other read/write MUST go through lib/supabase/server.ts so RLS
  * stays the enforced boundary. Reaching for this file because "it's

@@ -8,6 +8,7 @@ import {
   Package,
   Settings,
   ShieldCheck,
+  UserCog,
   Users,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -23,11 +24,11 @@ import { createClient } from "@/lib/supabase/server";
  * correct actions from 2e) now link to real pages; the rest are real
  * destinations from later phases (Notifications: 13-notifications.md,
  * Settings: Phase 4) shown as disabled rather than omitted so the full
- * menu shape stays visible. Approvals (2g) and Roles (4a) are both
- * appended conditionally, only for users who actually hold approvals.
- * manage/roles.manage -- unlike the others they aren't meant to be
- * visible-but-disabled for everyone, since most users will never have
- * anything to review or manage there.
+ * menu shape stays visible. Approvals (2g), Roles (4a), and Users (4b)
+ * are all appended conditionally, only for users who actually hold
+ * approvals.manage/roles.manage/(users.create or users.edit) -- unlike
+ * the others they aren't meant to be visible-but-disabled for everyone,
+ * since most users will never have anything to review or manage there.
  */
 const MENU_ITEMS: { label: string; icon: LucideIcon; href?: string }[] = [
   { label: "Products", icon: Package, href: "products" },
@@ -51,17 +52,20 @@ export default async function MorePage({
     .eq("slug", tenantSlug)
     .single();
 
-  const [canManageApprovals, canManageRoles] = tenant
+  const [canManageApprovals, canManageRoles, canCreateUsers, canEditUsers] = tenant
     ? await Promise.all([
         can("approvals.manage", { tenantId: tenant.id }),
         can("roles.manage", { tenantId: tenant.id }),
+        can("users.create", { tenantId: tenant.id }),
+        can("users.edit", { tenantId: tenant.id }),
       ])
-    : [false, false];
+    : [false, false, false, false];
 
   const menuItems = [
     ...MENU_ITEMS,
     ...(canManageApprovals ? [{ label: "Approvals", icon: ShieldCheck, href: "approvals" }] : []),
-    ...(canManageRoles ? [{ label: "Roles", icon: Users, href: "roles" }] : []),
+    ...(canManageRoles ? [{ label: "Roles", icon: UserCog, href: "roles" }] : []),
+    ...(canCreateUsers || canEditUsers ? [{ label: "Users", icon: Users, href: "users" }] : []),
   ];
 
   return (
