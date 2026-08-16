@@ -461,6 +461,28 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["reports"]["Row"]>;
         Relationships: [];
       };
+      insights_snapshots: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          location_id: string;
+          business_day_id: string | null;
+          rule_key: string;
+          severity: "positive" | "warning" | "info";
+          message: string;
+          data: Record<string, unknown>;
+          generated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["insights_snapshots"]["Row"]> & {
+          tenant_id: string;
+          location_id: string;
+          rule_key: string;
+          severity: "positive" | "warning" | "info";
+          message: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["insights_snapshots"]["Row"]>;
+        Relationships: [];
+      };
     };
     Functions: {
       void_sale: {

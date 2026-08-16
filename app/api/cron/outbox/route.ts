@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { InsightsService } from "@/services/InsightsService";
 import { ReportService } from "@/services/ReportService";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
@@ -25,6 +26,12 @@ const BATCH_SIZE = 20;
  * notifications fan-out itself -- see migration 0011's header): a
  * completed job means the report was generated and stored, not that
  * anyone was emailed about it.
+ *
+ * InsightsService.evaluateDailyInsights (Phase 3d) runs right after a
+ * daily report succeeds, same "a business day just closed" trigger --
+ * its own failure is caught separately and never undoes the report
+ * job's success (the report is this job's actual deliverable; insights
+ * are a best-effort bonus riding along on the same event).
  */
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
@@ -34,6 +41,7 @@ export async function GET(request: Request) {
 
   const supabase = createServiceRoleClient();
   const reportService = new ReportService(supabase);
+  const insightsService = new InsightsService(supabase);
 
   const { data: jobs, error } = await supabase
     .from("report_jobs")
@@ -57,9 +65,16 @@ export async function GET(request: Request) {
     try {
       let reportId: string;
       if (job.job_type === "daily_business_day_report") {
-        reportId = await reportService.generateDailyReport(
-          (job.payload as { business_day_id: string }).business_day_id
-        );
+        const businessDayId = (job.payload as { business_day_id: string }).business_day_id;
+        reportId = await reportService.generateDailyReport(businessDayId);
+
+        try {
+          await insightsService.evaluateDailyInsights(businessDayId);
+        } catch {
+          // Best-effort -- insights are a bonus on top of the report,
+          // not this job's deliverable. Swallowed rather than failing
+          // (and retrying) an otherwise-successful report job over it.
+        }
       } else {
         throw new Error(`Unknown report_jobs.job_type: ${job.job_type}`);
       }
