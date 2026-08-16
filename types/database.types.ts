@@ -439,6 +439,28 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["report_jobs"]["Row"]>;
         Relationships: [];
       };
+      reports: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          location_id: string | null;
+          report_type: string;
+          period_start: string;
+          period_end: string;
+          status: "completed" | "failed";
+          storage_path: string | null;
+          payload: Record<string, unknown>;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["reports"]["Row"]> & {
+          tenant_id: string;
+          report_type: string;
+          period_start: string;
+          period_end: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["reports"]["Row"]>;
+        Relationships: [];
+      };
     };
     Functions: {
       void_sale: {

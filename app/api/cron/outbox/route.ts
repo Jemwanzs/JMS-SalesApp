@@ -19,12 +19,12 @@ const BATCH_SIZE = 20;
  * Runs as the service-role client -- report_jobs has RLS enabled with no
  * policies at all (see migration 0011), so nothing else can read it.
  *
- * ReportService.generateDailyReport is still a Phase 3d stub, so every
- * job attempted here currently fails with a clear, honest "not yet
- * implemented" -- the job stays retryable (`pending`) until MAX_ATTEMPTS,
- * then flips to `failed` rather than retrying forever. This route's own
- * job -- claim, attempt, record outcome -- is real and complete; it just
- * has nothing successful to report yet until Phase 3d lands.
+ * ReportService.generateDailyReport (Phase 3c) is real -- a successful
+ * run links the job to the `reports` row it produced. Email delivery via
+ * Resend is NOT wired yet (deliberately deferred, same as the
+ * notifications fan-out itself -- see migration 0011's header): a
+ * completed job means the report was generated and stored, not that
+ * anyone was emailed about it.
  */
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
@@ -55,15 +55,19 @@ export async function GET(request: Request) {
     await supabase.from("report_jobs").update({ status: "running" }).eq("id", job.id);
 
     try {
+      let reportId: string;
       if (job.job_type === "daily_business_day_report") {
-        await reportService.generateDailyReport(
+        reportId = await reportService.generateDailyReport(
           (job.payload as { business_day_id: string }).business_day_id
         );
       } else {
         throw new Error(`Unknown report_jobs.job_type: ${job.job_type}`);
       }
 
-      await supabase.from("report_jobs").update({ status: "completed" }).eq("id", job.id);
+      await supabase
+        .from("report_jobs")
+        .update({ status: "completed", report_id: reportId })
+        .eq("id", job.id);
       completed += 1;
     } catch (err) {
       const attempts = job.attempts + 1;
