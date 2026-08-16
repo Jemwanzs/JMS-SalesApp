@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Plus } from "lucide-react";
 import { toast } from "sonner";
 
 import { RecordSaleSheet } from "@/features/sales/components/record-sale-sheet";
@@ -9,10 +10,19 @@ import type { Product } from "@/services/ProductService";
 import type { RecordSaleState } from "@/features/sales/actions/record-sale";
 
 /**
- * Product cards + the record-sale bottom sheet (spec S14-S18: tap
+ * Product list + the record-sale bottom sheet (spec S14-S18: tap
  * product -> enter amount -> Record Sale -> confirmation -> back to
  * Capture Sales, no intermediate navigation -- closing the sheet IS
  * "back to Capture Sales" since we never left this screen).
+ *
+ * Row layout (image + name/description, price, a dedicated tap target)
+ * replaced the earlier 2-column square-card grid -- denser and faster to
+ * scan for a longer catalog, borrowed from a marketplace-app reference
+ * the user shared rather than invented from scratch. Deliberately left
+ * behind from that reference: category tabs, discount badges, promo
+ * carousels -- none of it maps to this schema (no product categories or
+ * discount pricing yet) or to a staff POS flow (no browsing/cart), so
+ * only the list-row legibility pattern itself was worth adopting.
  */
 export function ProductGrid({
   products,
@@ -50,7 +60,7 @@ export function ProductGrid({
 
   return (
     <>
-      <div className="grid grid-cols-2 gap-3 p-4">
+      <div className="divide-y">
         {products.map((product) => (
           <div
             key={product.id}
@@ -63,7 +73,7 @@ export function ProductGrid({
                 setSelected(product);
               }
             }}
-            className="flex cursor-pointer flex-col items-center gap-1.5 rounded-lg border p-2 text-center transition-colors hover:bg-muted"
+            className="flex cursor-pointer items-center gap-3 p-4 text-left transition-colors hover:bg-muted active:bg-muted"
           >
             {/* ProductPhotoThumbnail's own "view photo" button is a
                 sibling target inside this div, not nested in another
@@ -74,14 +84,30 @@ export function ProductGrid({
               productName={product.name}
               showName={product.showNameInPhotoView}
             />
-            <div className="w-full">
-              <p className="truncate text-sm font-medium">{product.name}</p>
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-medium">{product.name}</p>
+              {product.description && (
+                <p className="line-clamp-2 text-sm text-muted-foreground">
+                  {product.description}
+                </p>
+              )}
               {product.showExpectedPrice && product.expectedPrice !== null && (
-                <p className="text-xs text-muted-foreground tabular-nums">
+                <p className="mt-0.5 text-sm font-medium tabular-nums">
                   {product.expectedPrice.toFixed(2)}
                 </p>
               )}
             </div>
+            <button
+              type="button"
+              aria-label={`Record a sale for ${product.name}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelected(product);
+              }}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-colors hover:bg-primary/80"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
           </div>
         ))}
       </div>
