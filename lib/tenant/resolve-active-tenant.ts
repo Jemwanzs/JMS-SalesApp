@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 
 export interface ActiveTenant {
+  tenantId: string;
   slug: string;
   /**
    * True until the tenant has at least one location, which the
@@ -56,5 +57,5 @@ export async function resolveActiveTenant(
     .select("id", { count: "exact", head: true })
     .eq("tenant_id", membership.tenant_id);
 
-  return { slug: tenant.slug, needsOnboarding: !count };
+  return { tenantId: membership.tenant_id, slug: tenant.slug, needsOnboarding: !count };
 }

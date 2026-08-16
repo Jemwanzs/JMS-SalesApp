@@ -26,6 +26,11 @@ import type { Database } from "@/types/database.types";
  *     profile crosses tenant boundaries, which profiles_select RLS
  *     deliberately blocks for an ordinary tenant admin's RLS-respecting
  *     client — see UserService's own header comment)
+ *   - SecurityService's writes (logLoginEvent/createSession/
+ *     revokeOtherSessions) — login_events/sessions have RLS enabled with
+ *     zero write policies (a FAILED login attempt has no authenticated
+ *     session for a self-scoped insert policy to key off of) — see
+ *     SecurityService's own header comment
  *
  * Every other read/write MUST go through lib/supabase/server.ts so RLS
  * stays the enforced boundary. Reaching for this file because "it's

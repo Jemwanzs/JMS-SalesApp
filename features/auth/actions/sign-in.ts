@@ -1,12 +1,23 @@
 "use server";
 
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { AuthService } from "@/services/AuthService";
+import { SecurityService } from "@/services/SecurityService";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { resolveActiveTenant } from "@/lib/tenant/resolve-active-tenant";
 import { firstIssuePerField } from "@/lib/utils/form-errors";
 import { loginSchema, type LoginInput } from "@/validations/auth";
+
+async function requestMeta() {
+  const h = await headers();
+  return {
+    ip: h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? h.get("x-real-ip") ?? null,
+    userAgent: h.get("user-agent"),
+  };
+}
 
 export interface LoginActionState {
   error?: string;
@@ -30,16 +41,74 @@ export async function signInAction(
 
   const supabase = await createClient();
   const authService = new AuthService(supabase);
+  const { ip, userAgent } = await requestMeta();
+  const securityService = new SecurityService(createServiceRoleClient());
 
   let userId: string;
   try {
     const result = await authService.signIn(parsed.data);
     userId = result.userId;
   } catch (err) {
+    // Best-effort: attach a profile_id to the failure log if this email
+    // matches a real account, so repeated failures against one account
+    // are visible together -- never surfaced to the client either way,
+    // signInWithPassword's own error message already avoids confirming
+    // account existence.
+    const { data: maybeProfile } = await createServiceRoleClient()
+      .from("profiles")
+      .select("id")
+      .eq("email", parsed.data.email)
+      .maybeSingle();
+
+    await securityService
+      .logLoginEvent({
+        tenantId: null,
+        profileId: maybeProfile?.id ?? null,
+        ip,
+        userAgent,
+        success: false,
+        failureReason: err instanceof Error ? err.message : "Sign in failed",
+      })
+      .catch(() => {});
+
     return { error: err instanceof Error ? err.message : "Sign in failed" };
   }
 
   const tenant = await resolveActiveTenant(supabase, userId);
+
+  try {
+    const [, session] = await Promise.all([
+      securityService.logLoginEvent({
+        tenantId: tenant?.tenantId ?? null,
+        profileId: userId,
+        ip,
+        userAgent,
+        success: true,
+      }),
+      securityService.createSession({
+        profileId: userId,
+        tenantId: tenant?.tenantId ?? null,
+        ip,
+        userAgent,
+      }),
+    ]);
+
+    // Correlates "which sessions row is THIS browser" for the security
+    // page's "sign out of other devices" action -- carries no auth
+    // authority of its own (just a row id), so it's fine as a plain
+    // cookie rather than needing the same handling as a real session
+    // token.
+    const cookieStore = await cookies();
+    cookieStore.set("sid", session.sessionId, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 30,
+    });
+  } catch {
+    // Best-effort -- session/login tracking never blocks a real sign-in.
+  }
 
   if (!tenant) {
     redirect("/no-tenant");

@@ -4,6 +4,7 @@ import {
   ChevronRight,
   CircleHelp,
   History,
+  Lock,
   LogOut,
   Package,
   Settings,
@@ -24,15 +25,20 @@ import { createClient } from "@/lib/supabase/server";
  * correct actions from 2e) now link to real pages; the rest are real
  * destinations from later phases (Notifications: 13-notifications.md,
  * Settings: Phase 4) shown as disabled rather than omitted so the full
- * menu shape stays visible. Approvals (2g), Roles (4a), and Users (4b)
- * are all appended conditionally, only for users who actually hold
- * approvals.manage/roles.manage/(users.create or users.edit) -- unlike
- * the others they aren't meant to be visible-but-disabled for everyone,
- * since most users will never have anything to review or manage there.
+ * menu shape stays visible. Security (4c) is a real, always-present
+ * link -- every signed-in user manages their own sessions/login history
+ * there regardless of permissions (RLS gates the tenant-wide activity
+ * section within the page itself, not this menu entry). Approvals (2g),
+ * Roles (4a), and Users (4b) are all appended conditionally instead,
+ * only for users who actually hold approvals.manage/roles.manage/
+ * (users.create or users.edit) -- unlike Security they aren't meant to
+ * be visible-but-disabled for everyone, since most users will never
+ * have anything to review or manage there.
  */
 const MENU_ITEMS: { label: string; icon: LucideIcon; href?: string }[] = [
   { label: "Products", icon: Package, href: "products" },
   { label: "Sales History", icon: History, href: "sales-history" },
+  { label: "Security", icon: Lock, href: "security" },
   { label: "Notifications", icon: Bell },
   { label: "Settings", icon: Settings },
   { label: "Help", icon: CircleHelp },

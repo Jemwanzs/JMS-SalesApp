@@ -483,6 +483,45 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["insights_snapshots"]["Row"]>;
         Relationships: [];
       };
+      login_events: {
+        Row: {
+          id: string;
+          tenant_id: string | null;
+          profile_id: string | null;
+          ip: string | null;
+          device: string | null;
+          browser: string | null;
+          os: string | null;
+          success: boolean;
+          failure_reason: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["login_events"]["Row"]> & {
+          success: boolean;
+        };
+        Update: Partial<Database["public"]["Tables"]["login_events"]["Row"]>;
+        Relationships: [];
+      };
+      sessions: {
+        Row: {
+          id: string;
+          profile_id: string;
+          tenant_id: string | null;
+          device_fingerprint: string | null;
+          ip: string | null;
+          user_agent: string | null;
+          last_seen_at: string;
+          revoked_at: string | null;
+          revoked_by: string | null;
+          revoked_reason: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["sessions"]["Row"]> & {
+          profile_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["sessions"]["Row"]>;
+        Relationships: [];
+      };
     };
     Functions: {
       void_sale: {
