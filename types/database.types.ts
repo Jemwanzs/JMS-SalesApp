@@ -126,7 +126,11 @@ export interface Database {
           updated_by: string | null;
           updated_at: string;
         };
-        Insert: Database["public"]["Tables"]["tenant_settings"]["Row"];
+        Insert: Partial<Database["public"]["Tables"]["tenant_settings"]["Row"]> & {
+          tenant_id: string;
+          setting_key: string;
+          value: unknown;
+        };
         Update: Partial<
           Database["public"]["Tables"]["tenant_settings"]["Row"]
         >;

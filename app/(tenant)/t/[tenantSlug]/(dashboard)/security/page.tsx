@@ -4,7 +4,9 @@ import { cookies } from "next/headers";
 import { LoginEventList } from "@/features/security/components/login-event-list";
 import { MfaEnrollment } from "@/features/security/components/mfa-enrollment";
 import { SessionList } from "@/features/security/components/session-list";
+import { WorkingHoursRestrictionToggle } from "@/features/security/components/working-hours-restriction-toggle";
 import { SecurityService } from "@/services/SecurityService";
+import { TenantService } from "@/services/TenantService";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 
@@ -13,14 +15,15 @@ export const metadata: Metadata = {
 };
 
 /**
- * Phase 4c: security centre -- login_events + sessions + MFA enrollment
- * (docs/05-authentication-security.md) -- working-hours restriction,
- * geo-fencing/temporary-access, download security, and the full
- * audit_logs coverage pass are separate, later Phase 4 increments.
- * Always reachable (every signed-in user manages their own sessions/MFA
- * factor); the tenant-wide activity section only renders for security.
- * manage holders, matching RLS's own self-or-security.manage visibility
- * on both tables. MFA enrollment doesn't need any data fetched here --
+ * Phase 4c/4e: security centre -- login_events + sessions + MFA
+ * enrollment + working-hours login restriction (docs/05-authentication-
+ * security.md) -- geo-fencing/temporary-access, download security, and
+ * the full audit_logs coverage pass are separate, later Phase 4
+ * increments. Always reachable (every signed-in user manages their own
+ * sessions/MFA factor); the tenant-wide activity section and the
+ * working-hours toggle only render for security.manage/settings.manage
+ * holders respectively, matching RLS's own gating on the underlying
+ * tables. MFA enrollment doesn't need any data fetched here --
  * MfaEnrollment calls supabase.auth.mfa.* directly against the caller's
  * own session (see its own header comment).
  */
@@ -43,24 +46,37 @@ export default async function SecurityPage({
     .single();
 
   const tenantId = tenant!.id;
-  const canManage = await can("security.manage", { tenantId });
+  const [canManageSecurity, canManageSettings] = await Promise.all([
+    can("security.manage", { tenantId }),
+    can("settings.manage", { tenantId }),
+  ]);
   const cookieStore = await cookies();
   const currentSessionId = cookieStore.get("sid")?.value ?? null;
 
   const securityService = new SecurityService(supabase);
-  const [sessions, myEvents, tenantEvents] = await Promise.all([
+  const [sessions, myEvents, tenantEvents, workingHoursRestricted] = await Promise.all([
     securityService.listSessions(user!.id),
     securityService.listLoginEvents(user!.id),
-    canManage ? securityService.listTenantLoginEvents(tenantId) : Promise.resolve([]),
+    canManageSecurity ? securityService.listTenantLoginEvents(tenantId) : Promise.resolve([]),
+    canManageSettings
+      ? new TenantService(supabase).getSetting<boolean>(tenantId, "restrict_login_to_working_hours")
+      : Promise.resolve(null),
   ]);
 
   return (
     <div className="flex flex-1 flex-col gap-4 p-6">
       <h1 className="text-xl font-semibold">Security</h1>
       <MfaEnrollment />
+      {canManageSettings && (
+        <WorkingHoursRestrictionToggle
+          tenantId={tenantId}
+          tenantSlug={tenantSlug}
+          initialEnabled={workingHoursRestricted === true}
+        />
+      )}
       <SessionList sessions={sessions} currentSessionId={currentSessionId} />
       <LoginEventList title="Your recent sign-ins" events={myEvents} />
-      {canManage && <LoginEventList title="Tenant-wide sign-in activity" events={tenantEvents} />}
+      {canManageSecurity && <LoginEventList title="Tenant-wide sign-in activity" events={tenantEvents} />}
     </div>
   );
 }

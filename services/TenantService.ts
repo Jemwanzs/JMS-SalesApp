@@ -108,8 +108,43 @@ export class TenantService {
     return { tenantId: tenant.id, slug: tenant.slug };
   }
 
-  async getSetting(_tenantId: string, _key: string): Promise<unknown> {
-    throw new Error("TenantService.getSetting: not yet implemented (Phase 1d)");
+  /**
+   * `tenant_settings` (migration 0001) is a generic per-tenant key/value
+   * jsonb table -- a missing row just means "not configured," not an
+   * error, so callers get `null` rather than having to special-case a
+   * PostgREST not-found response.
+   */
+  async getSetting<T = unknown>(tenantId: string, key: string): Promise<T | null> {
+    const { data, error } = await this.supabase
+      .from("tenant_settings")
+      .select("value")
+      .eq("tenant_id", tenantId)
+      .eq("setting_key", key)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`TenantService.getSetting: ${error.message}`);
+    }
+
+    return (data?.value as T | undefined) ?? null;
+  }
+
+  /**
+   * RLS (tenant_settings_upsert/update, migration 0001) gates this on
+   * settings.manage -- callers should check that first for a clear error
+   * rather than relying solely on the RLS rejection.
+   */
+  async setSetting(tenantId: string, key: string, value: unknown, updatedBy: string): Promise<void> {
+    const { error } = await this.supabase
+      .from("tenant_settings")
+      .upsert(
+        { tenant_id: tenantId, setting_key: key, value, updated_by: updatedBy },
+        { onConflict: "tenant_id,setting_key" }
+      );
+
+    if (error) {
+      throw new Error(`TenantService.setSetting: ${error.message}`);
+    }
   }
 
   /**

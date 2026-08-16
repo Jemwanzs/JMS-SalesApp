@@ -76,6 +76,29 @@ export async function signInAction(
 
   const tenant = await resolveActiveTenant(supabase, userId);
 
+  if (tenant) {
+    const gate = await authService.evaluateAccessGate({ tenantId: tenant.tenantId });
+    if (!gate.allowed) {
+      // The password WAS correct -- signInWithPassword already
+      // established a real session/cookies -- so it must be torn back
+      // down before returning an error, not just declined.
+      await supabase.auth.signOut();
+
+      await securityService
+        .logLoginEvent({
+          tenantId: tenant.tenantId,
+          profileId: userId,
+          ip,
+          userAgent,
+          success: false,
+          failureReason: gate.reason ?? "Blocked by access restrictions",
+        })
+        .catch(() => {});
+
+      return { error: gate.reason ?? "Sign in is currently restricted" };
+    }
+  }
+
   try {
     const [, session] = await Promise.all([
       securityService.logLoginEvent({
