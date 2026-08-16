@@ -515,6 +515,10 @@ export interface Database {
         Args: Record<string, never>;
         Returns: BusinessDaySweepResult;
       };
+      queue_daily_report_job: {
+        Args: { p_business_day_id: string };
+        Returns: void;
+      };
       is_tenant_member: {
         Args: { p_tenant_id: string };
         Returns: boolean;

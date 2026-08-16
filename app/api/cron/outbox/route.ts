@@ -27,11 +27,14 @@ const BATCH_SIZE = 20;
  * completed job means the report was generated and stored, not that
  * anyone was emailed about it.
  *
- * InsightsService.evaluateDailyInsights (Phase 3d) runs right after a
- * daily report succeeds, same "a business day just closed" trigger --
- * its own failure is caught separately and never undoes the report
- * job's success (the report is this job's actual deliverable; insights
- * are a best-effort bonus riding along on the same event).
+ * InsightsService.evaluateDailyInsights (Phase 3d) and ReportService.
+ * generateCorrectionsReport (Phase 3e) both run right after the daily
+ * report succeeds, same "a business day just closed" trigger -- each
+ * one's failure is caught separately and never undoes the report job's
+ * success (the daily report is this job's actual deliverable; insights
+ * and the corrections report are best-effort bonuses riding along on
+ * the same event). generateCorrectionsReport itself returns null (not
+ * an error) on an ordinary day with nothing voided/corrected.
  */
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
@@ -74,6 +77,12 @@ export async function GET(request: Request) {
           // Best-effort -- insights are a bonus on top of the report,
           // not this job's deliverable. Swallowed rather than failing
           // (and retrying) an otherwise-successful report job over it.
+        }
+
+        try {
+          await reportService.generateCorrectionsReport(businessDayId);
+        } catch {
+          // Same best-effort posture as insights above.
         }
       } else {
         throw new Error(`Unknown report_jobs.job_type: ${job.job_type}`);

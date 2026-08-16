@@ -204,6 +204,22 @@ export class BusinessDayService {
       throw new Error(`BusinessDayService.closeDay: ${error?.message}`);
     }
 
+    // Manual close reuses the exact same outbox trigger the pg_cron sweep
+    // uses on auto-close (migration 0011) -- daily report/insights
+    // generation shouldn't depend on which path closed the day.
+    // report_jobs has RLS enabled with zero policies (only the service-
+    // role outbox worker writes it directly), so this goes through the
+    // queue_daily_report_job() SECURITY DEFINER function (migration
+    // 0015) instead of an insert this RLS-respecting client couldn't
+    // perform. Best-effort: a failed enqueue doesn't fail the close
+    // itself -- the day is already closed by this point.
+    const { error: queueError } = await this.supabase.rpc("queue_daily_report_job", {
+      p_business_day_id: businessDayId,
+    });
+    if (queueError) {
+      console.error(`BusinessDayService.closeDay: failed to queue report_jobs: ${queueError.message}`);
+    }
+
     return toBusinessDay(data);
   }
 

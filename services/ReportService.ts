@@ -3,10 +3,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 
 /**
- * ReportService — scheduled report generation. Daily report only for now
- * (docs/09-business-day-engine.md's "Daily sales summary": gross sales,
- * transaction count, top product, highest sales person, average sale, vs
- * previous day) — weekly/monthly/custom and corrections/void reports are
+ * ReportService — scheduled report generation. Daily sales report + a
+ * daily corrections/void report (docs/09-business-day-engine.md's
+ * "Daily sales summary"; spec §38's "Sales Corrections"/"Void/Reversal
+ * Report" combined into one report_type here, both covering the same
+ * "what changed today" question). Weekly/monthly/custom report types are
  * later Phase 3 increments, not yet implemented.
  *
  * Called exclusively by the outbox-drain worker (app/api/cron/outbox),
@@ -29,6 +30,25 @@ export interface DailyReportPayload {
   topProduct: { name: string; revenue: number } | null;
   topSalesPerson: { name: string; revenue: number } | null;
   vsPreviousDay: { previousGrossSales: number; changePercent: number | null } | null;
+}
+
+export interface CorrectionsReportEntry {
+  saleNumber: string | null;
+  productName: string;
+  correctionType: "void" | "correct";
+  reason: string;
+  oldAmount: number;
+  newAmount: number | null;
+  requestedBy: string;
+  createdAt: string;
+}
+
+export interface CorrectionsReportPayload {
+  voidCount: number;
+  correctionCount: number;
+  totalVoided: number;
+  totalCorrectedDelta: number;
+  entries: CorrectionsReportEntry[];
 }
 
 export class ReportService {
@@ -133,13 +153,141 @@ export class ReportService {
   }
 
   /**
+   * Skipped (returns null, no row written) when nothing was voided or
+   * corrected that day -- an empty report for every ordinary day would
+   * just be noise, unlike the daily sales report which is meaningful
+   * even at zero sales.
+   *
+   * `sale_corrections.old_values`/`new_values` (migration 0006) already
+   * carry the original sale's full snapshot as jsonb (`to_jsonb(sale)`),
+   * including `location_id` -- filtering on `old_values->>location_id`
+   * avoids a second join back to `sales` entirely.
+   *
+   * "That day" is approximated as `created_at` within the business day's
+   * calendar date in UTC, not the location's own effective timezone --
+   * an acceptable approximation at the same rigor level as the rest of
+   * this increment (a correction is a rare, already-reviewed event, not
+   * a high-volume figure where a timezone-boundary sale could visibly
+   * move totals the way it would for the daily sales report).
+   */
+  async generateCorrectionsReport(businessDayId: string): Promise<string | null> {
+    const { data: businessDay, error: dayError } = await this.supabase
+      .from("business_days")
+      .select("id, tenant_id, location_id, business_date")
+      .eq("id", businessDayId)
+      .single();
+
+    if (dayError || !businessDay) {
+      throw new Error("ReportService.generateCorrectionsReport: business day not found");
+    }
+
+    const dayStart = `${businessDay.business_date}T00:00:00Z`;
+    const dayEnd = new Date(new Date(dayStart).getTime() + 86_400_000).toISOString();
+
+    const { data: corrections, error: correctionsError } = await this.supabase
+      .from("sale_corrections")
+      .select("correction_type, old_values, new_values, reason, requested_by, created_at")
+      .eq("tenant_id", businessDay.tenant_id)
+      .eq("old_values->>location_id", businessDay.location_id)
+      .gte("created_at", dayStart)
+      .lt("created_at", dayEnd);
+
+    if (correctionsError) {
+      throw new Error(`ReportService.generateCorrectionsReport: ${correctionsError.message}`);
+    }
+    if (!corrections || corrections.length === 0) {
+      return null;
+    }
+
+    const requesterIds = [...new Set(corrections.map((c) => c.requested_by))];
+    const { data: profiles } = await this.supabase
+      .from("profiles")
+      .select("id, full_name, email")
+      .in("id", requesterIds);
+    const nameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name ?? p.email]));
+
+    let voidCount = 0;
+    let correctionCount = 0;
+    let totalVoided = 0;
+    let totalCorrectedDelta = 0;
+    const entries: CorrectionsReportEntry[] = [];
+
+    for (const row of corrections) {
+      const oldValues = row.old_values as {
+        sale_number: string | null;
+        product_name_snapshot: string;
+        actual_amount: number;
+      };
+      const newValues = row.new_values as { actual_amount: number } | null;
+      const oldAmount = Number(oldValues.actual_amount);
+      const newAmount = newValues ? Number(newValues.actual_amount) : null;
+
+      if (row.correction_type === "void") {
+        voidCount += 1;
+        totalVoided += oldAmount;
+      } else {
+        correctionCount += 1;
+        totalCorrectedDelta += (newAmount ?? oldAmount) - oldAmount;
+      }
+
+      entries.push({
+        saleNumber: oldValues.sale_number,
+        productName: oldValues.product_name_snapshot,
+        correctionType: row.correction_type,
+        reason: row.reason,
+        oldAmount,
+        newAmount,
+        requestedBy: nameById.get(row.requested_by) ?? "Unknown",
+        createdAt: row.created_at,
+      });
+    }
+
+    const payload: CorrectionsReportPayload = {
+      voidCount,
+      correctionCount,
+      totalVoided,
+      totalCorrectedDelta,
+      entries,
+    };
+
+    const { data: report, error: reportError } = await this.supabase
+      .from("reports")
+      .insert({
+        tenant_id: businessDay.tenant_id,
+        location_id: businessDay.location_id,
+        report_type: "corrections_void",
+        period_start: businessDay.business_date,
+        period_end: businessDay.business_date,
+        status: "completed",
+        payload: payload as unknown as Record<string, unknown>,
+      })
+      .select("id")
+      .single();
+
+    if (reportError || !report) {
+      throw new Error(`ReportService.generateCorrectionsReport: ${reportError?.message}`);
+    }
+
+    return report.id;
+  }
+
+  /**
    * RLS (reports_select, migration 0013) already restricts rows to
    * holders of reports.view -- no separate permission check needed here.
    */
   async listReports(
     tenantId: string,
     opts: { limit?: number } = {}
-  ): Promise<Array<{ id: string; reportType: string; periodStart: string; periodEnd: string; payload: DailyReportPayload; createdAt: string }>> {
+  ): Promise<
+    Array<{
+      id: string;
+      reportType: string;
+      periodStart: string;
+      periodEnd: string;
+      payload: DailyReportPayload | CorrectionsReportPayload;
+      createdAt: string;
+    }>
+  > {
     const { data, error } = await this.supabase
       .from("reports")
       .select("id, report_type, period_start, period_end, payload, created_at")
@@ -156,7 +304,7 @@ export class ReportService {
       reportType: row.report_type,
       periodStart: row.period_start,
       periodEnd: row.period_end,
-      payload: row.payload as unknown as DailyReportPayload,
+      payload: row.payload as unknown as DailyReportPayload | CorrectionsReportPayload,
       createdAt: row.created_at,
     }));
   }
