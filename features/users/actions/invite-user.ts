@@ -2,7 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 
+import { AuditService } from "@/services/AuditService";
 import { UserService } from "@/services/UserService";
+import { AUDIT_ACTION } from "@/lib/audit/actions";
 import { assertCan } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
@@ -49,15 +51,27 @@ export async function inviteUserAction(
     // above already ran against the RLS-respecting session, so this
     // isn't a privilege-escalation shortcut, just the one step RLS
     // structurally can't do for the acting admin.
-    const userService = new UserService(createServiceRoleClient());
+    const serviceRole = createServiceRoleClient();
+    const userService = new UserService(serviceRole);
 
-    await userService.inviteUser({
+    const result = await userService.inviteUser({
       tenantId,
       email: parsed.data.email,
       fullName: parsed.data.fullName,
       roleId: parsed.data.roleId,
       invitedBy: user.id,
     });
+
+    await new AuditService(serviceRole)
+      .log({
+        tenantId,
+        actorProfileId: user.id,
+        action: AUDIT_ACTION.USER_INVITED,
+        entityType: "profile",
+        entityId: result.profileId,
+        newValues: { email: parsed.data.email },
+      })
+      .catch(() => {});
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Could not invite user" };
   }

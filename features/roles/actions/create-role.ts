@@ -2,9 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 
+import { AuditService } from "@/services/AuditService";
 import { RoleService } from "@/services/RoleService";
+import { AUDIT_ACTION } from "@/lib/audit/actions";
 import { assertCan } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { firstIssuePerField } from "@/lib/utils/form-errors";
 import { createRoleSchema, type CreateRoleInput } from "@/validations/role";
 
@@ -32,6 +35,9 @@ export async function createRoleAction(
 
   const permissionKeys = formData.getAll("permissionKeys").map(String);
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   const roleService = new RoleService(supabase);
   let roleId: string;
 
@@ -45,6 +51,17 @@ export async function createRoleAction(
       permissionKeys
     );
     roleId = created.roleId;
+
+    await new AuditService(createServiceRoleClient())
+      .log({
+        tenantId,
+        actorProfileId: user?.id ?? null,
+        action: AUDIT_ACTION.PERMISSION_CHANGED,
+        entityType: "role",
+        entityId: roleId,
+        newValues: { name: parsed.data.name, permissionKeys },
+      })
+      .catch(() => {});
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Could not create role" };
   }

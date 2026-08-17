@@ -2,8 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 
+import { AuditService } from "@/services/AuditService";
 import { SalesService, type RecordedSale } from "@/services/SalesService";
+import { AUDIT_ACTION } from "@/lib/audit/actions";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { firstIssuePerField } from "@/lib/utils/form-errors";
 import { recordSaleSchema, type RecordSaleInput } from "@/validations/sale";
 
@@ -58,6 +61,19 @@ export async function recordSaleAction(
       recordedBy: user.id,
       idempotencyKey: parsed.data.idempotencyKey,
     });
+
+    if (!sale.replayed) {
+      await new AuditService(createServiceRoleClient())
+        .log({
+          tenantId,
+          actorProfileId: user.id,
+          action: AUDIT_ACTION.SALE_CREATED,
+          entityType: "sale",
+          entityId: sale.id,
+          newValues: { saleNumber: sale.saleNumber, actualAmount: sale.actualAmount },
+        })
+        .catch(() => {});
+    }
 
     revalidatePath(`/t/${tenantSlug}/sales`);
     return { sale };

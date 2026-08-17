@@ -31,6 +31,10 @@ import type { Database } from "@/types/database.types";
  *     zero write policies (a FAILED login attempt has no authenticated
  *     session for a self-scoped insert policy to key off of) — see
  *     SecurityService's own header comment
+ *   - AuditService.log — audit_logs has RLS enabled with zero write
+ *     policies, same reasoning as login_events (FAILED_LOGIN in
+ *     particular has no session to key a self-scoped policy off of) —
+ *     see AuditService's own header comment
  *
  * Every other read/write MUST go through lib/supabase/server.ts so RLS
  * stays the enforced boundary. Reaching for this file because "it's

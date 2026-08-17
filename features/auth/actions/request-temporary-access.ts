@@ -1,7 +1,10 @@
 "use server";
 
+import { AuditService } from "@/services/AuditService";
 import { AuthService } from "@/services/AuthService";
+import { AUDIT_ACTION } from "@/lib/audit/actions";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { resolveActiveTenant } from "@/lib/tenant/resolve-active-tenant";
 import type { RequestTemporaryAccessResult } from "@/types/database.types";
 
@@ -60,6 +63,18 @@ export async function requestTemporaryAccessAction(
       longitude: Number.isFinite(longitude) ? longitude : null,
       durationMinutes,
     });
+
+    await new AuditService(createServiceRoleClient())
+      .log({
+        tenantId: tenant.tenantId,
+        actorProfileId: userId,
+        action: AUDIT_ACTION.TEMPORARY_ACCESS_REQUESTED,
+        entityType: "temporary_access_request",
+        entityId: result.requestId,
+        reason,
+        metadata: { durationMinutes },
+      })
+      .catch(() => {});
 
     await supabase.auth.signOut();
     return { result };

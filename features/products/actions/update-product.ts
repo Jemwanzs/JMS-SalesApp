@@ -2,9 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 
+import { AuditService } from "@/services/AuditService";
 import { ProductService, type Product } from "@/services/ProductService";
+import { AUDIT_ACTION } from "@/lib/audit/actions";
 import { assertCan } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { firstIssuePerField } from "@/lib/utils/form-errors";
 import { updateProductSchema, type UpdateProductInput } from "@/validations/product";
 
@@ -42,6 +45,9 @@ export async function updateProductAction(
   const showNameInPhotoView = formData.get("showNameInPhotoView") === "true";
 
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   const productService = new ProductService(supabase);
 
   try {
@@ -54,6 +60,17 @@ export async function updateProductAction(
       showExpectedPrice,
       showNameInPhotoView,
     });
+
+    await new AuditService(createServiceRoleClient())
+      .log({
+        tenantId,
+        actorProfileId: user?.id ?? null,
+        action: AUDIT_ACTION.PRODUCT_EDITED,
+        entityType: "product",
+        entityId: product.id,
+        newValues: { name: product.name, expectedPrice: product.expectedPrice },
+      })
+      .catch(() => {});
 
     revalidatePath(`/t/${tenantSlug}/products`);
     revalidatePath(`/t/${tenantSlug}/sales`);

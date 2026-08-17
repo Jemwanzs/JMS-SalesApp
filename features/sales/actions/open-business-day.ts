@@ -2,8 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 
+import { AuditService } from "@/services/AuditService";
 import { BusinessDayService } from "@/services/BusinessDayService";
+import { AUDIT_ACTION } from "@/lib/audit/actions";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
 export async function openBusinessDayAction(
   tenantId: string,
@@ -22,7 +25,17 @@ export async function openBusinessDayAction(
   const businessDayService = new BusinessDayService(supabase);
 
   try {
-    await businessDayService.openDay(tenantId, locationId, user.id);
+    const day = await businessDayService.openDay(tenantId, locationId, user.id);
+
+    await new AuditService(createServiceRoleClient())
+      .log({
+        tenantId,
+        actorProfileId: user.id,
+        action: AUDIT_ACTION.BUSINESS_DAY_OPENED,
+        entityType: "business_day",
+        entityId: day.id,
+      })
+      .catch(() => {});
   } catch (err) {
     return {
       error: err instanceof Error ? err.message : "Could not open business day",

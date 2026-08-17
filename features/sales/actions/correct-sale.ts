@@ -2,8 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 
+import { AuditService } from "@/services/AuditService";
 import { SalesService } from "@/services/SalesService";
+import { AUDIT_ACTION } from "@/lib/audit/actions";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { firstIssuePerField } from "@/lib/utils/form-errors";
 import { correctSaleSchema, type CorrectSaleInput } from "@/validations/sale";
 import type { VoidOrCorrectResult } from "@/types/database.types";
@@ -44,6 +47,26 @@ export async function correctSaleAction(
       newNotes: parsed.data.newNotes || null,
       reason: parsed.data.reason,
     });
+
+    if (result.status === "corrected") {
+      const [{ data: user }, { data: sale }] = await Promise.all([
+        supabase.auth.getUser().then((r) => ({ data: r.data.user })),
+        supabase.from("sales").select("tenant_id").eq("id", parsed.data.saleId).single(),
+      ]);
+      await new AuditService(createServiceRoleClient())
+        .log({
+          tenantId: sale?.tenant_id ?? null,
+          actorProfileId: user?.id ?? null,
+          action: AUDIT_ACTION.SALE_EDITED,
+          entityType: "sale",
+          entityId: parsed.data.saleId,
+          newValues: { newAmount: parsed.data.newAmount, newQuantity: parsed.data.newQuantity },
+          reason: parsed.data.reason,
+          metadata: result.replacementSaleId ? { replacementSaleId: result.replacementSaleId } : null,
+        })
+        .catch(() => {});
+    }
+
     revalidatePath(`/t/${tenantSlug}/sales-history`);
     return { result };
   } catch (err) {

@@ -559,6 +559,29 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["sessions"]["Row"]>;
         Relationships: [];
       };
+      audit_logs: {
+        Row: {
+          id: string;
+          tenant_id: string | null;
+          actor_profile_id: string | null;
+          action: string;
+          entity_type: string;
+          entity_id: string | null;
+          old_values: Record<string, unknown> | null;
+          new_values: Record<string, unknown> | null;
+          reason: string | null;
+          ip: string | null;
+          device: string | null;
+          metadata: Record<string, unknown> | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["audit_logs"]["Row"]> & {
+          action: string;
+          entity_type: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["audit_logs"]["Row"]>;
+        Relationships: [];
+      };
       download_audit: {
         Row: {
           id: string;

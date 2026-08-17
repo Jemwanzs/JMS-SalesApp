@@ -2,11 +2,14 @@
 
 import { headers } from "next/headers";
 
+import { AuditService } from "@/services/AuditService";
 import { DownloadService } from "@/services/DownloadService";
 import { SalesService } from "@/services/SalesService";
 import { TenantService } from "@/services/TenantService";
+import { AUDIT_ACTION } from "@/lib/audit/actions";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { toCsv } from "@/lib/utils/csv";
 
 export interface ExportSalesHistoryState {
@@ -47,6 +50,17 @@ export async function exportSalesHistoryCsvAction(
     return { error: "Not authorized to view sales" };
   }
 
+  const auditService = new AuditService(createServiceRoleClient());
+  await auditService
+    .log({
+      tenantId,
+      actorProfileId: user.id,
+      action: AUDIT_ACTION.EXPORT_REQUESTED,
+      entityType: "sales_history_csv",
+      metadata: filters,
+    })
+    .catch(() => {});
+
   const downloadService = new DownloadService(supabase);
   const requiresPasscode = await new TenantService(supabase).getSetting<boolean>(
     tenantId,
@@ -83,14 +97,27 @@ export async function exportSalesHistoryCsvAction(
   ]);
 
   const h = await headers();
+  const ip = h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? h.get("x-real-ip") ?? null;
+
   await downloadService.logDownload({
     tenantId,
     profileId: user.id,
     exportType: "sales_history_csv",
     entityRef: JSON.stringify(filters),
     passcodeVerifiedAt,
-    ip: h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? h.get("x-real-ip") ?? null,
+    ip,
   });
+
+  await auditService
+    .log({
+      tenantId,
+      actorProfileId: user.id,
+      action: AUDIT_ACTION.EXPORT_COMPLETED,
+      entityType: "sales_history_csv",
+      ipAddress: ip,
+      metadata: { ...filters, rowCount: sales.length },
+    })
+    .catch(() => {});
 
   return { csv, filename: `sales-history-${new Date().toISOString().slice(0, 10)}.csv` };
 }

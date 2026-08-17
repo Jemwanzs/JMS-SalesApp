@@ -2,9 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 
+import { AuditService } from "@/services/AuditService";
 import { RoleService } from "@/services/RoleService";
+import { AUDIT_ACTION } from "@/lib/audit/actions";
 import { assertCan } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { firstIssuePerField } from "@/lib/utils/form-errors";
 import { updateRoleSchema, type UpdateRoleInput } from "@/validations/role";
 
@@ -32,6 +35,9 @@ export async function updateRoleAction(
 
   const permissionKeys = formData.getAll("permissionKeys").map(String);
   const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   const roleService = new RoleService(supabase);
 
   try {
@@ -42,6 +48,17 @@ export async function updateRoleAction(
       description: parsed.data.description ?? null,
     });
     await roleService.setRolePermissions(tenantId, parsed.data.roleId, permissionKeys);
+
+    await new AuditService(createServiceRoleClient())
+      .log({
+        tenantId,
+        actorProfileId: user?.id ?? null,
+        action: AUDIT_ACTION.PERMISSION_CHANGED,
+        entityType: "role",
+        entityId: parsed.data.roleId,
+        newValues: { permissionKeys },
+      })
+      .catch(() => {});
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Could not update role" };
   }

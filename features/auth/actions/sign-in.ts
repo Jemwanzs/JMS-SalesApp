@@ -3,8 +3,10 @@
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { AuditService } from "@/services/AuditService";
 import { AuthService } from "@/services/AuthService";
 import { SecurityService } from "@/services/SecurityService";
+import { AUDIT_ACTION } from "@/lib/audit/actions";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { resolveActiveTenant } from "@/lib/tenant/resolve-active-tenant";
@@ -43,7 +45,9 @@ export async function signInAction(
   const supabase = await createClient();
   const authService = new AuthService(supabase);
   const { ip, userAgent } = await requestMeta();
-  const securityService = new SecurityService(createServiceRoleClient());
+  const serviceRole = createServiceRoleClient();
+  const securityService = new SecurityService(serviceRole);
+  const auditService = new AuditService(serviceRole);
 
   let userId: string;
   try {
@@ -61,6 +65,8 @@ export async function signInAction(
       .eq("email", parsed.data.email)
       .maybeSingle();
 
+    const failureReason = err instanceof Error ? err.message : "Sign in failed";
+
     await securityService
       .logLoginEvent({
         tenantId: null,
@@ -68,7 +74,19 @@ export async function signInAction(
         ip,
         userAgent,
         success: false,
-        failureReason: err instanceof Error ? err.message : "Sign in failed",
+        failureReason,
+      })
+      .catch(() => {});
+
+    await auditService
+      .log({
+        tenantId: null,
+        actorProfileId: maybeProfile?.id ?? null,
+        action: AUDIT_ACTION.FAILED_LOGIN,
+        entityType: "session",
+        reason: failureReason,
+        ipAddress: ip,
+        device: userAgent,
       })
       .catch(() => {});
 
@@ -95,6 +113,8 @@ export async function signInAction(
       // down before returning an error, not just declined.
       await supabase.auth.signOut();
 
+      const failureReason = gate.reason ?? "Blocked by access restrictions";
+
       await securityService
         .logLoginEvent({
           tenantId: tenant.tenantId,
@@ -102,7 +122,20 @@ export async function signInAction(
           ip,
           userAgent,
           success: false,
-          failureReason: gate.reason ?? "Blocked by access restrictions",
+          failureReason,
+        })
+        .catch(() => {});
+
+      await auditService
+        .log({
+          tenantId: tenant.tenantId,
+          actorProfileId: userId,
+          action: AUDIT_ACTION.FAILED_LOGIN,
+          entityType: "session",
+          reason: failureReason,
+          ipAddress: ip,
+          device: userAgent,
+          metadata: gate.blockedBy ? { blockedBy: gate.blockedBy } : null,
         })
         .catch(() => {});
 
@@ -124,6 +157,14 @@ export async function signInAction(
         tenantId: tenant?.tenantId ?? null,
         ip,
         userAgent,
+      }),
+      auditService.log({
+        tenantId: tenant?.tenantId ?? null,
+        actorProfileId: userId,
+        action: AUDIT_ACTION.LOGIN,
+        entityType: "session",
+        ipAddress: ip,
+        device: userAgent,
       }),
     ]);
 

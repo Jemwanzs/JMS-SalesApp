@@ -2,9 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 
+import { AuditService } from "@/services/AuditService";
 import { ProductService } from "@/services/ProductService";
+import { AUDIT_ACTION } from "@/lib/audit/actions";
 import { assertCan } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { firstIssuePerField } from "@/lib/utils/form-errors";
 import { createProductSchema, type CreateProductInput } from "@/validations/product";
 
@@ -56,7 +59,7 @@ export async function createProductAction(
   try {
     await assertCan("products.create", { tenantId });
 
-    await productService.create(tenantId, {
+    const product = await productService.create(tenantId, {
       id: typeof id === "string" && id ? id : undefined,
       name: parsed.data.name,
       expectedPrice: Number(parsed.data.expectedPrice),
@@ -65,6 +68,17 @@ export async function createProductAction(
       showNameInPhotoView,
       createdBy: user.id,
     });
+
+    await new AuditService(createServiceRoleClient())
+      .log({
+        tenantId,
+        actorProfileId: user.id,
+        action: AUDIT_ACTION.PRODUCT_CREATED,
+        entityType: "product",
+        entityId: product.id,
+        newValues: { name: product.name },
+      })
+      .catch(() => {});
   } catch (err) {
     return {
       error: err instanceof Error ? err.message : "Could not create product",
