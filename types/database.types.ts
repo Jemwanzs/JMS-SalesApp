@@ -37,6 +37,14 @@ export interface ReopenBusinessDayResult {
   approvalRequestId?: string;
 }
 
+export type TemporaryAccessStatus = "pending" | "approved" | "rejected" | "expired";
+
+export interface RequestTemporaryAccessResult {
+  status: "pending_approval";
+  approvalRequestId: string;
+  requestId: string;
+}
+
 export interface AutoRelockResult {
   status: BusinessDayStatus;
   relocked: boolean;
@@ -49,6 +57,7 @@ export interface BusinessDaySweepResult {
   opened: number;
   closed: number;
   relocked: number;
+  accessExpired: number;
   ranAt: string;
 }
 
@@ -396,6 +405,30 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["approval_requests"]["Row"]>;
         Relationships: [];
       };
+      temporary_access_requests: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          approval_request_id: string;
+          profile_id: string;
+          reason: string;
+          current_latitude: number | null;
+          current_longitude: number | null;
+          requested_duration_minutes: number;
+          granted_until: string | null;
+          status: TemporaryAccessStatus;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["temporary_access_requests"]["Row"]> & {
+          tenant_id: string;
+          approval_request_id: string;
+          profile_id: string;
+          reason: string;
+          requested_duration_minutes: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["temporary_access_requests"]["Row"]>;
+        Relationships: [];
+      };
       sale_corrections: {
         Row: {
           id: string;
@@ -577,6 +610,16 @@ export interface Database {
       get_my_permissions: {
         Args: { p_tenant_id: string };
         Returns: { permission_key: string; location_id: string | null }[];
+      };
+      request_temporary_access: {
+        Args: {
+          p_tenant_id: string;
+          p_reason: string;
+          p_current_latitude: number | null;
+          p_current_longitude: number | null;
+          p_duration_minutes: number;
+        };
+        Returns: RequestTemporaryAccessResult;
       };
     };
   };

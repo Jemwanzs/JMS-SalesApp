@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { Database } from "@/types/database.types";
+import type { Database, RequestTemporaryAccessResult } from "@/types/database.types";
+import { haversineDistanceMeters } from "@/lib/utils/geo";
 
 /**
  * AuthService — sign up/in/out, password reset, the composed access
@@ -9,15 +10,26 @@ import type { Database } from "@/types/database.types";
  * via @supabase/ssr — never construct this with the service-role client
  * for these methods.
  *
- * evaluateAccessGate() is Phase 4e's first restriction (working-hours
- * login only, docs/05-authentication-security.md's `restrict_login_to_
- * working_hours` tenant setting) — geo-fencing and tenant-suspension
- * checks are later additions to this SAME gate, not a redesign, per the
- * doc's "single access-gate composition point" intent. Scoped to
- * *login-time* blocking only: the doc's other half ("a session nearing
- * the configured end time gets a countdown warning, then signs out") is
- * a client-side polling/timer concern, deliberately deferred rather than
- * built speculatively alongside the server-verifiable half.
+ * evaluateAccessGate() is the single access-gate composition point docs/
+ * 05-authentication-security.md calls for: 4e added working-hours login
+ * restriction (`restrict_login_to_working_hours`), this increment adds
+ * geo-fencing (`restrict_login_to_geofence`) as a second, independent
+ * check in the SAME gate rather than a parallel one — tenant-suspension
+ * is a later addition to this same function, not a redesign. Scoped to
+ * *login-time* blocking only: the doc's "session nearing the configured
+ * end time gets a countdown warning, then signs out" language (for both
+ * working-hours and, by extension, an expiring temporary-access grant)
+ * is a client-side polling/timer concern, deliberately deferred rather
+ * than built speculatively alongside the server-verifiable half.
+ *
+ * requestTemporaryAccess() is the geo-fencing escape hatch (docs/05's
+ * "Temporary access requests" section, the Approval Engine's second
+ * consumer after migration 0006's void/correct/reopen). It must run
+ * under an authenticated session (the SECURITY DEFINER function keys off
+ * auth.uid()) — callers use it inside the same transient
+ * sign-in-then-sign-out window sign-in.ts already establishes for the
+ * gate check itself, never against a session that already passed the
+ * gate.
  */
 export interface SignUpResult {
   userId: string;
@@ -27,6 +39,7 @@ export interface SignUpResult {
 export interface AccessGateResult {
   allowed: boolean;
   reason?: string;
+  blockedBy?: "working_hours" | "geofence";
 }
 
 export class AuthService {
@@ -115,21 +128,30 @@ export class AuthService {
    * rather than taking a locationId param -- at login time the caller
    * doesn't have one to pass yet anyway.
    */
-  async evaluateAccessGate(input: { tenantId: string }): Promise<AccessGateResult> {
-    const { data: setting } = await this.supabase
+  async evaluateAccessGate(input: {
+    tenantId: string;
+    profileId: string;
+    latitude?: number | null;
+    longitude?: number | null;
+  }): Promise<AccessGateResult> {
+    const { data: settingRows } = await this.supabase
       .from("tenant_settings")
-      .select("value")
+      .select("setting_key, value")
       .eq("tenant_id", input.tenantId)
-      .eq("setting_key", "restrict_login_to_working_hours")
-      .maybeSingle();
+      .in("setting_key", ["restrict_login_to_working_hours", "restrict_login_to_geofence"]);
 
-    if (setting?.value !== true) {
+    const workingHoursRestricted =
+      settingRows?.find((r) => r.setting_key === "restrict_login_to_working_hours")?.value === true;
+    const geofenceRestricted =
+      settingRows?.find((r) => r.setting_key === "restrict_login_to_geofence")?.value === true;
+
+    if (!workingHoursRestricted && !geofenceRestricted) {
       return { allowed: true };
     }
 
     const { data: location } = await this.supabase
       .from("locations")
-      .select("id, timezone")
+      .select("id, timezone, lat, long, geofence_radius_m")
       .eq("tenant_id", input.tenantId)
       .order("created_at", { ascending: true })
       .limit(1)
@@ -139,10 +161,28 @@ export class AuthService {
       return { allowed: true };
     }
 
+    if (workingHoursRestricted) {
+      const gate = await this.checkWorkingHours(input.tenantId, location);
+      if (!gate.allowed) {
+        return gate;
+      }
+    }
+
+    if (geofenceRestricted) {
+      return await this.checkGeofence(input, location);
+    }
+
+    return { allowed: true };
+  }
+
+  private async checkWorkingHours(
+    tenantId: string,
+    location: { id: string; timezone: string | null }
+  ): Promise<AccessGateResult> {
     const { data: tenant } = await this.supabase
       .from("tenants")
       .select("timezone")
-      .eq("id", input.tenantId)
+      .eq("id", tenantId)
       .maybeSingle();
     const timezone = location.timezone ?? tenant?.timezone ?? "UTC";
 
@@ -211,9 +251,91 @@ export class AuthService {
 
     return {
       allowed: false,
+      blockedBy: "working_hours",
       reason: closedAllDay
         ? "Login is restricted to business hours — this location is closed today."
         : `Login is restricted to business hours (${openTime!.slice(0, 5)}–${closeTime!.slice(0, 5)}).`,
     };
+  }
+
+  /**
+   * An approved temporary_access_requests grant bypasses the fence
+   * entirely for its window (checked first, before even looking at
+   * coordinates) -- that's the whole point of the grant. Missing
+   * coordinates (geolocation denied/unavailable) and coordinates outside
+   * the configured radius are both blocked, with the SAME reason/
+   * blockedBy shape, so the client always knows to offer "Request
+   * Temporary Access" without needing to distinguish the two cases.
+   */
+  private async checkGeofence(
+    input: { tenantId: string; profileId: string; latitude?: number | null; longitude?: number | null },
+    location: { lat: number | null; long: number | null; geofence_radius_m: number | null }
+  ): Promise<AccessGateResult> {
+    const { data: grant } = await this.supabase
+      .from("temporary_access_requests")
+      .select("id")
+      .eq("tenant_id", input.tenantId)
+      .eq("profile_id", input.profileId)
+      .eq("status", "approved")
+      .gt("granted_until", new Date().toISOString())
+      .limit(1)
+      .maybeSingle();
+
+    if (grant) {
+      return { allowed: true };
+    }
+
+    // No fence configured for this location at all -- fail OPEN (data
+    // gap, not a deliberate restriction), same convention as the
+    // working-hours "no hours configured today" case.
+    if (location.lat == null || location.long == null || location.geofence_radius_m == null) {
+      return { allowed: true };
+    }
+
+    const blocked: AccessGateResult = {
+      allowed: false,
+      blockedBy: "geofence",
+      reason: "Sign-in is restricted to your workplace location.",
+    };
+
+    if (input.latitude == null || input.longitude == null) {
+      return blocked;
+    }
+
+    const distanceMeters = haversineDistanceMeters(location.lat, location.long, input.latitude, input.longitude);
+    if (distanceMeters > location.geofence_radius_m) {
+      return blocked;
+    }
+
+    return { allowed: true };
+  }
+
+  /**
+   * docs/05's "Temporary access requests" flow -- the geo-fencing escape
+   * hatch. Must be called while an authenticated session is live (the
+   * underlying SECURITY DEFINER function keys off auth.uid()); see
+   * features/auth/actions/request-temporary-access.ts for the transient
+   * sign-in-then-sign-out window that provides one.
+   */
+  async requestTemporaryAccess(input: {
+    tenantId: string;
+    reason: string;
+    latitude: number | null;
+    longitude: number | null;
+    durationMinutes: number;
+  }): Promise<RequestTemporaryAccessResult> {
+    const { data, error } = await this.supabase.rpc("request_temporary_access", {
+      p_tenant_id: input.tenantId,
+      p_reason: input.reason,
+      p_current_latitude: input.latitude,
+      p_current_longitude: input.longitude,
+      p_duration_minutes: input.durationMinutes,
+    });
+
+    if (error || !data) {
+      throw new Error(`AuthService.requestTemporaryAccess: ${error?.message ?? "unknown error"}`);
+    }
+
+    return data;
   }
 }

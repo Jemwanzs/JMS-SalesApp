@@ -22,6 +22,7 @@ async function requestMeta() {
 export interface LoginActionState {
   error?: string;
   fieldErrors?: Partial<Record<keyof LoginInput, string>>;
+  blockedBy?: "working_hours" | "geofence";
 }
 
 export async function signInAction(
@@ -77,7 +78,17 @@ export async function signInAction(
   const tenant = await resolveActiveTenant(supabase, userId);
 
   if (tenant) {
-    const gate = await authService.evaluateAccessGate({ tenantId: tenant.tenantId });
+    const rawLat = formData.get("latitude");
+    const rawLng = formData.get("longitude");
+    const latitude = typeof rawLat === "string" && rawLat.length > 0 ? Number(rawLat) : null;
+    const longitude = typeof rawLng === "string" && rawLng.length > 0 ? Number(rawLng) : null;
+
+    const gate = await authService.evaluateAccessGate({
+      tenantId: tenant.tenantId,
+      profileId: userId,
+      latitude: Number.isFinite(latitude) ? latitude : null,
+      longitude: Number.isFinite(longitude) ? longitude : null,
+    });
     if (!gate.allowed) {
       // The password WAS correct -- signInWithPassword already
       // established a real session/cookies -- so it must be torn back
@@ -95,7 +106,7 @@ export async function signInAction(
         })
         .catch(() => {});
 
-      return { error: gate.reason ?? "Sign in is currently restricted" };
+      return { error: gate.reason ?? "Sign in is currently restricted", blockedBy: gate.blockedBy };
     }
   }
 

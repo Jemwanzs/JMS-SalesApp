@@ -228,6 +228,62 @@ export class TenantService {
     return { locationId: created.id };
   }
 
+  /**
+   * Phase 4 geo-fencing config -- same one-location-per-tenant
+   * simplification as upsertPrimaryLocation. Distinct from that method
+   * (rather than folding lat/long/radius into it) because this is
+   * reachable post-onboarding, from the Security page, not the one-time
+   * wizard, and null clears the fence rather than requiring all three
+   * fields together.
+   */
+  async setLocationGeofence(
+    tenantId: string,
+    input: { latitude: number | null; longitude: number | null; radiusMeters: number | null }
+  ): Promise<void> {
+    const { data: location } = await this.supabase
+      .from("locations")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (!location) {
+      throw new Error("TenantService.setLocationGeofence: tenant has no location yet");
+    }
+
+    const { error } = await this.supabase
+      .from("locations")
+      .update({ lat: input.latitude, long: input.longitude, geofence_radius_m: input.radiusMeters })
+      .eq("id", location.id);
+
+    if (error) {
+      throw new Error(`TenantService.setLocationGeofence: ${error.message}`);
+    }
+  }
+
+  async getPrimaryLocationGeofence(
+    tenantId: string
+  ): Promise<{ latitude: number | null; longitude: number | null; radiusMeters: number | null } | null> {
+    const { data: location } = await this.supabase
+      .from("locations")
+      .select("lat, long, geofence_radius_m")
+      .eq("tenant_id", tenantId)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (!location) {
+      return null;
+    }
+
+    return {
+      latitude: location.lat,
+      longitude: location.long,
+      radiusMeters: location.geofence_radius_m,
+    };
+  }
+
   /** Onboarding wizard Step 2's hours grid — replaces all 7 rows. */
   async setLocationHours(
     tenantId: string,

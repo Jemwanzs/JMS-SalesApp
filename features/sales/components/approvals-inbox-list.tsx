@@ -8,6 +8,8 @@ import type { PendingApprovalRequest } from "@/services/ApprovalService";
 const TYPE_LABEL: Record<string, string> = {
   sale_void: "Void sale",
   sale_correction: "Correct sale",
+  business_day_reopen: "Reopen business day",
+  temporary_location_access: "Temporary location access",
 };
 
 export function ApprovalsInboxList({

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 
+import { GeofenceRestrictionCard } from "@/features/security/components/geofence-restriction-card";
 import { LoginEventList } from "@/features/security/components/login-event-list";
 import { MfaEnrollment } from "@/features/security/components/mfa-enrollment";
 import { SessionList } from "@/features/security/components/session-list";
@@ -54,14 +55,20 @@ export default async function SecurityPage({
   const currentSessionId = cookieStore.get("sid")?.value ?? null;
 
   const securityService = new SecurityService(supabase);
-  const [sessions, myEvents, tenantEvents, workingHoursRestricted] = await Promise.all([
-    securityService.listSessions(user!.id),
-    securityService.listLoginEvents(user!.id),
-    canManageSecurity ? securityService.listTenantLoginEvents(tenantId) : Promise.resolve([]),
-    canManageSettings
-      ? new TenantService(supabase).getSetting<boolean>(tenantId, "restrict_login_to_working_hours")
-      : Promise.resolve(null),
-  ]);
+  const tenantService = new TenantService(supabase);
+  const [sessions, myEvents, tenantEvents, workingHoursRestricted, geofenceRestricted, geofence] =
+    await Promise.all([
+      securityService.listSessions(user!.id),
+      securityService.listLoginEvents(user!.id),
+      canManageSecurity ? securityService.listTenantLoginEvents(tenantId) : Promise.resolve([]),
+      canManageSettings
+        ? tenantService.getSetting<boolean>(tenantId, "restrict_login_to_working_hours")
+        : Promise.resolve(null),
+      canManageSettings
+        ? tenantService.getSetting<boolean>(tenantId, "restrict_login_to_geofence")
+        : Promise.resolve(null),
+      canManageSettings ? tenantService.getPrimaryLocationGeofence(tenantId) : Promise.resolve(null),
+    ]);
 
   return (
     <div className="flex flex-1 flex-col gap-4 p-6">
@@ -72,6 +79,16 @@ export default async function SecurityPage({
           tenantId={tenantId}
           tenantSlug={tenantSlug}
           initialEnabled={workingHoursRestricted === true}
+        />
+      )}
+      {canManageSettings && (
+        <GeofenceRestrictionCard
+          tenantId={tenantId}
+          tenantSlug={tenantSlug}
+          initialEnabled={geofenceRestricted === true}
+          initialLatitude={geofence?.latitude ?? null}
+          initialLongitude={geofence?.longitude ?? null}
+          initialRadiusMeters={geofence?.radiusMeters ?? null}
         />
       )}
       <SessionList sessions={sessions} currentSessionId={currentSessionId} />
