@@ -559,6 +559,25 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["sessions"]["Row"]>;
         Relationships: [];
       };
+      download_audit: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          profile_id: string;
+          export_type: string;
+          entity_ref: string | null;
+          passcode_verified_at: string | null;
+          ip: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["download_audit"]["Row"]> & {
+          tenant_id: string;
+          profile_id: string;
+          export_type: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["download_audit"]["Row"]>;
+        Relationships: [];
+      };
     };
     Functions: {
       void_sale: {

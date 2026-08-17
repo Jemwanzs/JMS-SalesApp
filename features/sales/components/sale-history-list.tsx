@@ -1,45 +1,106 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
 
+import { exportSalesHistoryCsvAction } from "@/features/sales/actions/export-sales-history";
 import { CorrectSaleDialog } from "@/features/sales/components/correct-sale-dialog";
 import { VoidSaleDialog } from "@/features/sales/components/void-sale-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import type { SaleListItem } from "@/services/SalesService";
 import type { VoidOrCorrectResult } from "@/types/database.types";
 
-function downloadCsv(sales: SaleListItem[]) {
-  const header = [
-    "Sale Number",
-    "Product",
-    "Amount",
-    "Quantity",
-    "Status",
-    "Recorded At",
-  ];
-  const rows = sales.map((s) => [
-    s.saleNumber ?? "",
-    s.productNameSnapshot,
-    s.actualAmount.toFixed(2),
-    s.quantity ?? "",
-    s.status,
-    new Date(s.saleTime).toISOString(),
-  ]);
-  const csv = [header, ...rows]
-    .map((row) =>
-      row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","),
-    )
-    .join("\r\n");
-
+function triggerDownload(csv: string, filename: string) {
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = `sales-history-${new Date().toISOString().slice(0, 10)}.csv`;
+  link.download = filename;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+/**
+ * docs/05's download-security flow -- generation now happens server-side
+ * (export-sales-history.ts), so this component's job is just: collect a
+ * passcode when the tenant requires one, then hand the resulting CSV
+ * string off to the browser.
+ */
+function ExportCsvButton({
+  tenantId,
+  filters,
+  requiresPasscode,
+}: {
+  tenantId: string;
+  filters: { from?: string; to?: string; q?: string };
+  requiresPasscode: boolean;
+}) {
+  const [isPending, startTransition] = useTransition();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [passcode, setPasscode] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  function runExport(enteredPasscode: string | null) {
+    setError(null);
+    startTransition(async () => {
+      const result = await exportSalesHistoryCsvAction(tenantId, filters, enteredPasscode);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      triggerDownload(result.csv!, result.filename!);
+      setDialogOpen(false);
+      setPasscode("");
+    });
+  }
+
+  function onClick() {
+    if (requiresPasscode) {
+      setDialogOpen(true);
+      return;
+    }
+    runExport(null);
+  }
+
+  return (
+    <>
+      <Button type="button" variant="outline" size="sm" disabled={isPending} onClick={onClick}>
+        {isPending ? "Exporting..." : "Export CSV"}
+      </Button>
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Enter download passcode</DialogTitle>
+            <DialogDescription>
+              This tenant requires a passcode to export sales data.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            type="password"
+            value={passcode}
+            onChange={(e) => setPasscode(e.target.value)}
+            autoFocus
+          />
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <DialogFooter>
+            <Button disabled={isPending || !passcode} onClick={() => runExport(passcode)}>
+              {isPending ? "Verifying..." : "Download"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 }
 
 const STATUS_VARIANT: Record<
@@ -54,18 +115,24 @@ const STATUS_VARIANT: Record<
 
 export function SaleHistoryList({
   sales,
+  tenantId,
   tenantSlug,
   currentUserId,
   canVoid,
   canEditWindow,
   canCorrectHistorical,
+  requiresDownloadPasscode,
+  filters,
 }: {
   sales: SaleListItem[];
+  tenantId: string;
   tenantSlug: string;
   currentUserId: string;
   canVoid: boolean;
   canEditWindow: boolean;
   canCorrectHistorical: boolean;
+  requiresDownloadPasscode: boolean;
+  filters: { from?: string; to?: string; q?: string };
 }) {
   const [items, setItems] = useState(sales);
 
@@ -112,14 +179,7 @@ export function SaleHistoryList({
         <p className="text-xs text-muted-foreground">
           {items.length} sale{items.length === 1 ? "" : "s"}
         </p>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => downloadCsv(items)}
-        >
-          Export CSV
-        </Button>
+        <ExportCsvButton tenantId={tenantId} filters={filters} requiresPasscode={requiresDownloadPasscode} />
       </div>
       <div className="divide-y rounded-lg border">
         {items.map((sale) => {

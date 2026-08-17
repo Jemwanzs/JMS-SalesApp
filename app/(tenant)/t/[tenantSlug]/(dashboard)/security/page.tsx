@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 
+import { DownloadSecurityCard } from "@/features/security/components/download-security-card";
 import { GeofenceRestrictionCard } from "@/features/security/components/geofence-restriction-card";
 import { LoginEventList } from "@/features/security/components/login-event-list";
 import { MfaEnrollment } from "@/features/security/components/mfa-enrollment";
@@ -16,17 +17,17 @@ export const metadata: Metadata = {
 };
 
 /**
- * Phase 4c/4e: security centre -- login_events + sessions + MFA
- * enrollment + working-hours login restriction (docs/05-authentication-
- * security.md) -- geo-fencing/temporary-access, download security, and
- * the full audit_logs coverage pass are separate, later Phase 4
- * increments. Always reachable (every signed-in user manages their own
- * sessions/MFA factor); the tenant-wide activity section and the
- * working-hours toggle only render for security.manage/settings.manage
- * holders respectively, matching RLS's own gating on the underlying
- * tables. MFA enrollment doesn't need any data fetched here --
- * MfaEnrollment calls supabase.auth.mfa.* directly against the caller's
- * own session (see its own header comment).
+ * Phase 4c/4e/4f: security centre -- login_events + sessions + MFA
+ * enrollment + working-hours restriction + geo-fencing/temporary-access
+ * + download security (docs/05-authentication-security.md) -- the full
+ * audit_logs coverage pass is the one remaining Phase 4 increment.
+ * Always reachable (every signed-in user manages their own sessions/MFA
+ * factor); the tenant-wide activity section and every settings toggle
+ * only render for security.manage/settings.manage holders respectively,
+ * matching RLS's own gating on the underlying tables. MFA enrollment
+ * doesn't need any data fetched here -- MfaEnrollment calls
+ * supabase.auth.mfa.* directly against the caller's own session (see
+ * its own header comment).
  */
 export default async function SecurityPage({
   params,
@@ -56,19 +57,33 @@ export default async function SecurityPage({
 
   const securityService = new SecurityService(supabase);
   const tenantService = new TenantService(supabase);
-  const [sessions, myEvents, tenantEvents, workingHoursRestricted, geofenceRestricted, geofence] =
-    await Promise.all([
-      securityService.listSessions(user!.id),
-      securityService.listLoginEvents(user!.id),
-      canManageSecurity ? securityService.listTenantLoginEvents(tenantId) : Promise.resolve([]),
-      canManageSettings
-        ? tenantService.getSetting<boolean>(tenantId, "restrict_login_to_working_hours")
-        : Promise.resolve(null),
-      canManageSettings
-        ? tenantService.getSetting<boolean>(tenantId, "restrict_login_to_geofence")
-        : Promise.resolve(null),
-      canManageSettings ? tenantService.getPrimaryLocationGeofence(tenantId) : Promise.resolve(null),
-    ]);
+  const [
+    sessions,
+    myEvents,
+    tenantEvents,
+    workingHoursRestricted,
+    geofenceRestricted,
+    geofence,
+    requireDownloadPasscode,
+    hashedDownloadPasscode,
+  ] = await Promise.all([
+    securityService.listSessions(user!.id),
+    securityService.listLoginEvents(user!.id),
+    canManageSecurity ? securityService.listTenantLoginEvents(tenantId) : Promise.resolve([]),
+    canManageSettings
+      ? tenantService.getSetting<boolean>(tenantId, "restrict_login_to_working_hours")
+      : Promise.resolve(null),
+    canManageSettings
+      ? tenantService.getSetting<boolean>(tenantId, "restrict_login_to_geofence")
+      : Promise.resolve(null),
+    canManageSettings ? tenantService.getPrimaryLocationGeofence(tenantId) : Promise.resolve(null),
+    canManageSettings
+      ? tenantService.getSetting<boolean>(tenantId, "require_download_passcode")
+      : Promise.resolve(null),
+    canManageSettings
+      ? tenantService.getSetting<string>(tenantId, "hashed_download_passcode")
+      : Promise.resolve(null),
+  ]);
 
   return (
     <div className="flex flex-1 flex-col gap-4 p-6">
@@ -89,6 +104,14 @@ export default async function SecurityPage({
           initialLatitude={geofence?.latitude ?? null}
           initialLongitude={geofence?.longitude ?? null}
           initialRadiusMeters={geofence?.radiusMeters ?? null}
+        />
+      )}
+      {canManageSettings && (
+        <DownloadSecurityCard
+          tenantId={tenantId}
+          tenantSlug={tenantSlug}
+          initialEnabled={requireDownloadPasscode === true}
+          passcodeConfigured={!!hashedDownloadPasscode}
         />
       )}
       <SessionList sessions={sessions} currentSessionId={currentSessionId} />

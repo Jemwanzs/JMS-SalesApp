@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { SaleHistoryFilters } from "@/features/sales/components/sale-history-filters";
 import { SaleHistoryList } from "@/features/sales/components/sale-history-list";
 import { SalesService } from "@/services/SalesService";
+import { TenantService } from "@/services/TenantService";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 
@@ -49,7 +50,7 @@ export default async function SalesHistoryPage({
   const tenantId = tenant!.id;
   const hasFilters = Boolean(from || to || q);
 
-  const [sales, canVoid, canEditWindow, canCorrectHistorical] = await Promise.all([
+  const [sales, canVoid, canEditWindow, canCorrectHistorical, requiresDownloadPasscode] = await Promise.all([
     new SalesService(supabase).listRecent(tenantId, {
       limit: hasFilters ? 500 : 100,
       dateFrom: from,
@@ -59,6 +60,7 @@ export default async function SalesHistoryPage({
     can("sales.void", { tenantId }),
     can("sales.edit_window", { tenantId }),
     can("sales.correct_historical", { tenantId }),
+    new TenantService(supabase).getSetting<boolean>(tenantId, "require_download_passcode"),
   ]);
 
   return (
@@ -67,11 +69,14 @@ export default async function SalesHistoryPage({
       <SaleHistoryFilters />
       <SaleHistoryList
         sales={sales}
+        tenantId={tenantId}
         tenantSlug={tenantSlug}
         currentUserId={user!.id}
         canVoid={canVoid}
         canEditWindow={canEditWindow}
         canCorrectHistorical={canCorrectHistorical}
+        requiresDownloadPasscode={requiresDownloadPasscode === true}
+        filters={{ from, to, q }}
       />
     </div>
   );

@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { RoleService } from "@/services/RoleService";
 import type { Database } from "@/types/database.types";
+import { hashPasscode } from "@/lib/utils/passcode";
 import { randomSlugSuffix, slugify } from "@/lib/utils/slug";
 
 /**
@@ -145,6 +146,16 @@ export class TenantService {
     if (error) {
       throw new Error(`TenantService.setSetting: ${error.message}`);
     }
+  }
+
+  /**
+   * docs/05's `hashed_download_passcode` -- never store the raw
+   * passcode, only the scrypt hash, same as every other secret in this
+   * app. A thin wrapper around setSetting so callers never handle the
+   * plaintext passcode past this one call.
+   */
+  async setDownloadPasscode(tenantId: string, passcode: string, updatedBy: string): Promise<void> {
+    await this.setSetting(tenantId, "hashed_download_passcode", hashPasscode(passcode), updatedBy);
   }
 
   /**
