@@ -19,6 +19,9 @@ export type BusinessDayStatus = "scheduled" | "open" | "closing" | "closed" | "r
 export type SaleStatus = "open" | "locked" | "corrected" | "voided";
 export type ApprovalRequestStatus = "pending" | "approved" | "rejected" | "expired" | "auto_approved";
 export type SaleCorrectionType = "void" | "correct";
+export type ImportType = "sales_history" | "products";
+export type ImportStatus = "uploaded" | "validating" | "validated" | "importing" | "completed" | "failed";
+export type ImportRowStatus = "valid" | "invalid" | "imported" | "skipped";
 
 export interface VoidOrCorrectResult {
   status: "voided" | "corrected" | "pending_approval";
@@ -599,6 +602,58 @@ export interface Database {
           export_type: string;
         };
         Update: Partial<Database["public"]["Tables"]["download_audit"]["Row"]>;
+        Relationships: [];
+      };
+      imports: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          type: ImportType;
+          status: ImportStatus;
+          file_storage_path: string;
+          file_name: string;
+          uploaded_by: string;
+          confirmed_by: string | null;
+          confirmed_at: string | null;
+          total_rows: number;
+          valid_rows: number;
+          error_rows: number;
+          imported_rows: number;
+          failure_reason: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["imports"]["Row"]> & {
+          tenant_id: string;
+          type: ImportType;
+          file_storage_path: string;
+          file_name: string;
+          uploaded_by: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["imports"]["Row"]>;
+        Relationships: [];
+      };
+      import_rows: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          import_id: string;
+          row_number: number;
+          raw_data: Record<string, unknown>;
+          status: ImportRowStatus;
+          errors: string[] | null;
+          resolved_data: Record<string, unknown> | null;
+          created_entity_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["import_rows"]["Row"]> & {
+          tenant_id: string;
+          import_id: string;
+          row_number: number;
+          raw_data: Record<string, unknown>;
+        };
+        Update: Partial<Database["public"]["Tables"]["import_rows"]["Row"]>;
         Relationships: [];
       };
     };

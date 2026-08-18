@@ -9,6 +9,7 @@ import {
   Package,
   Settings,
   ShieldCheck,
+  Upload,
   UserCog,
   Users,
 } from "lucide-react";
@@ -29,11 +30,12 @@ import { createClient } from "@/lib/supabase/server";
  * link -- every signed-in user manages their own sessions/login history
  * there regardless of permissions (RLS gates the tenant-wide activity
  * section within the page itself, not this menu entry). Approvals (2g),
- * Roles (4a), and Users (4b) are all appended conditionally instead,
- * only for users who actually hold approvals.manage/roles.manage/
- * (users.create or users.edit) -- unlike Security they aren't meant to
- * be visible-but-disabled for everyone, since most users will never
- * have anything to review or manage there.
+ * Roles (4a), Users (4b), and Imports (Phase 5) are all appended
+ * conditionally instead, only for users who actually hold
+ * approvals.manage/roles.manage/(users.create or users.edit)/
+ * imports.manage -- unlike Security they aren't meant to be
+ * visible-but-disabled for everyone, since most users will never have
+ * anything to review or manage there.
  */
 const MENU_ITEMS: { label: string; icon: LucideIcon; href?: string }[] = [
   { label: "Products", icon: Package, href: "products" },
@@ -58,20 +60,22 @@ export default async function MorePage({
     .eq("slug", tenantSlug)
     .single();
 
-  const [canManageApprovals, canManageRoles, canCreateUsers, canEditUsers] = tenant
+  const [canManageApprovals, canManageRoles, canCreateUsers, canEditUsers, canManageImports] = tenant
     ? await Promise.all([
         can("approvals.manage", { tenantId: tenant.id }),
         can("roles.manage", { tenantId: tenant.id }),
         can("users.create", { tenantId: tenant.id }),
         can("users.edit", { tenantId: tenant.id }),
+        can("imports.manage", { tenantId: tenant.id }),
       ])
-    : [false, false, false, false];
+    : [false, false, false, false, false];
 
   const menuItems = [
     ...MENU_ITEMS,
     ...(canManageApprovals ? [{ label: "Approvals", icon: ShieldCheck, href: "approvals" }] : []),
     ...(canManageRoles ? [{ label: "Roles", icon: UserCog, href: "roles" }] : []),
     ...(canCreateUsers || canEditUsers ? [{ label: "Users", icon: Users, href: "users" }] : []),
+    ...(canManageImports ? [{ label: "Imports", icon: Upload, href: "imports" }] : []),
   ];
 
   return (

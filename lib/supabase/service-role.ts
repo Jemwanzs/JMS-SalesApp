@@ -35,6 +35,12 @@ import type { Database } from "@/types/database.types";
  *     policies, same reasoning as login_events (FAILED_LOGIN in
  *     particular has no session to key a self-scoped policy off of) —
  *     see AuditService's own header comment
+ *   - ImportService — confirming an import writes across import_rows +
+ *     business_days + sales as one consistent bulk operation, and a
+ *     historical business day is correctly 'closed' (never 'open'),
+ *     which the live-capture-shaped business_day.open/sales.create RLS
+ *     policies would otherwise reject — see ImportService's own header
+ *     comment and migration 0020
  *
  * Every other read/write MUST go through lib/supabase/server.ts so RLS
  * stays the enforced boundary. Reaching for this file because "it's
