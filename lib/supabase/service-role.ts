@@ -10,8 +10,12 @@ import type { Database } from "@/types/database.types";
  * into any client-bundled code path.
  *
  * Allowed callers, and ONLY these (see docs/02-system-architecture.md):
- *   - app/api/webhooks/paystack/route.ts (Paystack is the sole source of
- *     truth for subscription/payment state — see docs/14-billing-paystack.md)
+ *   - BillingService (subscriptions/payments/billing_events have RLS
+ *     enabled with zero write policies — the webhook route
+ *     (app/api/webhooks/paystack/route.ts) is the sole state-transition
+ *     authority per docs/14-billing-paystack.md, and even the initial
+ *     TRIAL row is created inside TenantService.createTenant's own
+ *     bootstrap sequence, not a client-authenticated insert)
  *   - app/api/cron/outbox/route.ts (draining the report_jobs/notifications
  *     outbox — see docs/09-business-day-engine.md)
  *   - PlatformAdminService (platform_admins/platform_audit_logs/

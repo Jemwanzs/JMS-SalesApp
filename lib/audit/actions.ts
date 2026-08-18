@@ -2,9 +2,9 @@
  * The event-type vocabulary from docs/05-authentication-security.md's
  * "Audit logging" section, as a shared const so every call site uses
  * the exact same string rather than retyping it ~20 times across the
- * app. SUBSCRIPTION_CHANGED/IMPERSONATION_STARTED/IMPERSONATION_ENDED
- * are listed for completeness (docs/05's vocabulary) but have no caller
- * yet — see AuditService's header comment for why.
+ * app. IMPERSONATION_STARTED/IMPERSONATION_ENDED are listed for
+ * completeness (docs/05's vocabulary) but have no caller yet — see
+ * AuditService's header comment for why.
  */
 export const AUDIT_ACTION = {
   LOGIN: "LOGIN",

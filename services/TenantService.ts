@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { BillingService } from "@/services/BillingService";
 import { RoleService } from "@/services/RoleService";
 import type { Database } from "@/types/database.types";
 import { hashPasscode } from "@/lib/utils/passcode";
@@ -12,8 +13,9 @@ import { randomSlugSuffix, slugify } from "@/lib/utils/slug";
  *
  * IMPORTANT: createTenant() runs its bootstrap sequence (tenant row +
  * owner tenant_membership + default roles + role_permissions + the
- * owner's user_role_assignment) using the SERVICE-ROLE client
- * (lib/supabase/service-role.ts), never the RLS-respecting server client.
+ * owner's user_role_assignment + a TRIAL subscription row, Phase 6)
+ * using the SERVICE-ROLE client (lib/supabase/service-role.ts), never
+ * the RLS-respecting server client.
  * A brand-new tenant has no role_permissions yet, so has_permission()
  * correctly denies the creating user everything until this seed sequence
  * completes — see the note at the top of
@@ -37,9 +39,11 @@ export interface CreatedTenant {
 
 export class TenantService {
   private readonly roleService: RoleService;
+  private readonly billingService: BillingService;
 
   constructor(private readonly supabase: SupabaseClient<Database>) {
     this.roleService = new RoleService(supabase);
+    this.billingService = new BillingService(supabase);
   }
 
   async createTenant(input: CreateTenantInput): Promise<CreatedTenant> {
@@ -105,6 +109,8 @@ export class TenantService {
         `TenantService.createTenant: failed to assign owner role: ${assignmentError.message}`
       );
     }
+
+    await this.billingService.bootstrapTrialSubscription(tenant.id);
 
     return { tenantId: tenant.id, slug: tenant.slug };
   }

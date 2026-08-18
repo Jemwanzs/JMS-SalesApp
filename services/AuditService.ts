@@ -10,11 +10,12 @@ import type { Database } from "@/types/database.types";
  * BUSINESS_DAY_OPENED/CLOSED/REOPENED, PRODUCT_CREATED/EDITED,
  * USER_INVITED/DISABLED, ROLE_CHANGED, PERMISSION_CHANGED,
  * EXPORT_REQUESTED/COMPLETED, SECURITY_SETTING_CHANGED,
- * TEMPORARY_ACCESS_REQUESTED/APPROVED/REJECTED). SUBSCRIPTION_CHANGED
- * and IMPERSONATION_STARTED/ENDED are deliberately not wired anywhere
- * yet — Billing (Phase 6) and Platform Administration/impersonation
- * (Phase 7) don't exist yet, so there is nothing to log; when either
- * lands, its own action is the place to add the call, not a stub here.
+ * TEMPORARY_ACCESS_REQUESTED/APPROVED/REJECTED, SUBSCRIPTION_CHANGED —
+ * the last now wired from BillingService.handleChargeSuccess, Phase 6).
+ * IMPERSONATION_STARTED/ENDED remain deliberately not wired anywhere
+ * yet — Platform Administration/impersonation (Phase 7) doesn't exist
+ * yet, so there is nothing to log; when it lands, its own action is the
+ * place to add the call, not a stub here.
  *
  * Always constructed with the service-role client (added to
  * lib/supabase/service-role.ts's allowed-callers list) — audit_logs has

@@ -22,6 +22,9 @@ export type SaleCorrectionType = "void" | "correct";
 export type ImportType = "sales_history" | "products";
 export type ImportStatus = "uploaded" | "validating" | "validated" | "importing" | "completed" | "failed";
 export type ImportRowStatus = "valid" | "invalid" | "imported" | "skipped";
+export type SubscriptionStatus = "TRIAL" | "ACTIVE" | "PAYMENT_DUE" | "GRACE_PERIOD" | "SUSPENDED" | "CANCELLED";
+export type BillingInterval = "monthly" | "yearly";
+export type PaymentStatus = "success" | "failed" | "pending";
 
 export interface VoidOrCorrectResult {
   status: "voided" | "corrected" | "pending_approval";
@@ -46,6 +49,13 @@ export interface RequestTemporaryAccessResult {
   status: "pending_approval";
   approvalRequestId: string;
   requestId: string;
+}
+
+export interface BillingSweepResult {
+  paymentDue: number;
+  gracePeriod: number;
+  suspended: number;
+  ranAt: string;
 }
 
 export interface AutoRelockResult {
@@ -656,6 +666,106 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["import_rows"]["Row"]>;
         Relationships: [];
       };
+      billing_plans: {
+        Row: {
+          id: string;
+          code: string;
+          name: string;
+          price: number;
+          currency: string;
+          interval: BillingInterval;
+          features: unknown;
+          is_active: boolean;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["billing_plans"]["Row"]> & {
+          code: string;
+          name: string;
+          price: number;
+          interval: BillingInterval;
+        };
+        Update: Partial<Database["public"]["Tables"]["billing_plans"]["Row"]>;
+        Relationships: [];
+      };
+      subscriptions: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          plan_id: string;
+          status: SubscriptionStatus;
+          trial_end: string | null;
+          current_period_start: string | null;
+          current_period_end: string | null;
+          next_billing_date: string | null;
+          grace_period_end: string | null;
+          paystack_customer_code: string | null;
+          paystack_subscription_code: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["subscriptions"]["Row"]> & {
+          tenant_id: string;
+          plan_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["subscriptions"]["Row"]>;
+        Relationships: [];
+      };
+      payments: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          subscription_id: string;
+          amount: number;
+          currency: string;
+          status: PaymentStatus;
+          paystack_reference: string;
+          paid_at: string | null;
+          raw_payload: Record<string, unknown> | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["payments"]["Row"]> & {
+          tenant_id: string;
+          subscription_id: string;
+          amount: number;
+          currency: string;
+          status: PaymentStatus;
+          paystack_reference: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["payments"]["Row"]>;
+        Relationships: [];
+      };
+      billing_events: {
+        Row: {
+          id: string;
+          tenant_id: string | null;
+          subscription_id: string | null;
+          event_type: string;
+          paystack_event_id: string;
+          payload: Record<string, unknown>;
+          processed_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["billing_events"]["Row"]> & {
+          event_type: string;
+          paystack_event_id: string;
+          payload: Record<string, unknown>;
+        };
+        Update: Partial<Database["public"]["Tables"]["billing_events"]["Row"]>;
+        Relationships: [];
+      };
+      platform_settings: {
+        Row: {
+          key: string;
+          value: unknown;
+          updated_by: string | null;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["platform_settings"]["Row"]> & {
+          key: string;
+          value: unknown;
+        };
+        Update: Partial<Database["public"]["Tables"]["platform_settings"]["Row"]>;
+        Relationships: [];
+      };
     };
     Functions: {
       void_sale: {
@@ -687,6 +797,10 @@ export interface Database {
       run_business_day_sweep: {
         Args: Record<string, never>;
         Returns: BusinessDaySweepResult;
+      };
+      run_billing_sweep: {
+        Args: Record<string, never>;
+        Returns: BillingSweepResult;
       };
       queue_daily_report_job: {
         Args: { p_business_day_id: string };

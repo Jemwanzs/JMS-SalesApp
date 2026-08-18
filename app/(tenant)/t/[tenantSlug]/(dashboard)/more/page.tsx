@@ -3,6 +3,7 @@ import {
   Bell,
   ChevronRight,
   CircleHelp,
+  CreditCard,
   History,
   Lock,
   LogOut,
@@ -30,12 +31,12 @@ import { createClient } from "@/lib/supabase/server";
  * link -- every signed-in user manages their own sessions/login history
  * there regardless of permissions (RLS gates the tenant-wide activity
  * section within the page itself, not this menu entry). Approvals (2g),
- * Roles (4a), Users (4b), and Imports (Phase 5) are all appended
- * conditionally instead, only for users who actually hold
+ * Roles (4a), Users (4b), Imports (Phase 5), and Billing (Phase 6) are
+ * all appended conditionally instead, only for users who actually hold
  * approvals.manage/roles.manage/(users.create or users.edit)/
- * imports.manage -- unlike Security they aren't meant to be
- * visible-but-disabled for everyone, since most users will never have
- * anything to review or manage there.
+ * imports.manage/(billing owner or settings.manage) -- unlike Security
+ * they aren't meant to be visible-but-disabled for everyone, since most
+ * users will never have anything to review or manage there.
  */
 const MENU_ITEMS: { label: string; icon: LucideIcon; href?: string }[] = [
   { label: "Products", icon: Package, href: "products" },
@@ -54,21 +55,28 @@ export default async function MorePage({
   const { tenantSlug } = await params;
   const supabase = await createClient();
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   const { data: tenant } = await supabase
     .from("tenants")
-    .select("id")
+    .select("id, billing_owner_profile_id")
     .eq("slug", tenantSlug)
     .single();
 
-  const [canManageApprovals, canManageRoles, canCreateUsers, canEditUsers, canManageImports] = tenant
+  const [canManageApprovals, canManageRoles, canCreateUsers, canEditUsers, canManageImports, canManageSettings] = tenant
     ? await Promise.all([
         can("approvals.manage", { tenantId: tenant.id }),
         can("roles.manage", { tenantId: tenant.id }),
         can("users.create", { tenantId: tenant.id }),
         can("users.edit", { tenantId: tenant.id }),
         can("imports.manage", { tenantId: tenant.id }),
+        can("settings.manage", { tenantId: tenant.id }),
       ])
-    : [false, false, false, false, false];
+    : [false, false, false, false, false, false];
+
+  const isBillingOwner = tenant?.billing_owner_profile_id === user?.id;
 
   const menuItems = [
     ...MENU_ITEMS,
@@ -76,6 +84,7 @@ export default async function MorePage({
     ...(canManageRoles ? [{ label: "Roles", icon: UserCog, href: "roles" }] : []),
     ...(canCreateUsers || canEditUsers ? [{ label: "Users", icon: Users, href: "users" }] : []),
     ...(canManageImports ? [{ label: "Imports", icon: Upload, href: "imports" }] : []),
+    ...(isBillingOwner || canManageSettings ? [{ label: "Billing", icon: CreditCard, href: "billing" }] : []),
   ];
 
   return (
