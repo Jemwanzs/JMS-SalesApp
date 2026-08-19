@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { Metadata } from "next";
 
 import { PlatformAdminService } from "@/services/PlatformAdminService";
@@ -8,10 +9,10 @@ export const metadata: Metadata = {
 };
 
 /**
- * Foundation-level dashboard (real tenant/user counts, no revenue/
- * renewal/usage KPIs yet — those need Phase 6's billing tables). Tenant
- * management actions (suspend/reactivate/access workspace), impersonation,
- * and the full KPI set are Phase 7.
+ * Foundation-level dashboard (tenant/user counts) — the full usage/
+ * revenue/conversion/churn breakdown lives at /admin/analytics
+ * (Phase 7c, PlatformAdminService.getUsageAnalytics()), not duplicated
+ * here.
  */
 export default async function PlatformAdminDashboardPage() {
   const platformAdminService = new PlatformAdminService(createServiceRoleClient());
@@ -39,8 +40,15 @@ export default async function PlatformAdminDashboardPage() {
         ))}
       </div>
       <p className="mt-8 max-w-[50ch] text-sm text-white/50">
-        Tenant management, impersonation, billing operations, and usage
-        analytics land in Phase 7.
+        See{" "}
+        <Link href="/admin/analytics" className="underline hover:text-white">
+          Analytics
+        </Link>{" "}
+        for the full platform usage breakdown, or{" "}
+        <Link href="/admin/tenants" className="underline hover:text-white">
+          Tenants
+        </Link>{" "}
+        to manage a specific workspace.
       </p>
     </div>
   );

@@ -52,6 +52,9 @@ export default async function PlatformAdminLayout({
             <Link href="/admin/tenants" className="hover:text-white">
               Tenants
             </Link>
+            <Link href="/admin/analytics" className="hover:text-white">
+              Analytics
+            </Link>
           </nav>
         </div>
         <span className="text-xs text-white/50">{user.email}</span>

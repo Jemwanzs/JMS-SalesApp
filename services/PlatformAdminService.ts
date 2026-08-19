@@ -22,12 +22,16 @@ import type { Database, SubscriptionStatus, TenantStatus } from "@/types/databas
  * session-token swap to the target's real identity; migration 0024's
  * SQL functions grant the target's exact permission set to the platform
  * admin's OWN session instead, see that migration's header comment for
- * the full design. "Send reminder" (needs Resend, not wired yet — see
- * every earlier Resend-dependent deferral this session) is still
- * deliberately not built here. "View billing"/"view usage" aren't
- * separate actions — the tenant detail page reads BillingService
- * directly for the same subscription/payment data the billing owner's
- * own screen shows.
+ * the full design. Phase 7c: getUsageAnalytics() — platform-wide DAU/
+ * MAU/conversion/churn plus a per-tenant sales/products/imports/reports/
+ * storage breakdown (docs/15's "Platform usage analytics" section).
+ * "Send reminder" (needs Resend, not wired yet — see every earlier
+ * Resend-dependent deferral this session) is still deliberately not
+ * built here. A single TENANT's own billing detail (on the tenant detail
+ * page, "view billing") still isn't a separate action — that page reads
+ * BillingService directly for the same subscription/payment data the
+ * billing owner's own screen shows; getUsageAnalytics is the platform-
+ * wide "view usage" the doc separately calls for.
  *
  * Every list/aggregate query here follows the same "fetch raw rows,
  * join/group in application code" convention AnalyticsService already
@@ -56,6 +60,35 @@ export interface TenantDetail extends TenantListItem {
   currency: string;
   createdAt: string;
   gracePeriodEnd: string | null;
+}
+
+export interface PlatformUsageSummary {
+  dau: number;
+  mau: number;
+  totalTenants: number;
+  totalSalesCount: number;
+  /** tenants whose subscription has ever converted from TRIAL (plan_id set) / tenants with any subscription row. */
+  trialConversionRate: number;
+  /** SUSPENDED / (ACTIVE + PAYMENT_DUE + GRACE_PERIOD + SUSPENDED) -- tenants that were ever billable and are
+   * currently not paying. `CANCELLED` is tracked separately since no feature in this app can actually reach it
+   * yet (see PlatformAdminService.extendTrial's own header comment) -- a churn rate built on a status nothing
+   * ever sets would always read zero, which is honest but not the number a real "churn" metric should mean here. */
+  churnRate: number;
+  cancelledCount: number;
+}
+
+export interface TenantUsageRow {
+  tenantId: string;
+  tenantName: string;
+  currency: string;
+  salesCount: number;
+  salesVolume: number;
+  productCount: number;
+  importedRowCount: number;
+  reportCount: number;
+  storageBytes: number;
+  lastLoginAt: string | null;
+  subscriptionStatus: SubscriptionStatus | null;
 }
 
 export class PlatformAdminService {
@@ -87,12 +120,7 @@ export class PlatformAdminService {
     return data?.id ?? null;
   }
 
-  /**
-   * Foundation-level KPIs only (tenant/user counts) — the full Phase 7
-   * dashboard (revenue, renewals, failed payments, usage analytics) needs
-   * the billing tables Phase 6 introduces. Real counts now rather than
-   * placeholders, since tenants/tenant_memberships already exist for real.
-   */
+  /** Foundation-level KPIs (tenant/user counts) for the dashboard's top row — see getUsageAnalytics() for the full Phase 7c usage/analytics set. */
   async getDashboardKpis(): Promise<{
     totalTenants: number;
     activeTenants: number;
@@ -123,6 +151,159 @@ export class PlatformAdminService {
       suspendedTenants: suspendedTenants ?? 0,
       totalUsers: totalUsers ?? 0,
     };
+  }
+
+  /**
+   * Phase 7c (docs/15-super-admin.md's "Platform usage analytics"):
+   * sales by tenant, DAU/MAU, storage consumption, product count, import
+   * volumes, report usage, login frequency, subscription/trial
+   * conversion, churn -- read-only aggregation, computed here from raw
+   * per-table fetches (same "aggregate in app code" convention as
+   * listTenants/getTenantDetail), never exposed through any tenant-
+   * scoped RLS-reachable view.
+   *
+   * Sales VOLUME is deliberately never summed across tenants -- tenants
+   * carry their own `currency` (docs/03), and adding KES to USD would be
+   * a real correctness bug, not a display nicety. The platform-wide
+   * summary only sums sales COUNT (currency-agnostic); volume is always
+   * shown per tenant, next to that tenant's own currency.
+   */
+  async getUsageAnalytics(): Promise<{ summary: PlatformUsageSummary; tenantRows: TenantUsageRow[] }> {
+    const [
+      { data: tenants },
+      { data: subscriptions },
+      { data: sales },
+      { data: products },
+      { data: imports },
+      { data: reportJobs },
+      { data: loginEvents },
+    ] = await Promise.all([
+      this.supabase.from("tenants").select("id, name, currency, status"),
+      this.supabase.from("subscriptions").select("tenant_id, status, plan_id"),
+      this.supabase.from("sales").select("tenant_id, actual_amount").neq("status", "voided"),
+      this.supabase.from("products").select("tenant_id").neq("status", "archived"),
+      this.supabase.from("imports").select("tenant_id, imported_rows"),
+      this.supabase.from("report_jobs").select("tenant_id").eq("status", "completed"),
+      this.supabase.from("login_events").select("tenant_id, profile_id, created_at").eq("success", true),
+    ]);
+
+    const now = Date.now();
+    const dayAgo = now - 24 * 60 * 60 * 1000;
+    const monthAgo = now - 30 * 24 * 60 * 60 * 1000;
+
+    const dauProfiles = new Set<string>();
+    const mauProfiles = new Set<string>();
+    const lastLoginByTenant = new Map<string, string>();
+    for (const e of loginEvents ?? []) {
+      if (!e.profile_id) continue; // profile_id is nullable on this table; every real successful login has one
+      const t = new Date(e.created_at).getTime();
+      if (t >= monthAgo) mauProfiles.add(e.profile_id);
+      if (t >= dayAgo) dauProfiles.add(e.profile_id);
+      if (e.tenant_id && (!lastLoginByTenant.has(e.tenant_id) || e.created_at > lastLoginByTenant.get(e.tenant_id)!)) {
+        lastLoginByTenant.set(e.tenant_id, e.created_at);
+      }
+    }
+
+    const salesByTenant = new Map<string, { count: number; volume: number }>();
+    for (const s of sales ?? []) {
+      const agg = salesByTenant.get(s.tenant_id) ?? { count: 0, volume: 0 };
+      agg.count += 1;
+      agg.volume += Number(s.actual_amount);
+      salesByTenant.set(s.tenant_id, agg);
+    }
+
+    const productCountByTenant = new Map<string, number>();
+    for (const p of products ?? []) {
+      productCountByTenant.set(p.tenant_id, (productCountByTenant.get(p.tenant_id) ?? 0) + 1);
+    }
+
+    const importedRowsByTenant = new Map<string, number>();
+    for (const i of imports ?? []) {
+      importedRowsByTenant.set(i.tenant_id, (importedRowsByTenant.get(i.tenant_id) ?? 0) + i.imported_rows);
+    }
+
+    const reportCountByTenant = new Map<string, number>();
+    for (const r of reportJobs ?? []) {
+      reportCountByTenant.set(r.tenant_id, (reportCountByTenant.get(r.tenant_id) ?? 0) + 1);
+    }
+
+    const subByTenant = new Map((subscriptions ?? []).map((s) => [s.tenant_id, s]));
+
+    const everBillableStatuses = new Set(["ACTIVE", "PAYMENT_DUE", "GRACE_PERIOD", "SUSPENDED"]);
+    const everBillable = (subscriptions ?? []).filter((s) => everBillableStatuses.has(s.status));
+    const suspendedBillable = everBillable.filter((s) => s.status === "SUSPENDED");
+    const cancelledCount = (subscriptions ?? []).filter((s) => s.status === "CANCELLED").length;
+    const convertedCount = (subscriptions ?? []).filter((s) => s.plan_id !== null).length;
+
+    const storageByTenant = await this.computeStorageBytesByTenant((tenants ?? []).map((t) => t.id));
+
+    const tenantRows: TenantUsageRow[] = (tenants ?? []).map((t) => ({
+      tenantId: t.id,
+      tenantName: t.name,
+      currency: t.currency,
+      salesCount: salesByTenant.get(t.id)?.count ?? 0,
+      salesVolume: salesByTenant.get(t.id)?.volume ?? 0,
+      productCount: productCountByTenant.get(t.id) ?? 0,
+      importedRowCount: importedRowsByTenant.get(t.id) ?? 0,
+      reportCount: reportCountByTenant.get(t.id) ?? 0,
+      storageBytes: storageByTenant.get(t.id) ?? 0,
+      lastLoginAt: lastLoginByTenant.get(t.id) ?? null,
+      subscriptionStatus: subByTenant.get(t.id)?.status ?? null,
+    }));
+
+    return {
+      summary: {
+        dau: dauProfiles.size,
+        mau: mauProfiles.size,
+        totalTenants: tenants?.length ?? 0,
+        totalSalesCount: (sales ?? []).length,
+        trialConversionRate: subscriptions && subscriptions.length > 0 ? convertedCount / subscriptions.length : 0,
+        churnRate: everBillable.length > 0 ? suspendedBillable.length / everBillable.length : 0,
+        cancelledCount,
+      },
+      tenantRows,
+    };
+  }
+
+  /**
+   * Both Storage buckets (product-images, imports -- migrations 0007/0020)
+   * key their paths by tenant_id as the top-level folder, so a per-tenant
+   * total is a bounded-depth recursive listing (Storage has no cheaper
+   * "sum bytes under this prefix" API) rather than a SQL aggregate --
+   * storage.objects isn't exposed over PostgREST the way public-schema
+   * tables are, so supabase.storage.*.list() is the only reliable path
+   * regardless of project-level API config. Sequential, not parallelized
+   * across tenants -- this runs on an admin-only, infrequently-visited
+   * page, and staying gentle on Storage's API is worth more here than
+   * shaving a few seconds off a dashboard load.
+   */
+  private async computeStorageBytesByTenant(tenantIds: string[]): Promise<Map<string, number>> {
+    const result = new Map<string, number>();
+    for (const tenantId of tenantIds) {
+      let total = 0;
+      for (const bucket of ["product-images", "imports"] as const) {
+        total += await this.sumBucketFolderBytes(bucket, tenantId, 0);
+      }
+      result.set(tenantId, total);
+    }
+    return result;
+  }
+
+  private async sumBucketFolderBytes(bucket: string, path: string, depth: number): Promise<number> {
+    if (depth > 4) return 0; // safety bound against an unexpectedly deep/cyclical listing
+    const { data: entries } = await this.supabase.storage.from(bucket).list(path, { limit: 1000 });
+    if (!entries) return 0;
+
+    let total = 0;
+    for (const entry of entries) {
+      if (entry.id === null) {
+        // A folder entry (Storage's own convention: no id/metadata means "folder, not file").
+        total += await this.sumBucketFolderBytes(bucket, `${path}/${entry.name}`, depth + 1);
+      } else {
+        total += Number(entry.metadata?.size ?? 0);
+      }
+    }
+    return total;
   }
 
   async listTenants(): Promise<TenantListItem[]> {
