@@ -24,26 +24,26 @@ import { createClient } from "@/lib/supabase/server";
 /**
  * The "More" menu (spec S12): Products, Sales History, Notifications,
  * Settings, Help, Logout. Products (2a) and Sales History (2i, void/
- * correct actions from 2e) now link to real pages; the rest are real
- * destinations from later phases (Notifications: 13-notifications.md,
- * Settings: Phase 4) shown as disabled rather than omitted so the full
- * menu shape stays visible. Security (4c) is a real, always-present
+ * correct actions from 2e) now link to real pages; Notifications (13-
+ * notifications.md) is still shown disabled rather than omitted, so the
+ * full menu shape stays visible. Security (4c) is a real, always-present
  * link -- every signed-in user manages their own sessions/login history
  * there regardless of permissions (RLS gates the tenant-wide activity
  * section within the page itself, not this menu entry). Approvals (2g),
- * Roles (4a), Users (4b), Imports (Phase 5), and Billing (Phase 6) are
- * all appended conditionally instead, only for users who actually hold
- * approvals.manage/roles.manage/(users.create or users.edit)/
- * imports.manage/(billing owner or settings.manage) -- unlike Security
- * they aren't meant to be visible-but-disabled for everyone, since most
- * users will never have anything to review or manage there.
+ * Roles (4a), Users (4b), Imports (Phase 5), Billing (Phase 6), and
+ * Settings (Phase 7d's anniversary wish-mode toggle, its first real
+ * setting) are all appended conditionally instead, only for users who
+ * actually hold approvals.manage/roles.manage/(users.create or users.
+ * edit)/imports.manage/(billing owner or settings.manage)/settings.manage
+ * -- unlike Security they aren't meant to be visible-but-disabled for
+ * everyone, since most users will never have anything to review or
+ * manage there.
  */
 const MENU_ITEMS: { label: string; icon: LucideIcon; href?: string }[] = [
   { label: "Products", icon: Package, href: "products" },
   { label: "Sales History", icon: History, href: "sales-history" },
   { label: "Security", icon: Lock, href: "security" },
   { label: "Notifications", icon: Bell },
-  { label: "Settings", icon: Settings },
   { label: "Help", icon: CircleHelp },
 ];
 
@@ -85,6 +85,7 @@ export default async function MorePage({
     ...(canCreateUsers || canEditUsers ? [{ label: "Users", icon: Users, href: "users" }] : []),
     ...(canManageImports ? [{ label: "Imports", icon: Upload, href: "imports" }] : []),
     ...(isBillingOwner || canManageSettings ? [{ label: "Billing", icon: CreditCard, href: "billing" }] : []),
+    ...(canManageSettings ? [{ label: "Settings", icon: Settings, href: "settings" }] : []),
   ];
 
   return (

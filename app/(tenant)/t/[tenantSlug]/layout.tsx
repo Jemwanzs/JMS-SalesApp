@@ -6,6 +6,7 @@ import { TenantProvider } from "@/hooks/tenant-context";
 import { getMyPermissions } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
+import { AnniversaryService } from "@/services/AnniversaryService";
 import { PlatformAdminService } from "@/services/PlatformAdminService";
 
 /**
@@ -34,6 +35,13 @@ import { PlatformAdminService } from "@/services/PlatformAdminService";
  * dashboard route; the persistent bottom nav lives one level down in
  * (dashboard)/layout.tsx, since /t/[tenantSlug] itself is never
  * rendered directly (it redirects into /sales — see page.tsx).
+ *
+ * Phase 7d: a recently-sent anniversary wish (AnniversaryService.
+ * getActiveWish, scoped to the last 7 days so it doesn't linger for the
+ * rest of the year) renders as a small banner here too, for the same
+ * "one shared spot, every dashboard page" reason the impersonation
+ * banner does — best-effort (`.catch(() => null)`), since a wish
+ * message failing to load must never block the tenant shell itself.
  */
 export default async function TenantLayout({
   children,
@@ -92,6 +100,7 @@ export default async function TenantLayout({
   }
 
   const permissions = await getMyPermissions(tenant.id);
+  const activeWish = await new AnniversaryService(supabase).getActiveWish(tenant.id).catch(() => null);
 
   return (
     <TenantProvider
@@ -119,6 +128,11 @@ export default async function TenantLayout({
           <div className="border-b px-6 py-4">
             <Logo />
           </div>
+          {activeWish && (
+            <div className="border-b bg-amber-50 px-6 py-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+              {activeWish.message}
+            </div>
+          )}
           {children}
         </div>
       </div>

@@ -55,6 +55,9 @@ export default async function PlatformAdminLayout({
             <Link href="/admin/analytics" className="hover:text-white">
               Analytics
             </Link>
+            <Link href="/admin/anniversaries" className="hover:text-white">
+              Anniversaries
+            </Link>
           </nav>
         </div>
         <span className="text-xs text-white/50">{user.email}</span>

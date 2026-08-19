@@ -813,6 +813,28 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["impersonation_sessions"]["Row"]>;
         Relationships: [];
       };
+      anniversary_wishes: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          year: number;
+          mode: string;
+          status: string;
+          scheduled_for: string;
+          sent_at: string | null;
+          message: string;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["anniversary_wishes"]["Row"]> & {
+          tenant_id: string;
+          year: number;
+          mode: string;
+          scheduled_for: string;
+          message: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["anniversary_wishes"]["Row"]>;
+        Relationships: [];
+      };
     };
     Functions: {
       void_sale: {

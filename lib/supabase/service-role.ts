@@ -39,6 +39,15 @@ import type { Database } from "@/types/database.types";
  *     policies, same reasoning as login_events (FAILED_LOGIN in
  *     particular has no session to key a self-scoped policy off of) —
  *     see AuditService's own header comment
+ *   - AnniversaryService's writes (ensureScheduledForUpcoming/
+ *     sendDueAutomaticWishes, called from the daily cron sweep across
+ *     every tenant at once, and sendWish/skipWish, a platform-admin
+ *     action on another tenant's data) — anniversary_wishes has RLS
+ *     enabled with a SELECT policy but zero write policies (migration
+ *     0025), same reasoning as report_jobs/insights_snapshots. Reads
+ *     (getWishMode/listUpcoming) and the tenant's own settings.manage
+ *     -gated setWishMode call go through the ordinary RLS-respecting
+ *     client instead — see AnniversaryService's own header comment
  *   - ImportService — confirming a sales_history import writes across
  *     import_rows + business_days + sales as one consistent bulk
  *     operation, and a historical business day is correctly 'closed'

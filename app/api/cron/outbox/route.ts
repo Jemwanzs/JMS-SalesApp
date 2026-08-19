@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { AnniversaryService } from "@/services/AnniversaryService";
 import { InsightsService } from "@/services/InsightsService";
 import { ReportService } from "@/services/ReportService";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
@@ -35,6 +36,12 @@ const BATCH_SIZE = 20;
  * and the corrections report are best-effort bonuses riding along on
  * the same event). generateCorrectionsReport itself returns null (not
  * an error) on an ordinary day with nothing voided/corrected.
+ *
+ * Phase 7d's anniversary wish scheduling/auto-sending (AnniversaryService)
+ * also rides along on this same once-daily slot, for the same "one cron
+ * job on this project's Hobby-plan Vercel Cron" reason report_jobs itself
+ * does -- entirely unrelated to the report_jobs drain above, so its own
+ * failure is caught independently and never affects report processing.
  */
 export async function GET(request: Request) {
   const authHeader = request.headers.get("authorization");
@@ -111,5 +118,26 @@ export async function GET(request: Request) {
     }
   }
 
-  return NextResponse.json({ processed: jobs?.length ?? 0, completed, failed, retried });
+  // Best-effort, same posture as insights/corrections-report above --
+  // this cron slot's real deliverable is the report_jobs drain; anniversary
+  // scheduling/sending riding along on the same once-daily run must never
+  // fail (or retry) that over an unrelated problem here.
+  let anniversariesScheduled = 0;
+  let anniversariesSent = 0;
+  try {
+    const anniversaryService = new AnniversaryService(supabase);
+    anniversariesScheduled = (await anniversaryService.ensureScheduledForUpcoming()).scheduled;
+    anniversariesSent = (await anniversaryService.sendDueAutomaticWishes()).sent;
+  } catch {
+    // best-effort
+  }
+
+  return NextResponse.json({
+    processed: jobs?.length ?? 0,
+    completed,
+    failed,
+    retried,
+    anniversariesScheduled,
+    anniversariesSent,
+  });
 }
