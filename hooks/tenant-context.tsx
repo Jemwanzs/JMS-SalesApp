@@ -4,6 +4,12 @@ import { createContext, useContext } from "react";
 
 import type { ResolvedPermission } from "@/lib/permissions/can";
 
+export interface ImpersonationBanner {
+  sessionId: string;
+  targetProfileName: string | null;
+  expiresAt: string;
+}
+
 export interface TenantContextValue {
   tenantId: string;
   tenantSlug: string;
@@ -17,6 +23,13 @@ export interface TenantContextValue {
    * server-side can() helper use — see docs/06-roles-permissions.md.
    */
   permissions: ResolvedPermission[];
+  /**
+   * Non-null only when the current viewer is a platform admin actively
+   * impersonating this tenant (migration 0024) — drives the SUPPORT MODE
+   * banner (components/shared/impersonation-banner.tsx). null for every
+   * ordinary tenant member, always.
+   */
+  impersonation: ImpersonationBanner | null;
 }
 
 const TenantContext = createContext<TenantContextValue | null>(null);

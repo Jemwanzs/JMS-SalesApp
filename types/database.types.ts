@@ -788,6 +788,31 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["platform_audit_logs"]["Row"]>;
         Relationships: [];
       };
+      impersonation_sessions: {
+        Row: {
+          id: string;
+          platform_admin_id: string;
+          target_tenant_id: string;
+          target_profile_id: string;
+          reason: string;
+          mfa_verified_at: string;
+          started_at: string;
+          expires_at: string;
+          ended_at: string | null;
+          banner_ack: boolean;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["impersonation_sessions"]["Row"]> & {
+          platform_admin_id: string;
+          target_tenant_id: string;
+          target_profile_id: string;
+          reason: string;
+          mfa_verified_at: string;
+          expires_at: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["impersonation_sessions"]["Row"]>;
+        Relationships: [];
+      };
     };
     Functions: {
       void_sale: {

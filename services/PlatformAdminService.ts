@@ -17,13 +17,17 @@ import type { Database, SubscriptionStatus, TenantStatus } from "@/types/databas
  *
  * Phase 7a: tenant list/detail + suspend/reactivate/extend-trial/adjust-
  * grace, all through this service, all audited (docs/15's "Tenant
- * management" section). "Send reminder" (needs Resend, not wired yet —
- * see every earlier Resend-dependent deferral this session) and "access
- * workspace"/impersonation (Phase 7b — session-swap semantics + platform
- * MFA are substantial enough to be their own increment) are deliberately
- * not built here. "View billing"/"view usage" aren't separate actions —
- * the tenant detail page reads BillingService directly for the same
- * subscription/payment data the billing owner's own screen shows.
+ * management" section). Phase 7b: "Access Workspace" impersonation
+ * (startImpersonation/endImpersonation/getActiveImpersonation) — no
+ * session-token swap to the target's real identity; migration 0024's
+ * SQL functions grant the target's exact permission set to the platform
+ * admin's OWN session instead, see that migration's header comment for
+ * the full design. "Send reminder" (needs Resend, not wired yet — see
+ * every earlier Resend-dependent deferral this session) is still
+ * deliberately not built here. "View billing"/"view usage" aren't
+ * separate actions — the tenant detail page reads BillingService
+ * directly for the same subscription/payment data the billing owner's
+ * own screen shows.
  *
  * Every list/aggregate query here follows the same "fetch raw rows,
  * join/group in application code" convention AnalyticsService already
@@ -377,15 +381,157 @@ export class PlatformAdminService {
     }
   }
 
-  async startImpersonation(_input: {
+  /**
+   * "Access Workspace" (docs/15-super-admin.md): reason -> platform MFA
+   * -> time-limited session -> immutable audit. Platform MFA itself is
+   * verified by the CALLER (features/platform-admin/actions/start-
+   * impersonation.ts checks AAL2 via supabase.auth.mfa before this ever
+   * runs) -- this method's job is recording that it happened
+   * (mfa_verified_at) and creating the bounded session that migration
+   * 0024's SQL functions key off of. durationMinutes is clamped
+   * server-side (never trusts a client-supplied value outright) to a
+   * 5-minute-to-2-hour window -- "bounded session duration" per spec,
+   * not an open-ended one a client could request.
+   */
+  async startImpersonation(input: {
     platformAdminId: string;
     targetTenantId: string;
     targetProfileId: string;
     reason: string;
     durationMinutes: number;
-  }) {
-    throw new Error(
-      "PlatformAdminService.startImpersonation: not yet implemented (Phase 7b)"
+  }): Promise<{ sessionId: string; expiresAt: string }> {
+    const { data: membership } = await this.supabase
+      .from("tenant_memberships")
+      .select("status")
+      .eq("tenant_id", input.targetTenantId)
+      .eq("profile_id", input.targetProfileId)
+      .maybeSingle();
+
+    if (!membership || membership.status !== "active") {
+      throw new Error("PlatformAdminService.startImpersonation: target user is not an active member of this tenant");
+    }
+
+    const clampedMinutes = Math.min(Math.max(Math.round(input.durationMinutes), 5), 120);
+    const expiresAt = new Date(Date.now() + clampedMinutes * 60_000).toISOString();
+
+    const { data, error } = await this.supabase
+      .from("impersonation_sessions")
+      .insert({
+        platform_admin_id: input.platformAdminId,
+        target_tenant_id: input.targetTenantId,
+        target_profile_id: input.targetProfileId,
+        reason: input.reason,
+        mfa_verified_at: new Date().toISOString(),
+        expires_at: expiresAt,
+      })
+      .select("id")
+      .single();
+
+    if (error || !data) {
+      throw new Error(`PlatformAdminService.startImpersonation: ${error?.message}`);
+    }
+
+    await this.logAction(
+      input.platformAdminId,
+      "IMPERSONATION_STARTED",
+      input.targetTenantId,
+      input.targetProfileId,
+      null,
+      { session_id: data.id, expires_at: expiresAt },
+      input.reason
     );
+
+    return { sessionId: data.id, expiresAt };
+  }
+
+  /** Safe to call twice (a manual "End session" after expiry already
+   * happened server-side) -- a session already ended is a no-op, not an
+   * error, since the caller's intent ("make sure this isn't active") is
+   * already satisfied either way. */
+  async endImpersonation(platformAdminId: string, sessionId: string): Promise<void> {
+    const { data: session } = await this.supabase
+      .from("impersonation_sessions")
+      .select("target_tenant_id, target_profile_id, ended_at")
+      .eq("id", sessionId)
+      .eq("platform_admin_id", platformAdminId)
+      .maybeSingle();
+
+    if (!session) {
+      throw new Error("PlatformAdminService.endImpersonation: session not found");
+    }
+    if (session.ended_at) {
+      return;
+    }
+
+    const { error } = await this.supabase
+      .from("impersonation_sessions")
+      .update({ ended_at: new Date().toISOString() })
+      .eq("id", sessionId);
+
+    if (error) {
+      throw new Error(`PlatformAdminService.endImpersonation: ${error.message}`);
+    }
+
+    await this.logAction(
+      platformAdminId,
+      "IMPERSONATION_ENDED",
+      session.target_tenant_id,
+      session.target_profile_id,
+      null,
+      null,
+      null
+    );
+  }
+
+  /**
+   * Called from app/(tenant)/t/[tenantSlug]/layout.tsx's membership
+   * fallback (a platform admin has no real tenant_memberships row) to
+   * resolve whether the CURRENT profile is running an active session
+   * against this specific tenant, and what the SUPPORT MODE banner
+   * should say. Mirrors exactly what migration 0024's
+   * impersonated_profile_id() SQL function resolves -- this is the
+   * TypeScript-side read of the same fact, not a second source of truth
+   * (the SQL function is what actually gates every RLS-backed query;
+   * this is purely for the layout/banner to know what to render).
+   */
+  async getActiveImpersonation(
+    profileId: string,
+    tenantId: string
+  ): Promise<{
+    sessionId: string;
+    targetProfileId: string;
+    targetProfileName: string | null;
+    reason: string;
+    expiresAt: string;
+  } | null> {
+    const admin = await this.getPlatformAdminId(profileId);
+    if (!admin) return null;
+
+    const { data: session } = await this.supabase
+      .from("impersonation_sessions")
+      .select("id, target_profile_id, reason, expires_at")
+      .eq("platform_admin_id", admin)
+      .eq("target_tenant_id", tenantId)
+      .is("ended_at", null)
+      .gt("expires_at", new Date().toISOString())
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!session) return null;
+
+    const { data: target } = await this.supabase
+      .from("profiles")
+      .select("full_name")
+      .eq("id", session.target_profile_id)
+      .maybeSingle();
+
+    return {
+      sessionId: session.id,
+      targetProfileId: session.target_profile_id,
+      targetProfileName: target?.full_name ?? null,
+      reason: session.reason,
+      expiresAt: session.expires_at,
+    };
   }
 }

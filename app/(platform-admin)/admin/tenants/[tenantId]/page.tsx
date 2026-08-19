@@ -1,9 +1,11 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 
+import { AccessWorkspaceDialog } from "@/features/platform-admin/components/access-workspace-dialog";
 import { TenantActionsPanel } from "@/features/platform-admin/components/tenant-actions-panel";
 import { BillingService } from "@/services/BillingService";
 import { PlatformAdminService } from "@/services/PlatformAdminService";
+import { UserService } from "@/services/UserService";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
 export const metadata: Metadata = {
@@ -16,6 +18,14 @@ export const metadata: Metadata = {
  * separate action -- this reads BillingService directly (service-role,
  * same as everything else in this shell) for the same subscription/
  * payment data the billing owner's own screen shows.
+ *
+ * Phase 7b: the Team section lists active members with an "Access
+ * Workspace" entry point per user (AccessWorkspaceDialog) -- reason ->
+ * platform MFA -> bounded session, per docs/15's "Impersonation" flow.
+ * Reads via UserService go through the service-role client here too
+ * (same reasoning as everything else on this page: the viewer is a
+ * platform admin, not a real tenant member, so the RLS-respecting
+ * client would see nothing).
  */
 export default async function PlatformAdminTenantDetailPage({
   params,
@@ -25,14 +35,17 @@ export default async function PlatformAdminTenantDetailPage({
   const { tenantId } = await params;
   const svc = createServiceRoleClient();
 
-  const [detail, payments] = await Promise.all([
+  const [detail, payments, members] = await Promise.all([
     new PlatformAdminService(svc).getTenantDetail(tenantId),
     new BillingService(svc).listPayments(tenantId),
+    new UserService(svc).listUsers(tenantId, ""),
   ]);
 
   if (!detail) {
     notFound();
   }
+
+  const activeMembers = members.filter((m) => m.status === "active");
 
   return (
     <div className="space-y-6">
@@ -64,6 +77,31 @@ export default async function PlatformAdminTenantDetailPage({
       </div>
 
       <TenantActionsPanel tenantId={tenantId} status={detail.status} subscriptionStatus={detail.subscriptionStatus} />
+
+      <div>
+        <h2 className="mb-2 text-sm font-semibold text-white/70">Team — Access Workspace</h2>
+        <div className="divide-y divide-white/5 rounded-lg border border-white/10">
+          {activeMembers.length === 0 && <p className="p-4 text-sm text-white/50">No active users.</p>}
+          {activeMembers.map((m) => (
+            <div key={m.membershipId} className="p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-medium">{m.fullName ?? m.email}</p>
+                  <p className="text-xs text-white/50">
+                    {m.email} · {m.roleNames.join(", ") || "No role"}
+                  </p>
+                </div>
+                <AccessWorkspaceDialog
+                  tenantId={tenantId}
+                  tenantSlug={detail.slug}
+                  targetProfileId={m.profileId}
+                  targetLabel={m.fullName ?? m.email}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
 
       <div>
         <h2 className="mb-2 text-sm font-semibold text-white/70">Payment history</h2>

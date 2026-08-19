@@ -10,12 +10,12 @@ import type { Database } from "@/types/database.types";
  * BUSINESS_DAY_OPENED/CLOSED/REOPENED, PRODUCT_CREATED/EDITED,
  * USER_INVITED/DISABLED, ROLE_CHANGED, PERMISSION_CHANGED,
  * EXPORT_REQUESTED/COMPLETED, SECURITY_SETTING_CHANGED,
- * TEMPORARY_ACCESS_REQUESTED/APPROVED/REJECTED, SUBSCRIPTION_CHANGED —
- * the last now wired from BillingService.handleChargeSuccess, Phase 6).
- * IMPERSONATION_STARTED/ENDED remain deliberately not wired anywhere
- * yet — Platform Administration/impersonation (Phase 7) doesn't exist
- * yet, so there is nothing to log; when it lands, its own action is the
- * place to add the call, not a stub here.
+ * TEMPORARY_ACCESS_REQUESTED/APPROVED/REJECTED, SUBSCRIPTION_CHANGED
+ * (wired from BillingService.handleChargeSuccess, Phase 6),
+ * IMPERSONATION_STARTED/ENDED (wired from features/platform-admin/
+ * actions/{start,end}-impersonation.ts, Phase 7b — actor is always the
+ * real platform admin's own profile id, never the impersonated target's,
+ * so the tenant's own audit trail stays honest about who actually acted).
  *
  * Always constructed with the service-role client (added to
  * lib/supabase/service-role.ts's allowed-callers list) — audit_logs has
