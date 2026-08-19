@@ -15,11 +15,22 @@ import type { Database, PaymentStatus, SubscriptionStatus } from "@/types/databa
  * TenantService.createTenant's own service-role bootstrap sequence — no
  * client-authenticated path ever writes subscriptions/payments.
  *
- * Free trial default is 7 days, grace period default is 3 days — both
- * read from `platform_settings` (global, Platform Super Admin scope
- * per the doc's decision log), not hardcoded, though there's no admin
- * UI to edit them yet (Phase 7's "adjust-grace"/"extend-trial" is where
- * that belongs — this ships the data layer with sensible defaults).
+ * Plans are fixed-duration packages the user picks at checkout (2 to
+ * 365 days, migration 0023) — the picked package's own price and
+ * duration_days are what actually get charged and what actually
+ * determine the resulting subscription period, never a fixed 30-day
+ * assumption. subscriptions.plan_id is null during TRIAL (nothing
+ * chosen/charged yet) and only gets set once a real payment succeeds.
+ *
+ * Trial default is 2 days (48 hours), grace period default is 3 days —
+ * both read from `platform_settings` (global, Platform Super Admin
+ * scope per the doc's decision log), not hardcoded. A tenant whose
+ * billing owner is a registered platform_admins row gets
+ * `platform_admin_trial_days` (180) instead of the normal default —
+ * this checks the REAL platform_admins table, not a hardcoded email,
+ * per docs/15-super-admin.md's "not a hardcoded email" principle: any
+ * current or future platform admin gets the longer trial on their own
+ * tenant automatically, not just the one bootstrap address.
  *
  * Scoped to the ONE event type that actually drives this app's
  * trial-to-paid flow: `charge.success` (a completed Standard Checkout
@@ -36,9 +47,10 @@ import type { Database, PaymentStatus, SubscriptionStatus } from "@/types/databa
 export interface SubscriptionView {
   id: string;
   status: SubscriptionStatus;
-  planName: string;
-  planPrice: number;
-  planCurrency: string;
+  planId: string | null;
+  planName: string | null;
+  planPrice: number | null;
+  planCurrency: string | null;
   trialEnd: string | null;
   currentPeriodEnd: string | null;
   nextBillingDate: string | null;
@@ -54,6 +66,17 @@ export interface PaymentView {
   createdAt: string;
 }
 
+export interface PlanView {
+  id: string;
+  code: string;
+  name: string;
+  price: number;
+  currency: string;
+  interval: string;
+  durationDays: number;
+  features: string[];
+}
+
 export class BillingService {
   constructor(private readonly supabase: SupabaseClient<Database>) {}
 
@@ -62,24 +85,30 @@ export class BillingService {
    * same service-role client, right after the tenant itself exists.
    */
   async bootstrapTrialSubscription(tenantId: string): Promise<void> {
-    const { data: plan, error: planError } = await this.supabase
-      .from("billing_plans")
-      .select("id")
-      .eq("is_active", true)
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .single();
+    const { data: tenant } = await this.supabase
+      .from("tenants")
+      .select("billing_owner_profile_id")
+      .eq("id", tenantId)
+      .maybeSingle();
 
-    if (planError || !plan) {
-      throw new Error(`BillingService.bootstrapTrialSubscription: no active billing plan found: ${planError?.message}`);
+    let trialDays = await this.getGlobalSetting("trial_days", 2);
+
+    if (tenant?.billing_owner_profile_id) {
+      const { data: admin } = await this.supabase
+        .from("platform_admins")
+        .select("id")
+        .eq("profile_id", tenant.billing_owner_profile_id)
+        .maybeSingle();
+
+      if (admin) {
+        trialDays = await this.getGlobalSetting("platform_admin_trial_days", 180);
+      }
     }
 
-    const trialDays = await this.getGlobalSetting("trial_days", 7);
     const trialEnd = new Date(Date.now() + trialDays * 86_400_000).toISOString();
 
     const { error } = await this.supabase.from("subscriptions").insert({
       tenant_id: tenantId,
-      plan_id: plan.id,
       status: "TRIAL",
       trial_end: trialEnd,
     });
@@ -87,6 +116,29 @@ export class BillingService {
     if (error) {
       throw new Error(`BillingService.bootstrapTrialSubscription: ${error.message}`);
     }
+  }
+
+  async listPlans(): Promise<PlanView[]> {
+    const { data, error } = await this.supabase
+      .from("billing_plans")
+      .select("id, code, name, price, currency, interval, duration_days, features")
+      .eq("is_active", true)
+      .order("duration_days", { ascending: true });
+
+    if (error) {
+      throw new Error(`BillingService.listPlans: ${error.message}`);
+    }
+
+    return (data ?? []).map((row) => ({
+      id: row.id,
+      code: row.code,
+      name: row.name,
+      price: Number(row.price),
+      currency: row.currency,
+      interval: row.interval,
+      durationDays: row.duration_days,
+      features: Array.isArray(row.features) ? (row.features as string[]) : [],
+    }));
   }
 
   async getSubscription(tenantId: string): Promise<SubscriptionView | null> {
@@ -100,18 +152,17 @@ export class BillingService {
 
     if (!sub) return null;
 
-    const { data: plan } = await this.supabase
-      .from("billing_plans")
-      .select("name, price, currency")
-      .eq("id", sub.plan_id)
-      .maybeSingle();
+    const plan = sub.plan_id
+      ? await this.supabase.from("billing_plans").select("name, price, currency").eq("id", sub.plan_id).maybeSingle()
+      : { data: null };
 
     return {
       id: sub.id,
       status: sub.status,
-      planName: plan?.name ?? "Unknown plan",
-      planPrice: plan ? Number(plan.price) : 0,
-      planCurrency: plan?.currency ?? "",
+      planId: sub.plan_id,
+      planName: plan.data?.name ?? null,
+      planPrice: plan.data ? Number(plan.data.price) : null,
+      planCurrency: plan.data?.currency ?? null,
       trialEnd: sub.trial_end,
       currentPeriodEnd: sub.current_period_end,
       nextBillingDate: sub.next_billing_date,
@@ -142,18 +193,20 @@ export class BillingService {
 
   /**
    * Payment status is never derived from this call's own success --
-   * this only starts a Paystack Standard Checkout session and hands
-   * back the URL to redirect to. The webhook is what actually moves the
-   * subscription to ACTIVE once Paystack confirms the charge.
+   * this only starts a Paystack Standard Checkout session for the
+   * user-picked package and hands back the URL to redirect to. The
+   * webhook is what actually moves the subscription to ACTIVE (and
+   * assigns plan_id) once Paystack confirms the charge.
    */
   async initializeCheckout(input: {
     tenantId: string;
+    planId: string;
     email: string;
     callbackUrl: string;
   }): Promise<{ authorizationUrl: string }> {
     const { data: sub, error: subError } = await this.supabase
       .from("subscriptions")
-      .select("id, plan_id")
+      .select("id")
       .eq("tenant_id", input.tenantId)
       .single();
 
@@ -164,7 +217,8 @@ export class BillingService {
     const { data: plan, error: planError } = await this.supabase
       .from("billing_plans")
       .select("price, currency")
-      .eq("id", sub.plan_id)
+      .eq("id", input.planId)
+      .eq("is_active", true)
       .single();
 
     if (planError || !plan) {
@@ -179,7 +233,7 @@ export class BillingService {
       currency: plan.currency,
       reference,
       callbackUrl: input.callbackUrl,
-      metadata: { tenant_id: input.tenantId, subscription_id: sub.id },
+      metadata: { tenant_id: input.tenantId, subscription_id: sub.id, plan_id: input.planId },
     });
 
     return { authorizationUrl: result.authorizationUrl };
@@ -213,7 +267,7 @@ export class BillingService {
       return { processed: false };
     }
 
-    const metadata = (data.metadata ?? {}) as { tenant_id?: string; subscription_id?: string };
+    const metadata = (data.metadata ?? {}) as { tenant_id?: string; subscription_id?: string; plan_id?: string };
 
     // The ledger row is written AFTER processing succeeds, not before --
     // writing it first would mark a genuinely-failed attempt (a real
@@ -224,8 +278,8 @@ export class BillingService {
     // is a much smaller, much rarer failure mode than that, and
     // handleChargeSuccess's own payments.paystack_reference unique
     // constraint still catches a concurrent double-processing attempt.
-    if (eventType === "charge.success" && metadata.tenant_id && metadata.subscription_id) {
-      await this.handleChargeSuccess(metadata.tenant_id, metadata.subscription_id, data);
+    if (eventType === "charge.success" && metadata.tenant_id && metadata.subscription_id && metadata.plan_id) {
+      await this.handleChargeSuccess(metadata.tenant_id, metadata.subscription_id, metadata.plan_id, data);
     }
 
     const { error: ledgerError } = await this.supabase.from("billing_events").insert({
@@ -246,19 +300,12 @@ export class BillingService {
   private async handleChargeSuccess(
     tenantId: string,
     subscriptionId: string,
+    planId: string,
     data: Record<string, unknown>
   ): Promise<void> {
-    const { data: sub } = await this.supabase
-      .from("subscriptions")
-      .select("plan_id")
-      .eq("id", subscriptionId)
-      .single();
+    const { data: plan } = await this.supabase.from("billing_plans").select("duration_days").eq("id", planId).maybeSingle();
 
-    const { data: plan } = sub
-      ? await this.supabase.from("billing_plans").select("interval").eq("id", sub.plan_id).single()
-      : { data: null };
-
-    const periodDays = plan?.interval === "yearly" ? 365 : 30;
+    const periodDays = plan?.duration_days ?? 30;
     const now = new Date();
     const periodEnd = new Date(now.getTime() + periodDays * 86_400_000);
 
@@ -284,6 +331,7 @@ export class BillingService {
       .from("subscriptions")
       .update({
         status: "ACTIVE",
+        plan_id: planId,
         current_period_start: now.toISOString(),
         current_period_end: periodEnd.toISOString(),
         next_billing_date: periodEnd.toISOString(),
@@ -301,7 +349,7 @@ export class BillingService {
         action: AUDIT_ACTION.SUBSCRIPTION_CHANGED,
         entityType: "subscription",
         entityId: subscriptionId,
-        newValues: { status: "ACTIVE" },
+        newValues: { status: "ACTIVE", plan_id: planId },
         metadata: { paystackReference: data.reference },
       })
       .catch(() => {});

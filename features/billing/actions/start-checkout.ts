@@ -17,7 +17,7 @@ export interface StartCheckoutState {
  * manage included) while the billing owner specifically must retain
  * the ability to pay and un-suspend.
  */
-export async function startCheckoutAction(tenantId: string, tenantSlug: string): Promise<StartCheckoutState> {
+export async function startCheckoutAction(tenantId: string, tenantSlug: string, planId: string): Promise<StartCheckoutState> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -42,6 +42,7 @@ export async function startCheckoutAction(tenantId: string, tenantSlug: string):
   try {
     const result = await billingService.initializeCheckout({
       tenantId,
+      planId,
       email: user.email!,
       callbackUrl: `${process.env.NEXT_PUBLIC_APP_URL}/t/${tenantSlug}/billing/callback`,
     });

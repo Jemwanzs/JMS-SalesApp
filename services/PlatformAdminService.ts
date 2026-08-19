@@ -170,7 +170,7 @@ export class PlatformAdminService {
         ownerEmail: owner?.email ?? null,
         ownerName: owner?.full_name ?? null,
         userCount: userCountByTenant.get(t.id) ?? 0,
-        planName: sub ? (planById.get(sub.plan_id) ?? null) : null,
+        planName: sub?.plan_id ? (planById.get(sub.plan_id) ?? null) : null,
         subscriptionStatus: sub?.status ?? null,
         trialEnd: sub?.trial_end ?? null,
         lastPaymentAt: lastPaymentByTenant.get(t.id) ?? null,
@@ -216,7 +216,9 @@ export class PlatformAdminService {
         .maybeSingle(),
     ]);
 
-    const plan = sub ? await this.supabase.from("billing_plans").select("name").eq("id", sub.plan_id).maybeSingle() : { data: null };
+    const plan = sub?.plan_id
+      ? await this.supabase.from("billing_plans").select("name").eq("id", sub.plan_id).maybeSingle()
+      : { data: null };
 
     return {
       id: tenant.id,
@@ -282,9 +284,14 @@ export class PlatformAdminService {
 
     const trialEnd = new Date(Date.now() + additionalDays * 86_400_000).toISOString();
 
+    // plan_id is cleared, not just status -- a PAYMENT_DUE/GRACE_PERIOD/
+    // SUSPENDED subscription (the other statuses this can run from) has
+    // a real plan_id from its last paid period, and leaving it in place
+    // would show that plan's name next to a "Free trial" badge, which
+    // reads as a real inconsistency, not just a stale display quirk.
     const { error } = await this.supabase
       .from("subscriptions")
-      .update({ status: "TRIAL", trial_end: trialEnd, grace_period_end: null })
+      .update({ status: "TRIAL", plan_id: null, trial_end: trialEnd, grace_period_end: null })
       .eq("tenant_id", tenantId);
     if (error) {
       throw new Error(`PlatformAdminService.extendTrial: ${error.message}`);

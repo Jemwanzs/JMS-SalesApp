@@ -23,7 +23,6 @@ export type ImportType = "sales_history" | "products";
 export type ImportStatus = "uploaded" | "validating" | "validated" | "importing" | "completed" | "failed";
 export type ImportRowStatus = "valid" | "invalid" | "imported" | "skipped";
 export type SubscriptionStatus = "TRIAL" | "ACTIVE" | "PAYMENT_DUE" | "GRACE_PERIOD" | "SUSPENDED" | "CANCELLED";
-export type BillingInterval = "monthly" | "yearly";
 export type PaymentStatus = "success" | "failed" | "pending";
 
 export interface VoidOrCorrectResult {
@@ -673,7 +672,9 @@ export interface Database {
           name: string;
           price: number;
           currency: string;
-          interval: BillingInterval;
+          /** Free-text short label ("2 days", "monthly", "annually") for the picker UI — duration_days is what actually drives period computation. */
+          interval: string;
+          duration_days: number;
           features: unknown;
           is_active: boolean;
           created_at: string;
@@ -682,7 +683,8 @@ export interface Database {
           code: string;
           name: string;
           price: number;
-          interval: BillingInterval;
+          interval: string;
+          duration_days: number;
         };
         Update: Partial<Database["public"]["Tables"]["billing_plans"]["Row"]>;
         Relationships: [];
@@ -691,7 +693,8 @@ export interface Database {
         Row: {
           id: string;
           tenant_id: string;
-          plan_id: string;
+          /** Null during TRIAL — no package has been chosen/charged yet. Set once the user picks a plan at checkout. */
+          plan_id: string | null;
           status: SubscriptionStatus;
           trial_end: string | null;
           current_period_start: string | null;
@@ -705,7 +708,6 @@ export interface Database {
         };
         Insert: Partial<Database["public"]["Tables"]["subscriptions"]["Row"]> & {
           tenant_id: string;
-          plan_id: string;
         };
         Update: Partial<Database["public"]["Tables"]["subscriptions"]["Row"]>;
         Relationships: [];

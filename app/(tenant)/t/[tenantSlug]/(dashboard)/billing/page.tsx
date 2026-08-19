@@ -47,9 +47,10 @@ export default async function BillingPage({
   }
 
   const billingService = new BillingService(supabase);
-  const [subscription, payments] = await Promise.all([
+  const [subscription, payments, plans] = await Promise.all([
     billingService.getSubscription(tenantId),
     billingService.listPayments(tenantId),
+    billingService.listPlans(),
   ]);
 
   return (
@@ -60,6 +61,7 @@ export default async function BillingPage({
           tenantId={tenantId}
           tenantSlug={tenantSlug}
           subscription={subscription}
+          plans={plans}
           canPay={isBillingOwner}
         />
       )}
