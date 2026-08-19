@@ -50,7 +50,7 @@ export default async function SalesHistoryPage({
   const tenantId = tenant!.id;
   const hasFilters = Boolean(from || to || q);
 
-  const [sales, canVoid, canEditWindow, canCorrectHistorical, requiresDownloadPasscode] = await Promise.all([
+  const [sales, canVoid, canReverse, canEditWindow, canCorrectHistorical, requiresDownloadPasscode] = await Promise.all([
     new SalesService(supabase).listRecent(tenantId, {
       limit: hasFilters ? 500 : 100,
       dateFrom: from,
@@ -58,6 +58,7 @@ export default async function SalesHistoryPage({
       search: q,
     }),
     can("sales.void", { tenantId }),
+    can("sales.reverse", { tenantId }),
     can("sales.edit_window", { tenantId }),
     can("sales.correct_historical", { tenantId }),
     new TenantService(supabase).getSetting<boolean>(tenantId, "require_download_passcode"),
@@ -73,6 +74,7 @@ export default async function SalesHistoryPage({
         tenantSlug={tenantSlug}
         currentUserId={user!.id}
         canVoid={canVoid}
+        canReverse={canReverse}
         canEditWindow={canEditWindow}
         canCorrectHistorical={canCorrectHistorical}
         requiresDownloadPasscode={requiresDownloadPasscode === true}

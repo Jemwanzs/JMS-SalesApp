@@ -794,11 +794,14 @@ export class ImportService {
   }
 
   private async recomputeBusinessDayAggregates(businessDayId: string): Promise<void> {
+    // Excludes 'corrected' too -- see AnalyticsService.getAnalytics's
+    // own comment on this exact filter.
     const { data: sales } = await this.supabase
       .from("sales")
       .select("actual_amount")
       .eq("business_day_id", businessDayId)
-      .neq("status", "voided");
+      .neq("status", "voided")
+      .neq("status", "corrected");
 
     const grossSales = (sales ?? []).reduce((sum, s) => sum + Number(s.actual_amount), 0);
     const transactionCount = sales?.length ?? 0;

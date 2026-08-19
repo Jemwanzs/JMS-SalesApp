@@ -31,6 +31,13 @@ export const correctSaleSchema = z.object({
 
 export type CorrectSaleInput = z.infer<typeof correctSaleSchema>;
 
+export const reverseSaleSchema = z.object({
+  saleId: z.uuid(),
+  reason: z.string().trim().min(1, "A reason is required"),
+});
+
+export type ReverseSaleInput = z.infer<typeof reverseSaleSchema>;
+
 export const resolveApprovalSchema = z.object({
   approvalRequestId: z.uuid(),
   decision: z.enum(["approved", "rejected"]),

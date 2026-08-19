@@ -16,9 +16,9 @@ export type MembershipStatus = "active" | "invited" | "disabled";
 export type PlatformAdminRole = "super_admin" | "support" | "billing_ops";
 export type ProductStatus = "active" | "inactive" | "archived";
 export type BusinessDayStatus = "scheduled" | "open" | "closing" | "closed" | "reopened";
-export type SaleStatus = "open" | "locked" | "corrected" | "voided";
+export type SaleStatus = "open" | "locked" | "corrected" | "voided" | "reversed";
 export type ApprovalRequestStatus = "pending" | "approved" | "rejected" | "expired" | "auto_approved";
-export type SaleCorrectionType = "void" | "correct";
+export type SaleCorrectionType = "void" | "correct" | "reverse";
 export type ImportType = "sales_history" | "products";
 export type ImportStatus = "uploaded" | "validating" | "validated" | "importing" | "completed" | "failed";
 export type ImportRowStatus = "valid" | "invalid" | "imported" | "skipped";
@@ -26,7 +26,7 @@ export type SubscriptionStatus = "TRIAL" | "ACTIVE" | "PAYMENT_DUE" | "GRACE_PER
 export type PaymentStatus = "success" | "failed" | "pending";
 
 export interface VoidOrCorrectResult {
-  status: "voided" | "corrected" | "pending_approval";
+  status: "voided" | "corrected" | "reversed" | "pending_approval";
   approvalRequestId?: string;
   replacementSaleId?: string;
 }
@@ -376,6 +376,7 @@ export interface Database {
           sale_time: string;
           status: SaleStatus;
           idempotency_key: string;
+          reversal_of_sale_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -849,6 +850,10 @@ export interface Database {
           p_new_notes: string | null;
           p_reason: string;
         };
+        Returns: VoidOrCorrectResult;
+      };
+      reverse_sale: {
+        Args: { p_sale_id: string; p_reason: string };
         Returns: VoidOrCorrectResult;
       };
       resolve_approval_request: {

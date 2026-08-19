@@ -169,6 +169,8 @@ export class PlatformAdminService {
    * shown per tenant, next to that tenant's own currency.
    */
   async getUsageAnalytics(): Promise<{ summary: PlatformUsageSummary; tenantRows: TenantUsageRow[] }> {
+    // sales excludes 'corrected' too, not just 'voided' -- see
+    // AnalyticsService.getAnalytics's own comment on this exact filter.
     const [
       { data: tenants },
       { data: subscriptions },
@@ -180,7 +182,7 @@ export class PlatformAdminService {
     ] = await Promise.all([
       this.supabase.from("tenants").select("id, name, currency, status"),
       this.supabase.from("subscriptions").select("tenant_id, status, plan_id"),
-      this.supabase.from("sales").select("tenant_id, actual_amount").neq("status", "voided"),
+      this.supabase.from("sales").select("tenant_id, actual_amount").neq("status", "voided").neq("status", "corrected"),
       this.supabase.from("products").select("tenant_id").neq("status", "archived"),
       this.supabase.from("imports").select("tenant_id, imported_rows"),
       this.supabase.from("report_jobs").select("tenant_id").eq("status", "completed"),

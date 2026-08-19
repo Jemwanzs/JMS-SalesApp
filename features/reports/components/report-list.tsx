@@ -84,6 +84,14 @@ function CorrectionsReportCard({
             {payload.totalCorrectedDelta.toFixed(2)})
           </span>
         </div>
+        {payload.reversalCount > 0 && (
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Reversed</span>
+            <span className="font-medium tabular-nums">
+              {payload.reversalCount} ({payload.totalReversed.toFixed(2)})
+            </span>
+          </div>
+        )}
         <div className="divide-y border-t">
           {payload.entries.map((entry, i) => (
             <div key={i} className="flex flex-col gap-0.5 py-2">

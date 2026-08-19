@@ -178,11 +178,16 @@ export class BusinessDayService {
     closedBy: string,
     reason?: string
   ): Promise<BusinessDay> {
+    // Excludes 'corrected' too, not just 'voided' -- see
+    // AnalyticsService.getAnalytics's own comment on this exact filter
+    // for why (a corrected sale's original amount is stale, replaced by
+    // its already-included replacement row).
     const { data: sales } = await this.supabase
       .from("sales")
       .select("actual_amount")
       .eq("business_day_id", businessDayId)
-      .neq("status", "voided");
+      .neq("status", "voided")
+      .neq("status", "corrected");
 
     const grossSales = (sales ?? []).reduce((sum, s) => sum + Number(s.actual_amount), 0);
     const transactionCount = sales?.length ?? 0;

@@ -35,7 +35,7 @@ export interface DailyReportPayload {
 export interface CorrectionsReportEntry {
   saleNumber: string | null;
   productName: string;
-  correctionType: "void" | "correct";
+  correctionType: "void" | "correct" | "reverse";
   reason: string;
   oldAmount: number;
   newAmount: number | null;
@@ -46,8 +46,10 @@ export interface CorrectionsReportEntry {
 export interface CorrectionsReportPayload {
   voidCount: number;
   correctionCount: number;
+  reversalCount: number;
   totalVoided: number;
   totalCorrectedDelta: number;
+  totalReversed: number;
   entries: CorrectionsReportEntry[];
 }
 
@@ -65,11 +67,14 @@ export class ReportService {
       throw new Error(`ReportService.generateDailyReport: business day not found`);
     }
 
+    // Excludes 'corrected' too -- see AnalyticsService.getAnalytics's
+    // own comment on this exact filter.
     const { data: sales, error: salesError } = await this.supabase
       .from("sales")
       .select("product_name_snapshot, actual_amount, recorded_by")
       .eq("business_day_id", businessDayId)
-      .neq("status", "voided");
+      .neq("status", "voided")
+      .neq("status", "corrected");
 
     if (salesError) {
       throw new Error(`ReportService.generateDailyReport: ${salesError.message}`);
@@ -208,8 +213,10 @@ export class ReportService {
 
     let voidCount = 0;
     let correctionCount = 0;
+    let reversalCount = 0;
     let totalVoided = 0;
     let totalCorrectedDelta = 0;
+    let totalReversed = 0;
     const entries: CorrectionsReportEntry[] = [];
 
     for (const row of corrections) {
@@ -225,6 +232,14 @@ export class ReportService {
       if (row.correction_type === "void") {
         voidCount += 1;
         totalVoided += oldAmount;
+      } else if (row.correction_type === "reverse") {
+        // Unlike a correction's newAmount (a corrected replacement
+        // figure), the reversal row's newAmount is the NEGATED original
+        // -- reported as its own "reversed" total, not folded into
+        // totalCorrectedDelta, since it isn't a delta on the original
+        // figure at all, it's an offsetting entry alongside it.
+        reversalCount += 1;
+        totalReversed += oldAmount;
       } else {
         correctionCount += 1;
         totalCorrectedDelta += (newAmount ?? oldAmount) - oldAmount;
@@ -245,8 +260,10 @@ export class ReportService {
     const payload: CorrectionsReportPayload = {
       voidCount,
       correctionCount,
+      reversalCount,
       totalVoided,
       totalCorrectedDelta,
+      totalReversed,
       entries,
     };
 

@@ -148,6 +148,8 @@ export class InsightsService {
   }) {
     const { from, to } = weekBounds(day.business_date);
 
+    // Excludes 'corrected' too -- see AnalyticsService.getAnalytics's
+    // own comment on this exact filter.
     const { data: sales, error } = await this.supabase
       .from("sales")
       .select("product_id, actual_amount")
@@ -155,7 +157,8 @@ export class InsightsService {
       .eq("location_id", day.location_id)
       .gte("sale_date", from)
       .lte("sale_date", to)
-      .neq("status", "voided");
+      .neq("status", "voided")
+      .neq("status", "corrected");
 
     if (error) {
       throw new Error(`InsightsService.productConcentration: ${error.message}`);

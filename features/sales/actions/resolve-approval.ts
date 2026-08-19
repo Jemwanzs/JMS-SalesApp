@@ -19,13 +19,13 @@ export interface ResolveApprovalState {
 
 /**
  * The generic approval-request resolver (ApprovalService, migration
- * 0006/0009/0017's 4 dispatch types) is also where an approval-gated
- * sale void/correction/business-day reopen/temporary-access grant
- * actually APPLIES, when a tenant requires review -- the originating
- * action (void-sale.ts etc.) only logs its own audit event for the
- * immediate/auto-approved path. So this action maps the resolved
- * request's `type` to the matching audit action here, the one place
- * that's true for every request type regardless of where it started.
+ * 0006/0009/0017/0026's 5 dispatch types) is also where an approval-
+ * gated sale void/correction/reversal/business-day reopen/temporary-
+ * access grant actually APPLIES, when a tenant requires review -- the
+ * originating action (void-sale.ts etc.) only logs its own audit event
+ * for the immediate/auto-approved path. So this action maps the
+ * resolved request's `type` to the matching audit action here, the one
+ * place that's true for every request type regardless of where it started.
  * Fetches `type` before resolving since a REJECTED result doesn't
  * include it (ApprovalService.resolve's rejected branch returns just
  * `{ status: 'rejected' }`) -- see resolve_approval_request()'s SQL.
@@ -33,6 +33,7 @@ export interface ResolveApprovalState {
 const APPROVED_AUDIT_ACTION: Partial<Record<string, AuditAction>> = {
   sale_void: AUDIT_ACTION.SALE_VOIDED,
   sale_correction: AUDIT_ACTION.SALE_EDITED,
+  sale_reversal: AUDIT_ACTION.SALE_EDITED,
   business_day_reopen: AUDIT_ACTION.BUSINESS_DAY_REOPENED,
   temporary_location_access: AUDIT_ACTION.TEMPORARY_ACCESS_APPROVED,
 };

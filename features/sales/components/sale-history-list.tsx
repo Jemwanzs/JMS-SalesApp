@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { exportSalesHistoryCsvAction } from "@/features/sales/actions/export-sales-history";
 import { CorrectSaleDialog } from "@/features/sales/components/correct-sale-dialog";
+import { ReverseSaleDialog } from "@/features/sales/components/reverse-sale-dialog";
 import { VoidSaleDialog } from "@/features/sales/components/void-sale-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -111,6 +112,7 @@ const STATUS_VARIANT: Record<
   locked: "secondary",
   corrected: "secondary",
   voided: "destructive",
+  reversed: "secondary",
 };
 
 export function SaleHistoryList({
@@ -119,6 +121,7 @@ export function SaleHistoryList({
   tenantSlug,
   currentUserId,
   canVoid,
+  canReverse,
   canEditWindow,
   canCorrectHistorical,
   requiresDownloadPasscode,
@@ -129,6 +132,7 @@ export function SaleHistoryList({
   tenantSlug: string;
   currentUserId: string;
   canVoid: boolean;
+  canReverse: boolean;
   canEditWindow: boolean;
   canCorrectHistorical: boolean;
   requiresDownloadPasscode: boolean;
@@ -159,6 +163,16 @@ export function SaleHistoryList({
       );
       toast.success("Sale corrected", {
         description: "A replacement sale was recorded with the new amount.",
+      });
+      return;
+    }
+
+    if (result.status === "reversed") {
+      setItems((prev) =>
+        prev.map((s) => (s.id === saleId ? { ...s, status: "reversed" } : s)),
+      );
+      toast.success("Sale reversed", {
+        description: "An offsetting entry was recorded for the same amount.",
       });
     }
   }
@@ -212,7 +226,7 @@ export function SaleHistoryList({
                 </div>
               </div>
 
-              {sale.status === "open" && (canVoid || canCorrectThis) && (
+              {sale.status === "open" && (canVoid || canReverse || canCorrectThis) && (
                 <div className="flex gap-2">
                   {canCorrectThis && (
                     <CorrectSaleDialog
@@ -224,6 +238,13 @@ export function SaleHistoryList({
                   )}
                   {canVoid && (
                     <VoidSaleDialog
+                      saleId={sale.id}
+                      tenantSlug={tenantSlug}
+                      onResolved={(result) => onResolved(sale.id, result)}
+                    />
+                  )}
+                  {canReverse && (
+                    <ReverseSaleDialog
                       saleId={sale.id}
                       tenantSlug={tenantSlug}
                       onResolved={(result) => onResolved(sale.id, result)}

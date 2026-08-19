@@ -14,13 +14,18 @@ import type { Database, SaleStatus, VoidOrCorrectResult } from "@/types/database
  * actual_amount is always the TOTAL charged, not a unit price — quantity
  * is informational only (docs/08-sales-engine.md's decision log).
  *
- * voidSale/correctSale never touch `sales` directly — `sales` still has
- * NO UPDATE/DELETE RLS policy at all (migration 0005's invariant holds).
- * Both delegate to the void_sale/correct_sale SECURITY DEFINER Postgres
- * functions (migration 0006), which enforce permission + edit-window +
- * approval-routing in one place and are the ONLY code path that can ever
- * change a sale's status post-insert. REVERSE is not implemented — a
- * documented future increment, not silently dropped.
+ * voidSale/correctSale/reverseSale never touch `sales` directly —
+ * `sales` still has NO UPDATE/DELETE RLS policy at all (migration 0005's
+ * invariant holds). All three delegate to the void_sale/correct_sale/
+ * reverse_sale SECURITY DEFINER Postgres functions (migrations 0006/
+ * 0026), which enforce permission + edit-window/approval-routing in one
+ * place and are the ONLY code path that can ever change a sale's status
+ * post-insert. reverseSale() is the third documented mutation type
+ * (docs/08-sales-engine.md's "VOID / CORRECT / REVERSE"): an offsetting
+ * entry, not a delete or amount-edit — the original flips to 'reversed'
+ * and a new sale row is inserted with the negated amount, both staying
+ * visible in history and correctly netting to zero in every gross-sales
+ * aggregate (which already just sums actual_amount).
  */
 export interface RecordSaleInput {
   tenantId: string;
@@ -168,6 +173,19 @@ export class SalesService {
 
     if (error || !data) {
       throw new Error(`SalesService.correctSale: ${error?.message}`);
+    }
+
+    return data;
+  }
+
+  async reverseSale(saleId: string, reason: string): Promise<VoidOrCorrectResult> {
+    const { data, error } = await this.supabase.rpc("reverse_sale", {
+      p_sale_id: saleId,
+      p_reason: reason,
+    });
+
+    if (error || !data) {
+      throw new Error(`SalesService.reverseSale: ${error?.message}`);
     }
 
     return data;

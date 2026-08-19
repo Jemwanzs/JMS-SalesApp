@@ -91,13 +91,22 @@ export class AnalyticsService {
   ) {
     this.assertRangeAllowed(range, timezoneToday, perms);
 
+    // Excludes 'voided' (removed, no replacement) AND 'corrected' (a
+    // corrected sale's ORIGINAL amount is stale -- the real figure lives
+    // on its replacement row, already 'open' and already included; a
+    // real double-counting bug fixed alongside migration 0026's REVERSE
+    // work). 'reversed' is deliberately NOT excluded -- unlike a
+    // correction, a reversed original's amount is still real, exactly
+    // offset by its new negative row, so both need to keep counting for
+    // the pair to correctly net to zero.
     let query = this.supabase
       .from("sales")
       .select("product_id, actual_amount, recorded_by")
       .eq("tenant_id", tenantId)
       .gte("sale_date", range.from)
       .lte("sale_date", range.to)
-      .neq("status", "voided");
+      .neq("status", "voided")
+      .neq("status", "corrected");
 
     if (!perms.viewAll) {
       query = query.eq("recorded_by", currentUserId);
