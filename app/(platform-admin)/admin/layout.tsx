@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { PlatformAdminService } from "@/services/PlatformAdminService";
@@ -40,9 +41,19 @@ export default async function PlatformAdminLayout({
   return (
     <div className="min-h-screen bg-[#0B1220] text-[#F2F1EC]">
       <header className="flex items-center justify-between border-b border-white/10 px-6 py-4">
-        <span className="text-sm font-semibold tracking-wide">
-          PLATFORM ADMIN
-        </span>
+        <div className="flex items-center gap-6">
+          <span className="text-sm font-semibold tracking-wide">
+            PLATFORM ADMIN
+          </span>
+          <nav className="flex items-center gap-4 text-sm text-white/70">
+            <Link href="/admin" className="hover:text-white">
+              Dashboard
+            </Link>
+            <Link href="/admin/tenants" className="hover:text-white">
+              Tenants
+            </Link>
+          </nav>
+        </div>
         <span className="text-xs text-white/50">{user.email}</span>
       </header>
       <main className="p-6">{children}</main>

@@ -766,6 +766,26 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["platform_settings"]["Row"]>;
         Relationships: [];
       };
+      platform_audit_logs: {
+        Row: {
+          id: string;
+          platform_admin_id: string;
+          action: string;
+          target_tenant_id: string | null;
+          target_profile_id: string | null;
+          old_values: Record<string, unknown> | null;
+          new_values: Record<string, unknown> | null;
+          reason: string | null;
+          ip: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["platform_audit_logs"]["Row"]> & {
+          platform_admin_id: string;
+          action: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["platform_audit_logs"]["Row"]>;
+        Relationships: [];
+      };
     };
     Functions: {
       void_sale: {
