@@ -2,19 +2,21 @@
 
 import { revalidatePath } from "next/cache";
 
-import { AnniversaryService, type AnniversaryWishMode } from "@/services/AnniversaryService";
 import { AuditService } from "@/services/AuditService";
+import { TenantService } from "@/services/TenantService";
 import { AUDIT_ACTION } from "@/lib/audit/actions";
 import { assertCan } from "@/lib/permissions/can";
+import { validateSaleNumberTemplate } from "@/lib/utils/sale-number-template";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
-export async function setAnniversaryWishModeAction(
-  tenantId: string,
-  tenantSlug: string,
-  mode: AnniversaryWishMode
-): Promise<{ error?: string }> {
+export async function setSaleNumberTemplateAction(tenantId: string, tenantSlug: string, template: string): Promise<{ error?: string }> {
   await assertCan("settings.manage", { tenantId });
+
+  const validationError = validateSaleNumberTemplate(template);
+  if (validationError) {
+    return { error: validationError };
+  }
 
   const supabase = await createClient();
   const {
@@ -26,7 +28,7 @@ export async function setAnniversaryWishModeAction(
   }
 
   try {
-    await new AnniversaryService(supabase).setWishMode(tenantId, mode, user.id);
+    await new TenantService(supabase).setSetting(tenantId, "sale_number_template", template.trim(), user.id);
 
     await new AuditService(createServiceRoleClient())
       .log({
@@ -34,8 +36,8 @@ export async function setAnniversaryWishModeAction(
         actorProfileId: user.id,
         action: AUDIT_ACTION.TENANT_SETTING_CHANGED,
         entityType: "tenant_settings",
-        entityId: "anniversary_wish_mode",
-        newValues: { anniversary_wish_mode: mode },
+        entityId: "sale_number_template",
+        newValues: { sale_number_template: template.trim() },
       })
       .catch(() => {});
 

@@ -2,24 +2,27 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { AnniversaryWishCard } from "@/features/settings/components/anniversary-wish-card";
+import { SaleNumberTemplateCard } from "@/features/settings/components/sale-number-template-card";
 import { AnniversaryService } from "@/services/AnniversaryService";
+import { TenantService } from "@/services/TenantService";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
+
+const DEFAULT_SALE_NUMBER_TEMPLATE = "SALE-{YYYY}-{000001}";
 
 export const metadata: Metadata = {
   title: "Settings | JMS Sales App",
 };
 
 /**
- * Business-wide settings, `settings.manage`-gated. Deliberately minimal
- * today -- this directory existed as an unused placeholder since the
- * More menu's own "Settings" entry was scaffolded (spec S12) with no
- * page ever built behind it; Phase 7d's anniversary wish-mode toggle
- * ("Automatic / Review Before Sending / Disabled", docs/15-super-
- * admin.md, "never forced on a tenant that hasn't opted in") is the
- * first real setting to need a home here. Other tenant-wide settings
- * can land on this same page over time rather than each inventing its
- * own screen.
+ * Business-wide settings, `settings.manage`-gated. This directory
+ * existed as an unused placeholder since the More menu's own "Settings"
+ * entry was scaffolded (spec S12) with no page ever built behind it;
+ * Phase 7d's anniversary wish-mode toggle was the first real setting to
+ * land here, and the sale-number template (docs/08-sales-engine.md,
+ * deferred since migration 0005) is the second. Other tenant-wide
+ * settings can land on this same page over time rather than each
+ * inventing its own screen.
  */
 export default async function SettingsPage({
   params,
@@ -36,11 +39,22 @@ export default async function SettingsPage({
     redirect(`/t/${tenantSlug}/more`);
   }
 
-  const currentMode = await new AnniversaryService(supabase).getWishMode(tenantId);
+  const tenantService = new TenantService(supabase);
+  const [currentMode, saleNumberTemplate, primaryLocation] = await Promise.all([
+    new AnniversaryService(supabase).getWishMode(tenantId),
+    tenantService.getSetting<string>(tenantId, "sale_number_template"),
+    supabase.from("locations").select("code").eq("tenant_id", tenantId).order("created_at", { ascending: true }).limit(1).maybeSingle(),
+  ]);
 
   return (
     <div className="flex flex-1 flex-col gap-4 p-6">
       <h1 className="text-xl font-semibold">Settings</h1>
+      <SaleNumberTemplateCard
+        tenantId={tenantId}
+        tenantSlug={tenantSlug}
+        initialTemplate={saleNumberTemplate ?? DEFAULT_SALE_NUMBER_TEMPLATE}
+        sampleLocationCode={primaryLocation.data?.code ?? null}
+      />
       <AnniversaryWishCard tenantId={tenantId} tenantSlug={tenantSlug} anniversaryDate={tenant!.anniversary_date} currentMode={currentMode} />
     </div>
   );

@@ -19,7 +19,12 @@ import type { Database } from "@/types/database.types";
  * SESSION_REVOKED (wired from features/security/actions/force-sign-out-
  * user.ts — the admin-driven, account-wide force sign-out; self-service
  * "sign out of other devices" isn't logged here, same as every other
- * purely self-scoped action in this app).
+ * purely self-scoped action in this app), TENANT_SETTING_CHANGED
+ * (general business-configuration settings — sale_number_template,
+ * anniversary_wish_mode — distinct from SECURITY_SETTING_CHANGED, which
+ * docs/05 scopes specifically to 4e/4f/4g's security toggles; the audit
+ * vocabulary is documented as "non-exhaustive," so this is an addition,
+ * not a deviation).
  *
  * Always constructed with the service-role client (added to
  * lib/supabase/service-role.ts's allowed-callers list) — audit_logs has
