@@ -12,29 +12,36 @@ import { deviceLabel, parseDeviceType, parseUserAgent } from "@/lib/utils/user-a
  * increments.
  *
  * All WRITES here (logLoginEvent, createSession, touchSession,
- * revokeSession, revokeOtherSessions) MUST run on the service-role
- * client (migration 0016: both tables have RLS enabled with a SELECT
- * policy but zero write policies) -- login_events in particular must be
- * writable for a FAILED login attempt, which by definition has no
- * authenticated session for a self-scoped RLS insert policy to key off
- * of. READS (listLoginEvents/listSessions) work correctly on either
- * client -- the RLS-respecting client's SELECT policy already implements
- * the right self-or-security.manage visibility, service-role is only
- * needed for callers (like the sign-in action) that don't have an
- * authenticated session yet.
+ * revokeSession, revokeOtherSessions, forceSignOutUser) MUST run on the
+ * service-role client (migration 0016: both tables have RLS enabled with
+ * a SELECT policy but zero write policies) -- login_events in particular
+ * must be writable for a FAILED login attempt, which by definition has
+ * no authenticated session for a self-scoped RLS insert policy to key
+ * off of; forceSignOutUser specifically also needs service-role for
+ * `supabase.auth.admin.*`, which only ever works under the service-role
+ * key regardless of RLS. READS (listLoginEvents/listSessions/
+ * listTenantSessions) work correctly on either client -- the RLS-
+ * respecting client's SELECT policy already implements the right self-
+ * or-security.manage visibility, service-role is only needed for callers
+ * (like the sign-in action) that don't have an authenticated session yet.
  *
- * **Known limitation, not silently glossed over**: `revokeSession`/
- * `revokeOtherSessions` mark our own tracking rows as revoked (a real,
- * useful audit trail) but do NOT forcibly invalidate another user's live
- * Supabase Auth JWT elsewhere -- the supabase-js admin API only exposes
- * `admin.signOut(jwt)`, which needs the actual token, not a session ID,
- * and this project's own hard rule (docs/05) forbids touching `auth.*`
- * tables directly to work around that. Self-service revocation of the
- * CALLER's own other sessions is fully real (uses `auth.signOut({scope:
- * 'others'})`, which the SDK does support for one's own session).
- * Admin-driven forced termination of a specific *other* session remains
- * an explicit gap -- `UserService.setActive(false)` (Phase 4b) is the
- * mechanism that actually blocks a disabled user's access reliably.
+ * **Known limitation, now worked around rather than silently accepted**:
+ * there is no way to revoke one SPECIFIC other session -- the supabase-js
+ * admin API only exposes `admin.signOut(jwt)`, which needs the actual
+ * token, not a session ID, and this project's own hard rule (docs/05)
+ * forbids touching `auth.*` tables directly to work around that.
+ * Self-service revocation of the CALLER's own other sessions is fully
+ * real (`auth.signOut({scope: 'others'})`, which the SDK does support
+ * for one's own session). For an ADMIN acting on a *different* user,
+ * `forceSignOutUser` is the closest real capability the Admin API
+ * actually offers: a short account-wide ban (`admin.updateUserById`,
+ * `ban_duration`) that blocks every new sign-in and, within at most one
+ * access-token lifetime, kills every live session too (GoTrue rejects
+ * the next refresh-token exchange for a banned user) -- genuinely
+ * broader than "one session," genuinely narrower and more reversible
+ * than `UserService.setActive(false)` (Phase 4b, which blocks access
+ * indefinitely until manually re-enabled). Both are real, honestly
+ * distinct tools for different situations, not the same button twice.
  */
 export interface LoginEventSummary {
   id: string;
@@ -172,6 +179,42 @@ export class SecurityService {
     }));
   }
 
+  /**
+   * Tenant-wide view for security.manage holders -- RLS's sessions_select
+   * already requires that grant for any row not the caller's own, same
+   * posture as listTenantLoginEvents. Only currently-active (non-revoked)
+   * sessions, one row per session (not collapsed per profile) -- the
+   * caller decides how to group/display them.
+   */
+  async listTenantSessions(tenantId: string): Promise<Array<SessionSummary & { profileId: string; who: string }>> {
+    const { data, error } = await this.supabase
+      .from("sessions")
+      .select("id, profile_id, device_fingerprint, ip, last_seen_at, revoked_at, created_at")
+      .eq("tenant_id", tenantId)
+      .is("revoked_at", null)
+      .order("last_seen_at", { ascending: false });
+
+    if (error) {
+      throw new Error(`SecurityService.listTenantSessions: ${error.message}`);
+    }
+
+    const profileIds = [...new Set((data ?? []).map((r) => r.profile_id))];
+    const { data: profiles } =
+      profileIds.length > 0 ? await this.supabase.from("profiles").select("id, full_name, email").in("id", profileIds) : { data: [] };
+    const nameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name ?? p.email]));
+
+    return (data ?? []).map((row) => ({
+      id: row.id,
+      profileId: row.profile_id,
+      who: nameById.get(row.profile_id) ?? "Unknown",
+      device: row.device_fingerprint ?? "Unknown device",
+      ip: row.ip,
+      lastSeenAt: row.last_seen_at,
+      revokedAt: row.revoked_at,
+      createdAt: row.created_at,
+    }));
+  }
+
   async listSessions(profileId: string): Promise<SessionSummary[]> {
     const { data, error } = await this.supabase
       .from("sessions")
@@ -215,6 +258,51 @@ export class SecurityService {
     const { error } = await query;
     if (error) {
       throw new Error(`SecurityService.revokeOtherSessions: ${error.message}`);
+    }
+  }
+
+  /**
+   * Admin-driven forced sign-out of a DIFFERENT user (docs/05: "sessions
+   * ... with revoke capability (self-service and admin-driven)") -- the
+   * real capability the Admin API actually offers, see this class's own
+   * header comment for why it's account-wide/timed rather than a single
+   * targeted session. A short ban (1 hour -- comfortably >= this
+   * project's access-token lifetime) rather than an indefinite one:
+   * the account recovers on its own once it expires, no separate
+   * "un-ban" step an admin has to remember, unlike disabling a user.
+   *
+   * Every one of the target's tracked session rows is marked revoked,
+   * not just the ones in the caller's own tenant -- the underlying ban
+   * is account-wide (GoTrue rejects a refresh-token exchange from a
+   * banned user regardless of which tenant they were last active in),
+   * so tracking anything narrower would silently lie about sessions
+   * that are, in fact, already dead.
+   */
+  async forceSignOutUser(profileId: string, tenantId: string, revokedBy: string): Promise<void> {
+    const { data: membership } = await this.supabase
+      .from("tenant_memberships")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .eq("profile_id", profileId)
+      .maybeSingle();
+
+    if (!membership) {
+      throw new Error("SecurityService.forceSignOutUser: that user is not a member of this tenant");
+    }
+
+    const { error: banError } = await this.supabase.auth.admin.updateUserById(profileId, { ban_duration: "1h" });
+    if (banError) {
+      throw new Error(`SecurityService.forceSignOutUser: ${banError.message}`);
+    }
+
+    const { error: revokeError } = await this.supabase
+      .from("sessions")
+      .update({ revoked_at: new Date().toISOString(), revoked_by: revokedBy, revoked_reason: "Force-signed-out by an administrator" })
+      .eq("profile_id", profileId)
+      .is("revoked_at", null);
+
+    if (revokeError) {
+      throw new Error(`SecurityService.forceSignOutUser: ${revokeError.message}`);
     }
   }
 }

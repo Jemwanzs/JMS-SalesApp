@@ -6,6 +6,7 @@ import { GeofenceRestrictionCard } from "@/features/security/components/geofence
 import { LoginEventList } from "@/features/security/components/login-event-list";
 import { MfaEnrollment } from "@/features/security/components/mfa-enrollment";
 import { SessionList } from "@/features/security/components/session-list";
+import { TenantSessionList } from "@/features/security/components/tenant-session-list";
 import { WorkingHoursRestrictionToggle } from "@/features/security/components/working-hours-restriction-toggle";
 import { SecurityService } from "@/services/SecurityService";
 import { TenantService } from "@/services/TenantService";
@@ -19,15 +20,20 @@ export const metadata: Metadata = {
 /**
  * Phase 4c/4e/4f: security centre -- login_events + sessions + MFA
  * enrollment + working-hours restriction + geo-fencing/temporary-access
- * + download security (docs/05-authentication-security.md) -- the full
- * audit_logs coverage pass is the one remaining Phase 4 increment.
- * Always reachable (every signed-in user manages their own sessions/MFA
- * factor); the tenant-wide activity section and every settings toggle
- * only render for security.manage/settings.manage holders respectively,
+ * + download security (docs/05-authentication-security.md). Always
+ * reachable (every signed-in user manages their own sessions/MFA
+ * factor); the tenant-wide sections and every settings toggle only
+ * render for security.manage/settings.manage holders respectively,
  * matching RLS's own gating on the underlying tables. MFA enrollment
  * doesn't need any data fetched here -- MfaEnrollment calls
  * supabase.auth.mfa.* directly against the caller's own session (see
  * its own header comment).
+ *
+ * `TenantSessionList` closes the "admin-driven forced termination"
+ * gap tracked since 4c -- see SecurityService.forceSignOutUser's own
+ * header comment for exactly what capability this is (account-wide,
+ * timed) and isn't (one specific targeted session, which the Supabase
+ * Admin API has no way to do).
  */
 export default async function SecurityPage({
   params,
@@ -61,6 +67,7 @@ export default async function SecurityPage({
     sessions,
     myEvents,
     tenantEvents,
+    tenantSessions,
     workingHoursRestricted,
     geofenceRestricted,
     geofence,
@@ -70,6 +77,7 @@ export default async function SecurityPage({
     securityService.listSessions(user!.id),
     securityService.listLoginEvents(user!.id),
     canManageSecurity ? securityService.listTenantLoginEvents(tenantId) : Promise.resolve([]),
+    canManageSecurity ? securityService.listTenantSessions(tenantId) : Promise.resolve([]),
     canManageSettings
       ? tenantService.getSetting<boolean>(tenantId, "restrict_login_to_working_hours")
       : Promise.resolve(null),
@@ -116,6 +124,9 @@ export default async function SecurityPage({
       )}
       <SessionList sessions={sessions} currentSessionId={currentSessionId} />
       <LoginEventList title="Your recent sign-ins" events={myEvents} />
+      {canManageSecurity && (
+        <TenantSessionList sessions={tenantSessions} tenantId={tenantId} tenantSlug={tenantSlug} currentUserId={user!.id} />
+      )}
       {canManageSecurity && <LoginEventList title="Tenant-wide sign-in activity" events={tenantEvents} />}
     </div>
   );

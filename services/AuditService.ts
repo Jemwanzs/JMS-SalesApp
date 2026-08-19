@@ -15,7 +15,11 @@ import type { Database } from "@/types/database.types";
  * IMPERSONATION_STARTED/ENDED (wired from features/platform-admin/
  * actions/{start,end}-impersonation.ts, Phase 7b — actor is always the
  * real platform admin's own profile id, never the impersonated target's,
- * so the tenant's own audit trail stays honest about who actually acted).
+ * so the tenant's own audit trail stays honest about who actually acted),
+ * SESSION_REVOKED (wired from features/security/actions/force-sign-out-
+ * user.ts — the admin-driven, account-wide force sign-out; self-service
+ * "sign out of other devices" isn't logged here, same as every other
+ * purely self-scoped action in this app).
  *
  * Always constructed with the service-role client (added to
  * lib/supabase/service-role.ts's allowed-callers list) — audit_logs has

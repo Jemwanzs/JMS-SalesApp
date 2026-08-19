@@ -16,8 +16,9 @@ export const metadata: Metadata = {
  * inactive so admins can toggle a product back on; archived products are
  * deliberately excluded here too (soft-deleted, no longer catalog-
  * managed) and were never shown on this page even before this batch.
- * No bulk upload or drag-and-drop reordering yet (docs/10-products.md
- * notes these as deliberate scope cuts).
+ * Bulk upload is Phase 5b (Imports); reordering is Move Up/Down buttons
+ * on ProductManagementList, not drag-and-drop -- see that component's
+ * own header comment for why.
  */
 export default async function ProductsPage({
   params,

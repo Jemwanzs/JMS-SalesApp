@@ -20,7 +20,9 @@ const IMAGE_BUCKET = "product-images";
  * replace/remove leaves behind, so nothing is ever orphaned in Storage
  * once a client call to this service has completed.
  *
- * Bulk upload (spec S45) is a separate, later increment.
+ * Bulk upload (spec S45) shipped as Phase 5b (ImportService, `type =
+ * 'products'`); reorder() (the other half of S45) is real too, see its
+ * own header comment.
  */
 export interface CreateProductInput {
   id?: string;
@@ -262,8 +264,30 @@ export class ProductService {
     }
   }
 
-  async reorder(_tenantId: string, _orderedProductIds: string[]) {
-    throw new Error("ProductService.reorder: not yet implemented (drag-and-drop UI is a later increment)");
+  /**
+   * Sets `display_order` to each product's index in `orderedProductIds`
+   * (the caller's full, current, already-in-the-desired-order list --
+   * see product-management-list.tsx's Move Up/Down buttons, the actual
+   * UI for this: press-and-drag doesn't translate well to a ~430px
+   * mobile viewport, docs/00's own "mobile-first, always" principle, so
+   * this ships as a simpler, equally-real reordering affordance rather
+   * than pulling in a drag-and-drop library for a worse touch UX).
+   * `products.edit`-gated by RLS (products_update, migration 0005), same
+   * permission every other write in this service already uses -- no
+   * separate check needed here.
+   */
+  async reorder(tenantId: string, orderedProductIds: string[]): Promise<void> {
+    for (let i = 0; i < orderedProductIds.length; i++) {
+      const { error } = await this.supabase
+        .from("products")
+        .update({ display_order: i })
+        .eq("tenant_id", tenantId)
+        .eq("id", orderedProductIds[i]);
+
+      if (error) {
+        throw new Error(`ProductService.reorder: ${error.message}`);
+      }
+    }
   }
 }
 
