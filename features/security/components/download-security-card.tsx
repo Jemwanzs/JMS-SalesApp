@@ -18,6 +18,13 @@ import { Switch } from "@/components/ui/switch";
  * visibility boundary every other secret in this app follows).
  * Currently applied to the one real export surface (Sales History's
  * CSV button) -- see export-sales-history.ts.
+ *
+ * This same passcode also doubles as Phase 2h's business-day reopen
+ * fallback gate (docs/09-business-day-engine.md: "MFA or passcode") for
+ * a team member who hasn't enrolled in two-factor authentication — one
+ * memorized passcode covers both, rather than a second one to configure
+ * here. The toggle above only governs *downloads*; reopening always
+ * checks the passcode when MFA isn't available, with no separate switch.
  */
 export function DownloadSecurityCard({
   tenantId,
@@ -104,6 +111,9 @@ export function DownloadSecurityCard({
             </Button>
           </div>
           {saveError && <p className="text-xs text-destructive">{saveError}</p>}
+          <p className="text-xs text-muted-foreground">
+            This passcode is also used to reopen a closed business day when two-factor authentication isn&rsquo;t enabled.
+          </p>
         </form>
       </CardContent>
     </Card>

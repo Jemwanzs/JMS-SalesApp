@@ -12,6 +12,12 @@ import { verifyPasscodeHash } from "@/lib/utils/passcode";
  * permission check and file generation, since those are specific to
  * whatever's being exported.
  *
+ * verifyPasscode() is also reused directly by features/sales/actions/
+ * reopen-business-day.ts (Phase 2h's "MFA or passcode" gate,
+ * docs/09-business-day-engine.md) for a caller without MFA enrolled —
+ * the same tenant-wide `hashed_download_passcode` value, not a second
+ * passcode to configure. logDownload() stays download-specific.
+ *
  * Runs on the RLS-respecting client, not service-role: an export only
  * ever happens under a live authenticated session (unlike a failed
  * login, which has none), so download_audit's self-scoped INSERT policy
