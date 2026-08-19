@@ -12,7 +12,7 @@ import { createServiceRoleClient } from "@/lib/supabase/service-role";
  * never real tenant data, so download security's "sales/transaction/
  * analytics/audit exports" scope doesn't apply to it.
  */
-export async function GET(_request: Request, { params }: { params: Promise<{ tenantSlug: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = await params;
   const supabase = await createClient();
 
@@ -25,12 +25,18 @@ export async function GET(_request: Request, { params }: { params: Promise<{ ten
     return NextResponse.json({ error: "Not authorized" }, { status: 403 });
   }
 
-  const buffer = await new ImportService(createServiceRoleClient()).generateSalesHistoryTemplate();
+  const type = new URL(request.url).searchParams.get("type") === "products" ? "products" : "sales_history";
+  const service = new ImportService(createServiceRoleClient());
+  const buffer =
+    type === "products" ? await service.generateProductsTemplate() : await service.generateSalesHistoryTemplate();
 
   return new NextResponse(new Uint8Array(buffer), {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "Content-Disposition": 'attachment; filename="sales-history-import-template.xlsx"',
+      "Content-Disposition":
+        type === "products"
+          ? 'attachment; filename="products-import-template.xlsx"'
+          : 'attachment; filename="sales-history-import-template.xlsx"',
     },
   });
 }

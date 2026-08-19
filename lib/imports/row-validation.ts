@@ -37,10 +37,10 @@ export interface ValidatedSaleRow {
   existingReference: string | null;
 }
 
-export interface RowValidationResult {
+export interface RowValidationResult<T> {
   valid: boolean;
   errors: string[];
-  data?: ValidatedSaleRow;
+  data?: T;
 }
 
 const COLUMN_KEYS = {
@@ -56,15 +56,44 @@ const COLUMN_KEYS = {
   notes: ["notes"],
 };
 
+/** docs/10-products.md's bulk-upload column set -- no location/sales-person/
+ * date concepts here, this is catalog data, not a transaction record. */
+export const PRODUCT_COLUMN_KEYS = {
+  name: ["product name", "name"],
+  sku: ["product code", "sku", "code"],
+  description: ["description"],
+  expectedPrice: ["expected price", "price"],
+  imageUrl: ["image url", "image"],
+};
+
+export interface ProductImportLookupContext {
+  /** Lowercased SKUs already on the tenant's catalog -- a bulk-imported
+   * row reusing one is almost always a re-run of the same file, not a
+   * deliberate second product, so it's treated as an error even though
+   * the `products.sku` column itself carries no unique constraint. */
+  existingSkus: Set<string>;
+}
+
+export interface ValidatedProductRow {
+  name: string;
+  sku: string | null;
+  description: string | null;
+  expectedPrice: number | null;
+  imageUrl: string | null;
+}
+
 function normalizeHeader(header: string): string {
   return header.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
 /** Maps a worksheet's actual header row to our known field names, case/whitespace-insensitively. */
-export function mapHeaders(headerRow: (string | null | undefined)[]): Record<string, number> {
+export function mapHeaders(
+  headerRow: (string | null | undefined)[],
+  columnKeys: Record<string, string[]> = COLUMN_KEYS
+): Record<string, number> {
   const normalized = headerRow.map((h) => (h ? normalizeHeader(String(h)) : ""));
   const map: Record<string, number> = {};
-  for (const [field, aliases] of Object.entries(COLUMN_KEYS)) {
+  for (const [field, aliases] of Object.entries(columnKeys)) {
     const idx = normalized.findIndex((h) => aliases.includes(h));
     if (idx >= 0) map[field] = idx;
   }
@@ -137,7 +166,7 @@ export function validateSalesHistoryRow(
   raw: Record<string, unknown>,
   ctx: ImportLookupContext,
   seenReferences: Set<string>
-): RowValidationResult {
+): RowValidationResult<ValidatedSaleRow> {
   const errors: string[] = [];
   const get = (field: keyof typeof COLUMN_KEYS) => raw[field];
 
@@ -269,5 +298,82 @@ export function validateSalesHistoryRow(
       notes,
       existingReference: existingReferenceRaw,
     },
+  };
+}
+
+function parseUrl(value: string): string | null {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:" ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+/** docs/10-products.md's bulk-upload validation: name required; SKU/price/
+ * image format checks only where a value is actually provided; SKU
+ * uniqueness checked both within this file and against the tenant's
+ * existing catalog (see ProductImportLookupContext for why). */
+export function validateProductRow(
+  raw: Record<string, unknown>,
+  ctx: ProductImportLookupContext,
+  seenSkus: Set<string>
+): RowValidationResult<ValidatedProductRow> {
+  const errors: string[] = [];
+  const get = (field: keyof typeof PRODUCT_COLUMN_KEYS) => raw[field];
+
+  // --- Product Name (required) ---
+  const name = cellToString(get("name"));
+  if (!name) {
+    errors.push("Product name is required");
+  }
+
+  // --- SKU / Product Code (optional, unique within file + against existing catalog) ---
+  const skuRaw = cellToString(get("sku")) || null;
+  if (skuRaw) {
+    const key = skuRaw.toLowerCase();
+    if (seenSkus.has(key)) {
+      errors.push(`Duplicate product code in this file: "${skuRaw}"`);
+    } else if (ctx.existingSkus.has(key)) {
+      errors.push(`A product with this code already exists: "${skuRaw}"`);
+    } else {
+      seenSkus.add(key);
+    }
+  }
+
+  // --- Description (optional) ---
+  const description = cellToString(get("description")) || null;
+
+  // --- Expected Price (optional, non-negative) ---
+  const expectedPriceRaw = get("expectedPrice");
+  let expectedPrice: number | null = null;
+  if (expectedPriceRaw != null && expectedPriceRaw !== "") {
+    expectedPrice = parseNumber(expectedPriceRaw);
+    if (expectedPrice == null) {
+      errors.push(`Invalid expected price format: "${cellToString(expectedPriceRaw)}"`);
+    } else if (expectedPrice < 0) {
+      errors.push(`Expected price cannot be negative: ${expectedPrice}`);
+      expectedPrice = null;
+    }
+  }
+
+  // --- Image URL (optional, must be http(s)) ---
+  const imageUrlRaw = cellToString(get("imageUrl")) || null;
+  let imageUrl: string | null = null;
+  if (imageUrlRaw) {
+    imageUrl = parseUrl(imageUrlRaw);
+    if (!imageUrl) {
+      errors.push(`Invalid image URL: "${imageUrlRaw}"`);
+    }
+  }
+
+  if (errors.length > 0 || !name) {
+    return { valid: false, errors };
+  }
+
+  return {
+    valid: true,
+    errors: [],
+    data: { name, sku: skuRaw, description, expectedPrice, imageUrl },
   };
 }

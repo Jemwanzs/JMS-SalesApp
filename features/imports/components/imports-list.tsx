@@ -12,6 +12,11 @@ const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive"> = 
   failed: "destructive",
 };
 
+const TYPE_LABEL: Record<string, string> = {
+  sales_history: "Historical sales",
+  products: "Products",
+};
+
 export function ImportsList({ imports, tenantSlug }: { imports: ImportSummary[]; tenantSlug: string }) {
   if (imports.length === 0) {
     return (
@@ -32,7 +37,8 @@ export function ImportsList({ imports, tenantSlug }: { imports: ImportSummary[];
           <div>
             <p className="text-sm font-medium">{imp.fileName}</p>
             <p className="text-xs text-muted-foreground">
-              {imp.totalRows} rows · {imp.validRows} valid · {imp.errorRows} need attention
+              {TYPE_LABEL[imp.type] ?? imp.type} · {imp.totalRows} rows · {imp.validRows} valid ·{" "}
+              {imp.errorRows} need attention
               {imp.importedRows > 0 ? ` · ${imp.importedRows} imported` : ""}
             </p>
             <p className="text-xs text-muted-foreground">{new Date(imp.createdAt).toLocaleString()}</p>

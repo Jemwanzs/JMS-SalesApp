@@ -3,18 +3,18 @@
 --
 -- Phase 5 (Data Migration): import template generation -> validation
 -- engine -> preview/resolve-errors -> confirm/import -> analytics
--- rebuild trigger (docs/12-imports-data-migration.md, docs/03-database-
--- schema.md's imports/import_rows rows). Scoped to `type = 'sales_history'`
--- for this pass -- the schema is generic enough for `type = 'products'`
--- (same shape, per the doc's own "Products bulk upload" section) but
--- that template/validation/confirm logic is a documented, deliberate
--- follow-up, not built speculatively alongside sales history.
+-- rebuild trigger (docs/12-imports-data-migration.md for `type =
+-- 'sales_history'`, docs/10-products.md for `type = 'products'`,
+-- docs/03-database-schema.md's imports/import_rows rows). One shared
+-- schema/shape for both types -- ImportService's confirm step is what
+-- actually differs per type, not this table layout.
 --
 -- Both tables get a SELECT policy (imports.manage) but ZERO write
 -- policies. Unlike login_events (no session at all for some events),
 -- the reason here is different: a single confirm step writes across
 -- import_rows + business_days + sales together as one consistent bulk
--- operation, and creating historical business_days/sales rows needs to
+-- operation for sales_history (or import_rows + products for
+-- products), and creating historical business_days/sales rows needs to
 -- bypass the live-capture-shaped business_day.open/sales.create RLS
 -- checks entirely (a historical row is correctly 'closed', never
 -- 'open', by design) -- so ImportService always runs on the

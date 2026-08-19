@@ -12,10 +12,11 @@ export const metadata: Metadata = {
 };
 
 /**
- * Phase 5: Data Migration (docs/12-imports-data-migration.md). Scoped
- * to `type = 'sales_history'` -- see ImportService's header comment for
- * why products bulk upload isn't built here too. Reads go through the
- * RLS-respecting client (imports_select/import_rows_select, migration
+ * Phase 5: Data Migration (docs/12-imports-data-migration.md for
+ * historical sales, docs/10-products.md for product catalog bulk
+ * upload) -- one shared list/upload shell for both `type`s, the type
+ * picker lives inside ImportUploadForm. Reads go through the RLS-
+ * respecting client (imports_select/import_rows_select, migration
  * 0020, both gated on imports.manage) even though ImportService's
  * WRITES (upload/validate/resolve/confirm, all in features/imports/
  * actions/) always use service-role -- read-only listing doesn't need

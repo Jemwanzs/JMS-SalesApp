@@ -6,6 +6,7 @@ import { ImportService } from "@/services/ImportService";
 import { assertCan } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
+import type { ImportType } from "@/types/database.types";
 
 export interface UploadImportState {
   error?: string;
@@ -27,6 +28,9 @@ export async function uploadImportAction(
   formData: FormData
 ): Promise<UploadImportState> {
   await assertCan("imports.manage", { tenantId });
+
+  const typeRaw = formData.get("type");
+  const type: ImportType = typeRaw === "products" ? "products" : "sales_history";
 
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) {
@@ -54,7 +58,7 @@ export async function uploadImportAction(
     const buffer = Buffer.from(await file.arrayBuffer());
     const { importId } = await importService.createImport({
       tenantId,
-      type: "sales_history",
+      type,
       fileBuffer: buffer,
       fileName: file.name,
       uploadedBy: user.id,

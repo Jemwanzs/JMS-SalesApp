@@ -45,9 +45,11 @@ export function ImportDetail({
         return;
       }
       setConfirmed({ imported: result.imported ?? 0, skipped: result.skipped ?? 0 });
-      toast.success(`Imported ${result.imported} sales`);
+      toast.success(`Imported ${result.imported} ${importSummary.type === "products" ? "products" : "sales"}`);
     });
   }
+
+  const isProducts = importSummary.type === "products";
 
   return (
     <div className="flex flex-1 flex-col gap-4">
@@ -72,9 +74,19 @@ export function ImportDetail({
           <TableHeader>
             <TableRow>
               <TableHead>Row</TableHead>
-              <TableHead>Date</TableHead>
-              <TableHead>Product</TableHead>
-              <TableHead>Amount</TableHead>
+              {isProducts ? (
+                <>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Code</TableHead>
+                  <TableHead>Price</TableHead>
+                </>
+              ) : (
+                <>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Product</TableHead>
+                  <TableHead>Amount</TableHead>
+                </>
+              )}
               <TableHead>Status</TableHead>
               <TableHead>Details</TableHead>
               <TableHead />
@@ -84,9 +96,19 @@ export function ImportDetail({
             {items.map((row) => (
               <TableRow key={row.id}>
                 <TableCell>{row.rowNumber}</TableCell>
-                <TableCell>{cell(row.rawData.saleDate)}</TableCell>
-                <TableCell>{cell(row.rawData.productName) !== "—" ? cell(row.rawData.productName) : cell(row.rawData.productCode)}</TableCell>
-                <TableCell>{cell(row.rawData.amount)}</TableCell>
+                {isProducts ? (
+                  <>
+                    <TableCell>{cell(row.rawData.name)}</TableCell>
+                    <TableCell>{cell(row.rawData.sku)}</TableCell>
+                    <TableCell>{cell(row.rawData.expectedPrice)}</TableCell>
+                  </>
+                ) : (
+                  <>
+                    <TableCell>{cell(row.rawData.saleDate)}</TableCell>
+                    <TableCell>{cell(row.rawData.productName) !== "—" ? cell(row.rawData.productName) : cell(row.rawData.productCode)}</TableCell>
+                    <TableCell>{cell(row.rawData.amount)}</TableCell>
+                  </>
+                )}
                 <TableCell>
                   <Badge
                     variant={
@@ -105,6 +127,7 @@ export function ImportDetail({
                       tenantId={tenantId}
                       tenantSlug={tenantSlug}
                       importId={importSummary.id}
+                      importType={importSummary.type}
                       row={row}
                       onResolved={() => {
                         setItems((prev) =>

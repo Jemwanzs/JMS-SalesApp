@@ -7,17 +7,24 @@ import type { Database, ImportType } from "@/types/database.types";
 import {
   mapHeaders,
   validateSalesHistoryRow,
+  validateProductRow,
+  PRODUCT_COLUMN_KEYS,
   type ImportLookupContext,
+  type ProductImportLookupContext,
 } from "@/lib/imports/row-validation";
 
 /**
- * ImportService — historical sales bulk-upload workflow (docs/12-imports
- * -data-migration.md): template -> upload -> validate -> preview ->
- * resolve errors -> confirm -> analytics rebuild. Scoped to `type =
- * 'sales_history'` for now -- `type = 'products'` shares the imports/
- * import_rows schema (migration 0020) but its own template/validation/
- * confirm logic is a deliberate, documented follow-up, not built
- * speculatively here.
+ * ImportService — bulk-upload workflow (docs/12-imports-data-migration.md
+ * for `type = 'sales_history'`; docs/10-products.md for `type =
+ * 'products'`): template -> upload -> validate -> preview -> resolve
+ * errors -> confirm. Both types share the imports/import_rows schema
+ * (migration 0020) and the same generic per-row/per-import flow;
+ * generateTemplate/validateImport/confirmImport each dispatch on the
+ * import's own `type` column for the parts that actually differ (which
+ * columns, which validator, what confirm ultimately writes). Products
+ * import has no "historical business day" or analytics-rebuild concept
+ * the way sales history does -- confirming it is a much shorter, direct
+ * insert into `products`.
  *
  * ALWAYS constructed with the service-role client (added to lib/
  * supabase/service-role.ts's allowed-callers list) -- see migration
@@ -51,6 +58,14 @@ const SALES_HISTORY_TEMPLATE_COLUMNS = [
   { header: "Location", required: false, example: "Main" },
   { header: "Existing Reference", required: false, example: "POS-10293" },
   { header: "Notes", required: false, example: "" },
+] as const;
+
+const PRODUCTS_TEMPLATE_COLUMNS = [
+  { header: "Product Name", required: true, example: "Espresso" },
+  { header: "Product Code", required: false, example: "ESP-001" },
+  { header: "Description", required: false, example: "Single shot, house blend" },
+  { header: "Expected Price", required: false, example: 4.5 },
+  { header: "Image URL", required: false, example: "" },
 ] as const;
 
 export interface ImportSummary {
@@ -120,6 +135,44 @@ export class ImportService {
       { column: "Location", required: "No", notes: "Must match an existing location name exactly. Defaults to your primary location if left blank." },
       { column: "Existing Reference", required: "No", notes: "Your own external reference (e.g. a POS receipt number). Must be unique within this file." },
       { column: "Notes", required: "No", notes: "Free text, carried over onto the imported sale." },
+    ]);
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    return Buffer.from(buffer);
+  }
+
+  /** docs/10-products.md's bulk product-catalog template. */
+  async generateProductsTemplate(): Promise<Buffer> {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("Products");
+
+    sheet.columns = PRODUCTS_TEMPLATE_COLUMNS.map((c) => ({
+      header: c.header,
+      key: c.header,
+      width: 24,
+    }));
+
+    const headerRow = sheet.getRow(1);
+    headerRow.font = { bold: true };
+    headerRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE5E7EB" } };
+
+    sheet.addRow(Object.fromEntries(PRODUCTS_TEMPLATE_COLUMNS.map((c) => [c.header, c.example])));
+    const exampleRow = sheet.getRow(2);
+    exampleRow.font = { italic: true, color: { argb: "FF6B7280" } };
+
+    const notesSheet = workbook.addWorksheet("Instructions");
+    notesSheet.columns = [
+      { header: "Column", key: "column", width: 22 },
+      { header: "Required?", key: "required", width: 12 },
+      { header: "Notes", key: "notes", width: 60 },
+    ];
+    notesSheet.getRow(1).font = { bold: true };
+    notesSheet.addRows([
+      { column: "Product Name", required: "Yes", notes: "The product's display name." },
+      { column: "Product Code", required: "No", notes: "Your own SKU. Must be unique -- both within this file and against your existing catalog." },
+      { column: "Description", required: "No", notes: "Free text shown on the product's detail view." },
+      { column: "Expected Price", required: "No", notes: "Must be 0 or more if provided." },
+      { column: "Image URL", required: "No", notes: "A direct link (http/https) to an image. Leave blank to add a photo later from the product's page." },
     ]);
 
     const buffer = await workbook.xlsx.writeBuffer();
@@ -202,10 +255,15 @@ export class ImportService {
 
       const buffer = Buffer.from(await fileData.arrayBuffer());
       const worksheet = await parseWorksheet(buffer, importRow.file_name);
-      const headerMap = mapHeaders(worksheet.getRow(1).values as (string | null | undefined)[]);
+      const headerMap = mapHeaders(
+        worksheet.getRow(1).values as (string | null | undefined)[],
+        importRow.type === "products" ? PRODUCT_COLUMN_KEYS : undefined
+      );
 
-      const ctx = await this.buildLookupContext(tenantId, importRow.uploaded_by);
+      const salesCtx = importRow.type === "products" ? null : await this.buildLookupContext(tenantId, importRow.uploaded_by);
+      const productsCtx = importRow.type === "products" ? await this.buildProductLookupContext(tenantId) : null;
       const seenReferences = new Set<string>();
+      const seenSkus = new Set<string>();
 
       const rowsToInsert: Database["public"]["Tables"]["import_rows"]["Insert"][] = [];
       let validCount = 0;
@@ -224,7 +282,10 @@ export class ImportService {
           raw[field] = values[colIndex] ?? null;
         }
 
-        const result = validateSalesHistoryRow(raw, ctx, seenReferences);
+        const result =
+          importRow.type === "products"
+            ? validateProductRow(raw, productsCtx!, seenSkus)
+            : validateSalesHistoryRow(raw, salesCtx!, seenReferences);
         if (result.valid) validCount++;
         else errorCount++;
 
@@ -366,19 +427,22 @@ export class ImportService {
 
     const { data: importRow } = await this.supabase
       .from("imports")
-      .select("uploaded_by")
+      .select("type, uploaded_by")
       .eq("id", row.import_id)
       .single();
 
-    const ctx = await this.buildLookupContext(tenantId, importRow!.uploaded_by);
     const merged = { ...row.raw_data, ...correctedFields };
 
-    // Duplicate-reference detection is a whole-batch concern; re-checking
-    // it for one row in isolation would either always pass (nothing else
-    // in scope) or need every other row's reference re-fetched for no
-    // real benefit -- a corrected reference collides with another row
-    // gets caught the next time the whole import is (re-)validated.
-    const result = validateSalesHistoryRow(merged, ctx, new Set());
+    // Duplicate-reference/duplicate-SKU detection is a whole-batch
+    // concern; re-checking it for one row in isolation would either
+    // always pass (nothing else in scope) or need every other row's
+    // value re-fetched for no real benefit -- a corrected value that
+    // collides with another row gets caught the next time the whole
+    // import is (re-)validated.
+    const result =
+      importRow!.type === "products"
+        ? validateProductRow(merged, await this.buildProductLookupContext(tenantId), new Set())
+        : validateSalesHistoryRow(merged, await this.buildLookupContext(tenantId, importRow!.uploaded_by), new Set());
 
     const { error: updateError } = await this.supabase
       .from("import_rows")
@@ -428,6 +492,28 @@ export class ImportService {
    * matching what a live close already does.
    */
   async confirmImport(
+    importId: string,
+    tenantId: string,
+    confirmedBy: string
+  ): Promise<{ imported: number; skipped: number }> {
+    const { data: importRow, error: importError } = await this.supabase
+      .from("imports")
+      .select("type")
+      .eq("id", importId)
+      .eq("tenant_id", tenantId)
+      .single();
+
+    if (importError || !importRow) {
+      throw new Error(`ImportService.confirmImport: import not found`);
+    }
+
+    if (importRow.type === "products") {
+      return this.confirmProductsImport(importId, tenantId, confirmedBy);
+    }
+    return this.confirmSalesHistoryImport(importId, tenantId, confirmedBy);
+  }
+
+  private async confirmSalesHistoryImport(
     importId: string,
     tenantId: string,
     confirmedBy: string
@@ -572,6 +658,107 @@ export class ImportService {
     return { imported, skipped };
   }
 
+  /**
+   * Direct inserts into `products`, mirroring ProductService.create's
+   * insert shape but not calling it -- a per-row SELECT-then-INSERT for
+   * display_order would be N+1 across a whole file, so the running max
+   * is tracked locally instead, incremented once per row. No product_
+   * images row is created even when an Image URL was provided: that
+   * table exists for Storage-backed uploads (path + cleanup bookkeeping
+   * ProductService owns), and a bulk-imported row only ever carries an
+   * external URL -- ProductService.create's own logic already treats
+   * imageUrl-without-imageStoragePath as "just set products.image_url,
+   * no Storage-backed row", the exact behavior wanted here.
+   */
+  private async confirmProductsImport(
+    importId: string,
+    tenantId: string,
+    confirmedBy: string
+  ): Promise<{ imported: number; skipped: number }> {
+    const { data: rows, error: rowsError } = await this.supabase
+      .from("import_rows")
+      .select("id, resolved_data")
+      .eq("import_id", importId)
+      .eq("tenant_id", tenantId)
+      .eq("status", "valid")
+      .order("row_number", { ascending: true });
+
+    if (rowsError) {
+      throw new Error(`ImportService.confirmImport: ${rowsError.message}`);
+    }
+
+    const validRows = (rows ?? []).filter(
+      (r): r is typeof r & { resolved_data: NonNullable<typeof r.resolved_data> } => r.resolved_data != null
+    );
+
+    await this.supabase.from("imports").update({ status: "importing" }).eq("id", importId);
+
+    const { data: maxOrder } = await this.supabase
+      .from("products")
+      .select("display_order")
+      .eq("tenant_id", tenantId)
+      .order("display_order", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    let nextDisplayOrder = (maxOrder?.display_order ?? -1) + 1;
+    let imported = 0;
+    let skipped = 0;
+
+    for (const row of validRows) {
+      const data = row.resolved_data as {
+        name: string;
+        sku: string | null;
+        description: string | null;
+        expectedPrice: number | null;
+        imageUrl: string | null;
+      };
+
+      const { data: inserted, error: insertError } = await this.supabase
+        .from("products")
+        .insert({
+          tenant_id: tenantId,
+          name: data.name,
+          sku: data.sku,
+          description: data.description,
+          expected_price: data.expectedPrice,
+          image_url: data.imageUrl,
+          display_order: nextDisplayOrder,
+          created_by: confirmedBy,
+        })
+        .select("id")
+        .single();
+
+      if (insertError || !inserted) {
+        await this.supabase
+          .from("import_rows")
+          .update({ status: "skipped", errors: [`Import failed: ${insertError?.message}`] })
+          .eq("id", row.id);
+        skipped++;
+        continue;
+      }
+
+      nextDisplayOrder++;
+      await this.supabase
+        .from("import_rows")
+        .update({ status: "imported", created_entity_id: inserted.id })
+        .eq("id", row.id);
+      imported++;
+    }
+
+    await this.supabase
+      .from("imports")
+      .update({
+        status: "completed",
+        imported_rows: imported,
+        confirmed_by: confirmedBy,
+        confirmed_at: new Date().toISOString(),
+      })
+      .eq("id", importId);
+
+    return { imported, skipped };
+  }
+
   private async findOrCreateHistoricalBusinessDay(
     tenantId: string,
     locationId: string,
@@ -664,6 +851,14 @@ export class ImportService {
       defaultLocationId: primaryLocation?.id ?? "",
       uploadedBy,
       todayYmd: new Date().toISOString().slice(0, 10),
+    };
+  }
+
+  private async buildProductLookupContext(tenantId: string): Promise<ProductImportLookupContext> {
+    const { data: products } = await this.supabase.from("products").select("sku").eq("tenant_id", tenantId);
+
+    return {
+      existingSkus: new Set((products ?? []).flatMap((p) => (p.sku ? [p.sku.toLowerCase()] : []))),
     };
   }
 }

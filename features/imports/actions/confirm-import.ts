@@ -37,6 +37,7 @@ export async function confirmImportAction(
     revalidatePath(`/t/${tenantSlug}/imports`);
     revalidatePath(`/t/${tenantSlug}/analytics`);
     revalidatePath(`/t/${tenantSlug}/sales-history`);
+    revalidatePath(`/t/${tenantSlug}/products`);
     return result;
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Could not confirm the import" };

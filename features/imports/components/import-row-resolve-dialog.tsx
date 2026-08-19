@@ -15,8 +15,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ImportRowView } from "@/services/ImportService";
+import type { ImportType } from "@/types/database.types";
 
-const FIELDS: { key: string; label: string }[] = [
+const SALES_HISTORY_FIELDS: { key: string; label: string }[] = [
   { key: "saleDate", label: "Sale Date" },
   { key: "saleTime", label: "Sale Time" },
   { key: "productName", label: "Product Name" },
@@ -27,6 +28,14 @@ const FIELDS: { key: string; label: string }[] = [
   { key: "location", label: "Location" },
   { key: "existingReference", label: "Existing Reference" },
   { key: "notes", label: "Notes" },
+];
+
+const PRODUCTS_FIELDS: { key: string; label: string }[] = [
+  { key: "name", label: "Product Name" },
+  { key: "sku", label: "Product Code" },
+  { key: "description", label: "Description" },
+  { key: "expectedPrice", label: "Expected Price" },
+  { key: "imageUrl", label: "Image URL" },
 ];
 
 /** Cell values may arrive as ISO date strings (exceljs date cells) -- trim to a friendlier edit-field default. */
@@ -41,15 +50,18 @@ export function ImportRowResolveDialog({
   tenantId,
   tenantSlug,
   importId,
+  importType,
   row,
   onResolved,
 }: {
   tenantId: string;
   tenantSlug: string;
   importId: string;
+  importType: ImportType;
   row: ImportRowView;
   onResolved: (result: { valid: boolean; errors?: string[] }) => void;
 }) {
+  const FIELDS = importType === "products" ? PRODUCTS_FIELDS : SALES_HISTORY_FIELDS;
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [values, setValues] = useState<Record<string, string>>(
