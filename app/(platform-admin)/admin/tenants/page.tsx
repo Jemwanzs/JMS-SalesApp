@@ -11,6 +11,10 @@ export const metadata: Metadata = {
 const STATUS_COLOR: Record<string, string> = {
   active: "bg-emerald-500/20 text-emerald-300",
   suspended: "bg-red-500/20 text-red-300",
+  // Deliberately harder/darker than suspended's lighter red -- a
+  // genuinely stronger lockout (migration 0031), should read as more
+  // severe at a glance, not visually interchangeable with suspended.
+  deactivated: "bg-red-900/60 text-red-200",
   cancelled: "bg-white/10 text-white/50",
 };
 

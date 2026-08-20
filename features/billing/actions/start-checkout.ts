@@ -1,5 +1,7 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
+
 import { BillingService } from "@/services/BillingService";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
@@ -7,6 +9,7 @@ import { createServiceRoleClient } from "@/lib/supabase/service-role";
 export interface StartCheckoutState {
   error?: string;
   authorizationUrl?: string;
+  activatedDirectly?: boolean;
 }
 
 /**
@@ -46,6 +49,11 @@ export async function startCheckoutAction(tenantId: string, tenantSlug: string, 
       email: user.email!,
       callbackUrl: `${process.env.NEXT_PUBLIC_APP_URL}/t/${tenantSlug}/billing/callback`,
     });
+
+    if ("activatedDirectly" in result) {
+      revalidatePath(`/t/${tenantSlug}/billing`);
+      return { activatedDirectly: true };
+    }
     return { authorizationUrl: result.authorizationUrl };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Could not start checkout" };

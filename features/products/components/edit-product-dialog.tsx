@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 
+import { deleteProductAction } from "@/features/products/actions/delete-product";
 import { removeProductImageAction } from "@/features/products/actions/remove-product-image";
 import { setProductImageAction } from "@/features/products/actions/set-product-image";
 import { updateProductAction } from "@/features/products/actions/update-product";
@@ -28,12 +29,16 @@ export function EditProductDialog({
   product,
   tenantId,
   tenantSlug,
+  canDelete,
   onUpdated,
+  onDeleted,
 }: {
   product: Product;
   tenantId: string;
   tenantSlug: string;
+  canDelete: boolean;
   onUpdated: (product: Product) => void;
+  onDeleted: (productId: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(product.name);
@@ -53,6 +58,26 @@ export function EditProductDialog({
     description !== (product.description ?? "") ||
     expectedPrice !== (product.expectedPrice !== null ? String(product.expectedPrice) : "0") ||
     showNameInPhotoView !== product.showNameInPhotoView;
+
+  function onDelete() {
+    if (
+      !window.confirm(
+        `Permanently delete "${product.name}"? This cannot be undone. Only works if it has never been sold -- otherwise, use Archive instead.`
+      )
+    ) {
+      return;
+    }
+    startTransition(async () => {
+      const result = await deleteProductAction(tenantId, tenantSlug, product.id, product.name);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      toast.success("Product deleted");
+      setOpen(false);
+      onDeleted(product.id);
+    });
+  }
 
   function onImageChange(next: ProductImageValue | null) {
     setImage(next);
@@ -149,6 +174,11 @@ export function EditProductDialog({
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <DialogFooter>
+            {canDelete && (
+              <Button type="button" variant="destructive" disabled={isPending} onClick={onDelete}>
+                Delete product
+              </Button>
+            )}
             <Button type="submit" disabled={isPending || !isDirty}>
               {isPending ? "Saving..." : "Save changes"}
             </Button>

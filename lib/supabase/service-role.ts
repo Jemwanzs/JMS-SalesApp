@@ -15,12 +15,16 @@ import type { Database } from "@/types/database.types";
  *     (app/api/webhooks/paystack/route.ts) is the sole state-transition
  *     authority per docs/14-billing-paystack.md, and even the initial
  *     TRIAL row is created inside TenantService.createTenant's own
- *     bootstrap sequence, not a client-authenticated insert)
+ *     bootstrap sequence, not a client-authenticated insert. Also marks
+ *     a tenant_credits row 'applied' when a Super Admin-granted credit
+ *     is redeemed at checkout — tenant_credits has RLS with a SELECT
+ *     policy only, migration 0031, same reasoning as payments/
+ *     subscriptions themselves)
  *   - app/api/cron/outbox/route.ts (draining the report_jobs/notifications
  *     outbox — see docs/09-business-day-engine.md)
  *   - PlatformAdminService (platform_admins/platform_audit_logs/
- *     impersonation_sessions are not reachable via normal RLS at all —
- *     see docs/15-super-admin.md)
+ *     impersonation_sessions/tenant_credits grants are not reachable via
+ *     normal RLS at all — see docs/15-super-admin.md)
  *   - ApprovalService's auto-approval writes and TenantService's onboarding
  *     bootstrap sequence (creating a tenant's first owner membership +
  *     default roles, before any role_permissions exist for that tenant to

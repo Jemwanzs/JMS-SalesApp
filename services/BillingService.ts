@@ -192,18 +192,46 @@ export class BillingService {
   }
 
   /**
-   * Payment status is never derived from this call's own success --
-   * this only starts a Paystack Standard Checkout session for the
-   * user-picked package and hands back the URL to redirect to. The
-   * webhook is what actually moves the subscription to ACTIVE (and
-   * assigns plan_id) once Paystack confirms the charge.
+   * A tenant's most recent still-'available' Super Admin credit
+   * (PlatformAdminService.grantSubscriptionCredit) -- RLS-safe (billing
+   * owner or settings.manage, same as subscriptions/payments), used by
+   * initializeCheckout below and to show the "you have a credit" banner
+   * on the tenant's own billing page.
+   */
+  async getAvailableCredit(tenantId: string): Promise<{ id: string; amount: number; currency: string } | null> {
+    const { data } = await this.supabase
+      .from("tenant_credits")
+      .select("id, amount, currency")
+      .eq("tenant_id", tenantId)
+      .eq("status", "available")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!data) return null;
+    return { id: data.id, amount: Number(data.amount), currency: data.currency };
+  }
+
+  /**
+   * Payment status is never derived from this call's own success (the
+   * Paystack-redirect branch, at least) -- starting a Standard Checkout
+   * session only hands back a URL to redirect to; the webhook is what
+   * actually moves the subscription to ACTIVE once Paystack confirms
+   * the charge. BUT a credit that fully covers the plan's price is a
+   * real, common case here (the cheapest plan is KES 100, and a support
+   * credit routinely exceeds that) -- Paystack has no sensible "charge
+   * KES 0" checkout, and redirecting a user to pay nothing is broken UX
+   * regardless. That branch activates the subscription directly, using
+   * the exact same activateSubscription() write handleChargeSuccess
+   * uses for a real webhook-confirmed charge, so both paths produce
+   * identical resulting state.
    */
   async initializeCheckout(input: {
     tenantId: string;
     planId: string;
     email: string;
     callbackUrl: string;
-  }): Promise<{ authorizationUrl: string }> {
+  }): Promise<{ authorizationUrl: string } | { activatedDirectly: true }> {
     const { data: sub, error: subError } = await this.supabase
       .from("subscriptions")
       .select("id")
@@ -225,15 +253,39 @@ export class BillingService {
       throw new Error(`BillingService.initializeCheckout: plan not found`);
     }
 
+    const planPrice = Number(plan.price);
+    const credit = await this.getAvailableCredit(input.tenantId);
+    const applicableCredit = credit && credit.currency === plan.currency ? credit : null;
+
+    if (applicableCredit && applicableCredit.amount >= planPrice) {
+      const now = new Date().toISOString();
+      const paymentId = await this.activateSubscription(input.tenantId, sub.id, input.planId, {
+        amount: 0,
+        currency: plan.currency,
+        paystackReference: `credit_${applicableCredit.id}_${Date.now()}`,
+        paidAt: now,
+        customerCode: null,
+        rawPayload: { creditApplied: applicableCredit.id, creditAmount: applicableCredit.amount },
+      });
+      await this.markCreditApplied(applicableCredit.id, paymentId);
+      return { activatedDirectly: true };
+    }
+
+    const chargeAmount = applicableCredit ? planPrice - applicableCredit.amount : planPrice;
     const reference = `sub_${sub.id}_${Date.now()}`;
 
     const result = await initializeTransaction({
       email: input.email,
-      amount: Number(plan.price),
+      amount: chargeAmount,
       currency: plan.currency,
       reference,
       callbackUrl: input.callbackUrl,
-      metadata: { tenant_id: input.tenantId, subscription_id: sub.id, plan_id: input.planId },
+      metadata: {
+        tenant_id: input.tenantId,
+        subscription_id: sub.id,
+        plan_id: input.planId,
+        ...(applicableCredit ? { credit_id: applicableCredit.id } : {}),
+      },
     });
 
     return { authorizationUrl: result.authorizationUrl };
@@ -267,7 +319,12 @@ export class BillingService {
       return { processed: false };
     }
 
-    const metadata = (data.metadata ?? {}) as { tenant_id?: string; subscription_id?: string; plan_id?: string };
+    const metadata = (data.metadata ?? {}) as {
+      tenant_id?: string;
+      subscription_id?: string;
+      plan_id?: string;
+      credit_id?: string;
+    };
 
     // The ledger row is written AFTER processing succeeds, not before --
     // writing it first would mark a genuinely-failed attempt (a real
@@ -279,7 +336,7 @@ export class BillingService {
     // handleChargeSuccess's own payments.paystack_reference unique
     // constraint still catches a concurrent double-processing attempt.
     if (eventType === "charge.success" && metadata.tenant_id && metadata.subscription_id && metadata.plan_id) {
-      await this.handleChargeSuccess(metadata.tenant_id, metadata.subscription_id, metadata.plan_id, data);
+      await this.handleChargeSuccess(metadata.tenant_id, metadata.subscription_id, metadata.plan_id, data, metadata.credit_id);
     }
 
     const { error: ledgerError } = await this.supabase.from("billing_events").insert({
@@ -301,30 +358,69 @@ export class BillingService {
     tenantId: string,
     subscriptionId: string,
     planId: string,
-    data: Record<string, unknown>
+    data: Record<string, unknown>,
+    creditId?: string
   ): Promise<void> {
+    const amountMinorUnits = typeof data.amount === "number" ? data.amount : 0;
+    const customer = (data.customer ?? {}) as { customer_code?: string };
+
+    const paymentId = await this.activateSubscription(tenantId, subscriptionId, planId, {
+      amount: amountMinorUnits / 100,
+      currency: typeof data.currency === "string" ? data.currency : "KES",
+      paystackReference: String(data.reference),
+      paidAt: typeof data.paid_at === "string" ? data.paid_at : new Date().toISOString(),
+      customerCode: customer.customer_code ?? null,
+      rawPayload: data,
+    });
+
+    if (creditId) {
+      await this.markCreditApplied(creditId, paymentId);
+    }
+  }
+
+  /**
+   * The one place that actually moves a subscription to ACTIVE -- shared
+   * by the real webhook-confirmed path (handleChargeSuccess) and
+   * initializeCheckout's "credit fully covers the plan, skip Paystack"
+   * path, so both produce byte-identical resulting state. Returns the
+   * new payment row's id so a credit can be marked applied against it.
+   */
+  private async activateSubscription(
+    tenantId: string,
+    subscriptionId: string,
+    planId: string,
+    params: {
+      amount: number;
+      currency: string;
+      paystackReference: string;
+      paidAt: string;
+      customerCode: string | null;
+      rawPayload: Record<string, unknown>;
+    }
+  ): Promise<string> {
     const { data: plan } = await this.supabase.from("billing_plans").select("duration_days").eq("id", planId).maybeSingle();
 
     const periodDays = plan?.duration_days ?? 30;
     const now = new Date();
     const periodEnd = new Date(now.getTime() + periodDays * 86_400_000);
 
-    const amountMinorUnits = typeof data.amount === "number" ? data.amount : 0;
-    const customer = (data.customer ?? {}) as { customer_code?: string };
+    const { data: payment, error: paymentError } = await this.supabase
+      .from("payments")
+      .insert({
+        tenant_id: tenantId,
+        subscription_id: subscriptionId,
+        amount: params.amount,
+        currency: params.currency,
+        status: "success",
+        paystack_reference: params.paystackReference,
+        paid_at: params.paidAt,
+        raw_payload: params.rawPayload,
+      })
+      .select("id")
+      .single();
 
-    const { error: paymentError } = await this.supabase.from("payments").insert({
-      tenant_id: tenantId,
-      subscription_id: subscriptionId,
-      amount: amountMinorUnits / 100,
-      currency: typeof data.currency === "string" ? data.currency : "KES",
-      status: "success",
-      paystack_reference: String(data.reference),
-      paid_at: typeof data.paid_at === "string" ? data.paid_at : now.toISOString(),
-      raw_payload: data,
-    });
-
-    if (paymentError) {
-      throw new Error(`BillingService.handleChargeSuccess: failed to record payment: ${paymentError.message}`);
+    if (paymentError || !payment) {
+      throw new Error(`BillingService.activateSubscription: failed to record payment: ${paymentError?.message}`);
     }
 
     await this.supabase
@@ -336,7 +432,7 @@ export class BillingService {
         current_period_end: periodEnd.toISOString(),
         next_billing_date: periodEnd.toISOString(),
         grace_period_end: null,
-        paystack_customer_code: customer.customer_code ?? null,
+        paystack_customer_code: params.customerCode,
       })
       .eq("id", subscriptionId);
 
@@ -350,9 +446,23 @@ export class BillingService {
         entityType: "subscription",
         entityId: subscriptionId,
         newValues: { status: "ACTIVE", plan_id: planId },
-        metadata: { paystackReference: data.reference },
+        metadata: { paystackReference: params.paystackReference },
       })
       .catch(() => {});
+
+    return payment.id;
+  }
+
+  private async markCreditApplied(creditId: string, paymentId: string): Promise<void> {
+    const { error } = await this.supabase
+      .from("tenant_credits")
+      .update({ status: "applied", applied_at: new Date().toISOString(), applied_to_payment_id: paymentId })
+      .eq("id", creditId)
+      .eq("status", "available");
+
+    if (error) {
+      throw new Error(`BillingService.markCreditApplied: ${error.message}`);
+    }
   }
 
   private async getGlobalSetting(key: string, fallback: number): Promise<number> {

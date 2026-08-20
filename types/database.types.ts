@@ -11,7 +11,7 @@
  * alongside this file instead (see docs/16-api-services.md).
  */
 
-export type TenantStatus = "active" | "suspended" | "cancelled";
+export type TenantStatus = "active" | "suspended" | "cancelled" | "deactivated";
 export type MembershipStatus = "active" | "invited" | "disabled";
 export type PlatformAdminRole = "super_admin" | "support" | "billing_ops";
 export type ProductStatus = "active" | "inactive" | "archived";
@@ -24,6 +24,7 @@ export type ImportStatus = "uploaded" | "validating" | "validated" | "importing"
 export type ImportRowStatus = "valid" | "invalid" | "imported" | "skipped";
 export type SubscriptionStatus = "TRIAL" | "ACTIVE" | "PAYMENT_DUE" | "GRACE_PERIOD" | "SUSPENDED" | "CANCELLED";
 export type PaymentStatus = "success" | "failed" | "pending";
+export type TenantCreditStatus = "available" | "applied" | "expired";
 
 export interface VoidOrCorrectResult {
   status: "voided" | "corrected" | "reversed" | "pending_approval";
@@ -767,6 +768,29 @@ export interface Database {
           value: unknown;
         };
         Update: Partial<Database["public"]["Tables"]["platform_settings"]["Row"]>;
+        Relationships: [];
+      };
+      tenant_credits: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          granted_by: string;
+          amount: number;
+          currency: string;
+          reason: string;
+          status: TenantCreditStatus;
+          created_at: string;
+          applied_at: string | null;
+          applied_to_payment_id: string | null;
+        };
+        Insert: Partial<Database["public"]["Tables"]["tenant_credits"]["Row"]> & {
+          tenant_id: string;
+          granted_by: string;
+          amount: number;
+          currency: string;
+          reason: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["tenant_credits"]["Row"]>;
         Relationships: [];
       };
       platform_audit_logs: {

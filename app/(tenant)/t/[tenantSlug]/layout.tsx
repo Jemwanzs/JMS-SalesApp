@@ -63,7 +63,7 @@ export default async function TenantLayout({
 
   const { data: tenant } = await supabase
     .from("tenants")
-    .select("id, name, slug")
+    .select("id, name, slug, status")
     .eq("slug", tenantSlug)
     .maybeSingle();
 
@@ -86,6 +86,7 @@ export default async function TenantLayout({
   // this is purely so the layout knows whether to render the SUPPORT
   // MODE banner instead of redirecting to /no-tenant.
   let impersonation: { sessionId: string; targetProfileName: string | null; expiresAt: string } | null = null;
+  let isRealMember = false;
   if (!membership || membership.status !== "active") {
     const active = await new PlatformAdminService(createServiceRoleClient()).getActiveImpersonation(user.id, tenant.id);
     if (active) {
@@ -97,6 +98,17 @@ export default async function TenantLayout({
     } else {
       redirect("/no-tenant");
     }
+  } else {
+    isRealMember = true;
+  }
+
+  // UX fast-path only -- migration 0031's has_permission() redefinition
+  // is the REAL enforcement (a Server Action is directly invokable
+  // regardless of what this layout redirects to). Deliberately does NOT
+  // apply to the impersonation branch above: Support must still be able
+  // to open a deactivated tenant's workspace to investigate it.
+  if (isRealMember && tenant.status === "deactivated") {
+    redirect("/tenant-deactivated");
   }
 
   const [permissions, activeWish] = await Promise.all([

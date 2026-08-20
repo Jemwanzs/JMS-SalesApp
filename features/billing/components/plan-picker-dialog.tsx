@@ -59,6 +59,14 @@ export function PlanPickerDialog({
         toast.error(result.error);
         return;
       }
+      if (result.activatedDirectly) {
+        // A credit fully covered this plan -- no Paystack redirect
+        // happened, the subscription is already ACTIVE server-side.
+        toast.success("Your credit covered this plan in full -- you're all set!");
+        setOpen(false);
+        setSelectedPlanId(null);
+        return;
+      }
       if (result.authorizationUrl) {
         window.location.href = result.authorizationUrl;
       }

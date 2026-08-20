@@ -187,6 +187,43 @@ export class ProductService {
     }
   }
 
+  /**
+   * A real, permanent delete -- only for a product with zero sales
+   * history (migration 0029). A product that's ever been sold stays
+   * archive-only: `sales.product_id` has no cascade/set-null, so even if
+   * this app-layer check were somehow wrong, Postgres itself would
+   * reject the delete with a foreign-key violation rather than silently
+   * orphaning historical sales data.
+   */
+  async delete(tenantId: string, productId: string): Promise<void> {
+    const { data: existingSale, error: checkError } = await this.supabase
+      .from("sales")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .eq("product_id", productId)
+      .limit(1)
+      .maybeSingle();
+
+    if (checkError) {
+      throw new Error(`ProductService.delete: ${checkError.message}`);
+    }
+    if (existingSale) {
+      throw new Error("This product has recorded sales and can't be deleted -- archive it instead.");
+    }
+
+    await this.deletePrimaryImageRow(tenantId, productId);
+
+    const { error } = await this.supabase
+      .from("products")
+      .delete()
+      .eq("tenant_id", tenantId)
+      .eq("id", productId);
+
+    if (error) {
+      throw new Error(`ProductService.delete: ${error.message}`);
+    }
+  }
+
   /** Sets (or replaces) a product's primary image. Deletes the previous
    * storage object first if one exists, so a replace never orphans it. */
   async setImage(

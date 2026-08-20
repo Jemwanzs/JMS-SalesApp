@@ -224,6 +224,66 @@ export class AnniversaryService {
   }
 
   /**
+   * Tenant 360's "Send anniversary wish" -- on demand, any time, not
+   * gated by wish mode or the 7-day pre-anniversary scheduling window
+   * ensureScheduledForUpcoming uses (most tenants have no 'pending' row
+   * outside that window, which is exactly what sendWish/skipWish above
+   * require). Keys off the CURRENT/most-recently-passed occurrence year
+   * (not nextOccurrence()'s forward-looking one, which would file a
+   * same-day send 11 months out under next year's row if today happens
+   * to be just past this year's date) -- e.g. sent on or shortly after
+   * the actual anniversary, this lands on this year's row every time.
+   * unique(tenant_id, year) (migration 0025) means at most one row per
+   * occurrence regardless of path: reuse/overwrite an existing row for
+   * that year (already 'pending' -> send it; already 'sent' -> allow a
+   * resend/correction with the new message) rather than erroring, since
+   * an admin composing an ad-hoc message should be able to fix or repeat
+   * one they already sent.
+   */
+  async sendAdHocWish(tenantId: string, message: string): Promise<void> {
+    const { data: tenant } = await this.supabase.from("tenants").select("name, anniversary_date").eq("id", tenantId).maybeSingle();
+
+    if (!tenant?.anniversary_date) {
+      throw new Error("This business has no anniversary date on file yet.");
+    }
+
+    const occurrenceYear = currentOrMostRecentOccurrenceYear(tenant.anniversary_date, new Date());
+
+    const { data: existing } = await this.supabase
+      .from("anniversary_wishes")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .eq("year", occurrenceYear)
+      .maybeSingle();
+
+    const now = new Date().toISOString();
+
+    if (existing) {
+      const { error } = await this.supabase
+        .from("anniversary_wishes")
+        .update({ status: "sent", sent_at: now, message })
+        .eq("id", existing.id);
+      if (error) {
+        throw new Error(`AnniversaryService.sendAdHocWish: ${error.message}`);
+      }
+      return;
+    }
+
+    const { error } = await this.supabase.from("anniversary_wishes").insert({
+      tenant_id: tenantId,
+      year: occurrenceYear,
+      mode: "review",
+      status: "sent",
+      scheduled_for: now.slice(0, 10),
+      sent_at: now,
+      message,
+    });
+    if (error) {
+      throw new Error(`AnniversaryService.sendAdHocWish: ${error.message}`);
+    }
+  }
+
+  /**
    * Tenant-facing: a RECENTLY sent wish, for a small banner -- scoped to
    * the last 7 days (not "this year") so it doesn't linger on screen for
    * the rest of the year after being sent once.
@@ -258,6 +318,25 @@ export class AnniversaryService {
 
 function startOfDay(d: Date): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+}
+
+/**
+ * The occurrence year for a same-day "send now" -- deliberately backward-
+ * looking, unlike nextOccurrence() below (which is for SCHEDULING future
+ * wishes). If this year's date has already passed, the most recent real
+ * occurrence was last year, not "the one 11 months from now."
+ */
+function currentOrMostRecentOccurrenceYear(anniversaryDate: string, from: Date): number {
+  const anniv = new Date(`${anniversaryDate}T00:00:00Z`);
+  const month = anniv.getUTCMonth();
+  const day = anniv.getUTCDate();
+
+  const todayStart = startOfDay(from);
+  const thisYearOccurrence = new Date(Date.UTC(todayStart.getUTCFullYear(), month, day));
+
+  return thisYearOccurrence.getTime() <= todayStart.getTime()
+    ? todayStart.getUTCFullYear()
+    : todayStart.getUTCFullYear() - 1;
 }
 
 /** Recurs annually on the same month/day -- this year's occurrence if it hasn't passed yet, else next year's. */

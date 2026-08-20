@@ -67,6 +67,10 @@ export function ProductManagementList({
     setItems((prev) => [...prev, created]);
   }
 
+  function onDeleted(productId: string) {
+    setItems((prev) => prev.filter((p) => p.id !== productId));
+  }
+
   function onToggleStatus(product: Product) {
     const nextStatus = product.status === "active" ? "inactive" : "active";
     const formData = new FormData();
@@ -166,7 +170,9 @@ export function ProductManagementList({
                   product={product}
                   tenantId={tenantId}
                   tenantSlug={tenantSlug}
+                  canDelete={canArchive}
                   onUpdated={onUpdated}
+                  onDeleted={onDeleted}
                 />
               )}
               {canEdit && (

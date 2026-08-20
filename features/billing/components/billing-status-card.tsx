@@ -32,12 +32,14 @@ export function BillingStatusCard({
   subscription,
   plans,
   canPay,
+  availableCredit,
 }: {
   tenantId: string;
   tenantSlug: string;
   subscription: SubscriptionView;
   plans: PlanView[];
   canPay: boolean;
+  availableCredit: { id: string; amount: number; currency: string } | null;
 }) {
   const needsPayment =
     subscription.status === "TRIAL" ||
@@ -61,6 +63,11 @@ export function BillingStatusCard({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
+        {availableCredit && (
+          <p className="rounded-md bg-emerald-50 p-2 text-sm text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200">
+            You have a {availableCredit.currency} {availableCredit.amount.toFixed(2)} credit that will apply to your next payment.
+          </p>
+        )}
         {subscription.planPrice != null && subscription.planCurrency && (
           <p className="text-sm text-muted-foreground">
             {subscription.planCurrency} {subscription.planPrice.toFixed(2)}

@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { Database, SubscriptionStatus, TenantStatus } from "@/types/database.types";
+import type { Database, SubscriptionStatus, TenantCreditStatus, TenantStatus } from "@/types/database.types";
 
 /**
  * PlatformAdminService — tenant management, impersonation, platform
@@ -60,6 +60,31 @@ export interface TenantDetail extends TenantListItem {
   currency: string;
   createdAt: string;
   gracePeriodEnd: string | null;
+  anniversaryDate: string | null;
+  productsSoldCount: number;
+  locationName: string | null;
+  locationAddress: string | null;
+}
+
+export interface TenantCreditView {
+  id: string;
+  amount: number;
+  currency: string;
+  reason: string;
+  status: TenantCreditStatus;
+  createdAt: string;
+  appliedAt: string | null;
+}
+
+export interface PlatformAuditLogEntry {
+  id: string;
+  action: string;
+  adminName: string | null;
+  adminEmail: string | null;
+  oldValues: Record<string, unknown> | null;
+  newValues: Record<string, unknown> | null;
+  reason: string | null;
+  createdAt: string;
 }
 
 export interface PlatformUsageSummary {
@@ -370,13 +395,21 @@ export class PlatformAdminService {
   async getTenantDetail(tenantId: string): Promise<TenantDetail | null> {
     const { data: tenant } = await this.supabase
       .from("tenants")
-      .select("id, name, slug, status, country, currency, created_at, billing_owner_profile_id")
+      .select("id, name, slug, status, country, currency, anniversary_date, created_at, billing_owner_profile_id")
       .eq("id", tenantId)
       .maybeSingle();
 
     if (!tenant) return null;
 
-    const [{ data: sub }, { data: owner }, { count: userCount }, { data: lastPayment }, { data: lastLogin }] = await Promise.all([
+    const [
+      { data: sub },
+      { data: owner },
+      { count: userCount },
+      { data: lastPayment },
+      { data: lastLogin },
+      { data: primaryLocation },
+      { data: soldSales },
+    ] = await Promise.all([
       this.supabase
         .from("subscriptions")
         .select("plan_id, status, trial_end, next_billing_date, grace_period_end")
@@ -401,6 +434,25 @@ export class PlatformAdminService {
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
+      this.supabase
+        .from("locations")
+        .select("name, address")
+        .eq("tenant_id", tenantId)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle(),
+      // Distinct products actually SOLD, not catalog size -- different
+      // from getUsageAnalytics()'s TenantUsageRow.productCount, which
+      // counts every non-archived catalog product regardless of sales.
+      // Excludes 'voided'/'corrected' only (not 'reversed'), same
+      // convention AnalyticsService.getAnalytics documents: a reversed
+      // sale's amount is still real, exactly offset by its pair.
+      this.supabase
+        .from("sales")
+        .select("product_id")
+        .eq("tenant_id", tenantId)
+        .neq("status", "voided")
+        .neq("status", "corrected"),
     ]);
 
     const plan = sub?.plan_id
@@ -415,6 +467,7 @@ export class PlatformAdminService {
       country: tenant.country,
       currency: tenant.currency,
       createdAt: tenant.created_at,
+      anniversaryDate: tenant.anniversary_date,
       ownerEmail: owner?.email ?? null,
       ownerName: owner?.full_name ?? null,
       userCount: userCount ?? 0,
@@ -425,6 +478,9 @@ export class PlatformAdminService {
       lastPaymentAt: lastPayment?.paid_at ?? null,
       nextBillingDate: sub?.next_billing_date ?? null,
       lastActivityAt: lastLogin?.created_at ?? null,
+      locationName: primaryLocation?.name ?? null,
+      locationAddress: primaryLocation?.address ?? null,
+      productsSoldCount: new Set((soldSales ?? []).map((s) => s.product_id)).size,
     };
   }
 
@@ -448,6 +504,26 @@ export class PlatformAdminService {
     }
 
     await this.logAction(platformAdminId, "TENANT_REACTIVATED", tenantId, null, before, { status: "active" }, reason);
+  }
+
+  /**
+   * A genuinely stronger lockout than suspendTenant -- migration 0031's
+   * has_permission() redefinition is what actually enforces this (zero
+   * permissions resolve true for a deactivated tenant's real members, no
+   * is_read_only carve-out); this method just flips the status column
+   * and audits it, same shape as suspendTenant. reactivateTenant already
+   * handles bringing a deactivated tenant back to 'active' for free (it
+   * sets status='active' unconditionally regardless of prior status).
+   */
+  async deactivateTenant(platformAdminId: string, tenantId: string, reason: string): Promise<void> {
+    const { data: before } = await this.supabase.from("tenants").select("status").eq("id", tenantId).single();
+
+    const { error } = await this.supabase.from("tenants").update({ status: "deactivated" }).eq("id", tenantId);
+    if (error) {
+      throw new Error(`PlatformAdminService.deactivateTenant: ${error.message}`);
+    }
+
+    await this.logAction(platformAdminId, "TENANT_DEACTIVATED", tenantId, null, before, { status: "deactivated" }, reason);
   }
 
   /**
@@ -540,7 +616,122 @@ export class PlatformAdminService {
     );
   }
 
-  private async logAction(
+  /**
+   * A one-time, fixed-amount credit toward the tenant's NEXT checkout --
+   * this app has no auto-recurring Paystack subscription object (every
+   * billing cycle is a manually-initiated checkout for a fixed-duration
+   * pass), so "next billing cycle" means "the next checkout the billing
+   * owner completes," whenever that happens to be, for whichever plan
+   * they pick. See BillingService.initializeCheckout for how this
+   * actually gets applied (subtracted from the charge, or — since a
+   * credit routinely exceeds the cheapest plan's price — skips Paystack
+   * entirely and activates the subscription directly).
+   */
+  async grantSubscriptionCredit(
+    platformAdminId: string,
+    tenantId: string,
+    amount: number,
+    currency: string,
+    reason: string
+  ): Promise<void> {
+    const { error } = await this.supabase.from("tenant_credits").insert({
+      tenant_id: tenantId,
+      granted_by: platformAdminId,
+      amount,
+      currency,
+      reason,
+      status: "available",
+    });
+
+    if (error) {
+      throw new Error(`PlatformAdminService.grantSubscriptionCredit: ${error.message}`);
+    }
+
+    await this.logAction(platformAdminId, "TENANT_CREDIT_GRANTED", tenantId, null, null, { amount, currency }, reason);
+  }
+
+  /** Tenant 360's "Credits" section -- available + already-applied history. */
+  async listTenantCredits(tenantId: string): Promise<TenantCreditView[]> {
+    const { data, error } = await this.supabase
+      .from("tenant_credits")
+      .select("id, amount, currency, reason, status, created_at, applied_at")
+      .eq("tenant_id", tenantId)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      throw new Error(`PlatformAdminService.listTenantCredits: ${error.message}`);
+    }
+
+    return (data ?? []).map((row) => ({
+      id: row.id,
+      amount: Number(row.amount),
+      currency: row.currency,
+      reason: row.reason,
+      status: row.status,
+      createdAt: row.created_at,
+      appliedAt: row.applied_at,
+    }));
+  }
+
+  /**
+   * Tenant 360's "Activity Log" section -- every Super Admin action
+   * taken against this specific tenant, newest first. Joins
+   * platform_admins -> profiles in application code, this file's own
+   * established convention (see the class header comment), not a new
+   * embedded-select.
+   */
+  async listTenantAuditLog(tenantId: string): Promise<PlatformAuditLogEntry[]> {
+    const { data: logs, error } = await this.supabase
+      .from("platform_audit_logs")
+      .select("id, platform_admin_id, action, old_values, new_values, reason, created_at")
+      .eq("target_tenant_id", tenantId)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      throw new Error(`PlatformAdminService.listTenantAuditLog: ${error.message}`);
+    }
+
+    const adminIds = [...new Set((logs ?? []).map((l) => l.platform_admin_id))];
+    const { data: admins } =
+      adminIds.length > 0 ? await this.supabase.from("platform_admins").select("id, profile_id").in("id", adminIds) : { data: [] };
+    const profileIdByAdminId = new Map((admins ?? []).map((a) => [a.id, a.profile_id]));
+
+    const profileIds = [...new Set([...profileIdByAdminId.values()])];
+    const { data: profiles } =
+      profileIds.length > 0 ? await this.supabase.from("profiles").select("id, full_name, email").in("id", profileIds) : { data: [] };
+    const profileById = new Map((profiles ?? []).map((p) => [p.id, p]));
+
+    return (logs ?? []).map((l) => {
+      const profileId = profileIdByAdminId.get(l.platform_admin_id);
+      const profile = profileId ? profileById.get(profileId) : undefined;
+      return {
+        id: l.id,
+        action: l.action,
+        adminName: profile?.full_name ?? null,
+        adminEmail: profile?.email ?? null,
+        oldValues: l.old_values,
+        newValues: l.new_values,
+        reason: l.reason,
+        createdAt: l.created_at,
+      };
+    });
+  }
+
+  /**
+   * Public (not private) -- every mutating method in this class already
+   * calls it internally, and the anniversary-wish server actions
+   * (features/platform-admin/actions/send-anniversary-wish.ts, send-
+   * adhoc-wish.ts) now call it directly too, right after
+   * AnniversaryService.sendWish/skipWish/sendAdHocWish succeed -- closing
+   * a real gap where those actions never wrote to platform_audit_logs at
+   * all before this. AnniversaryService itself stays free of any
+   * PlatformAdminService dependency; the action layer orchestrates both,
+   * same "actions call multiple services" convention this app already
+   * uses elsewhere (e.g. features/products/actions/create-product.ts
+   * calling ProductService then AuditService separately). Still the sole
+   * write path to platform_audit_logs.
+   */
+  async logAction(
     platformAdminId: string,
     action: string,
     targetTenantId: string | null,

@@ -3,12 +3,14 @@
 import { useState, useTransition } from "react";
 
 import { adjustGracePeriodAction } from "@/features/platform-admin/actions/adjust-grace-period";
+import { deactivateTenantAction } from "@/features/platform-admin/actions/deactivate-tenant";
 import { extendTrialAction } from "@/features/platform-admin/actions/extend-trial";
+import { grantSubscriptionCreditAction } from "@/features/platform-admin/actions/grant-subscription-credit";
 import { reactivateTenantAction } from "@/features/platform-admin/actions/reactivate-tenant";
 import { suspendTenantAction } from "@/features/platform-admin/actions/suspend-tenant";
 import type { SubscriptionStatus, TenantStatus } from "@/types/database.types";
 
-type ActionKind = "suspend" | "reactivate" | "extendTrial" | "adjustGrace" | null;
+type ActionKind = "suspend" | "deactivate" | "reactivate" | "extendTrial" | "adjustGrace" | "grantCredit" | null;
 
 /**
  * Plain, minimally-styled forms (no shadcn primitives) -- matching the
@@ -21,10 +23,12 @@ export function TenantActionsPanel({
   tenantId,
   status,
   subscriptionStatus,
+  currency,
 }: {
   tenantId: string;
   status: TenantStatus;
   subscriptionStatus: SubscriptionStatus | null;
+  currency: string;
 }) {
   const [open, setOpen] = useState<ActionKind>(null);
   const [isPending, startTransition] = useTransition();
@@ -68,11 +72,29 @@ export function TenantActionsPanel({
     });
   }
 
+  function runCreditAction(reason: string, amount: string) {
+    setError(null);
+    setMessage(null);
+    const formData = new FormData();
+    formData.set("reason", reason);
+    formData.set("amount", amount);
+    formData.set("currency", currency);
+    startTransition(async () => {
+      const result = await grantSubscriptionCreditAction(tenantId, {}, formData);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setMessage("Credit granted.");
+      setOpen(null);
+    });
+  }
+
   return (
     <div className="rounded-lg border border-white/10 bg-white/5 p-4">
       <h2 className="mb-3 text-sm font-semibold text-white/70">Actions</h2>
       <div className="flex flex-wrap gap-2">
-        {status === "active" && (
+        {(status === "active" || status === "suspended") && (
           <button
             type="button"
             onClick={() => setOpen(open === "suspend" ? null : "suspend")}
@@ -81,7 +103,16 @@ export function TenantActionsPanel({
             Suspend
           </button>
         )}
-        {status === "suspended" && (
+        {(status === "active" || status === "suspended") && (
+          <button
+            type="button"
+            onClick={() => setOpen(open === "deactivate" ? null : "deactivate")}
+            className="rounded bg-red-900/40 px-3 py-1.5 text-sm text-red-200 hover:bg-red-900/60"
+          >
+            Deactivate
+          </button>
+        )}
+        {(status === "suspended" || status === "deactivated") && (
           <button
             type="button"
             onClick={() => setOpen(open === "reactivate" ? null : "reactivate")}
@@ -90,7 +121,7 @@ export function TenantActionsPanel({
             Reactivate
           </button>
         )}
-        {subscriptionStatus !== "ACTIVE" && subscriptionStatus !== "CANCELLED" && (
+        {status !== "deactivated" && subscriptionStatus !== "ACTIVE" && subscriptionStatus !== "CANCELLED" && (
           <button
             type="button"
             onClick={() => setOpen(open === "extendTrial" ? null : "extendTrial")}
@@ -99,12 +130,21 @@ export function TenantActionsPanel({
             Extend Trial
           </button>
         )}
+        {status !== "deactivated" && (
+          <button
+            type="button"
+            onClick={() => setOpen(open === "adjustGrace" ? null : "adjustGrace")}
+            className="rounded bg-white/10 px-3 py-1.5 text-sm hover:bg-white/20"
+          >
+            Adjust Grace Period
+          </button>
+        )}
         <button
           type="button"
-          onClick={() => setOpen(open === "adjustGrace" ? null : "adjustGrace")}
+          onClick={() => setOpen(open === "grantCredit" ? null : "grantCredit")}
           className="rounded bg-white/10 px-3 py-1.5 text-sm hover:bg-white/20"
         >
-          Adjust Grace Period
+          Grant Credit
         </button>
       </div>
 
@@ -113,6 +153,13 @@ export function TenantActionsPanel({
           label="Reason for suspension"
           isPending={isPending}
           onSubmit={(reason) => runSimpleAction(suspendTenantAction.bind(null, tenantId), reason)}
+        />
+      )}
+      {open === "deactivate" && (
+        <ReasonForm
+          label="Reason for deactivation"
+          isPending={isPending}
+          onSubmit={(reason) => runSimpleAction(deactivateTenantAction.bind(null, tenantId), reason)}
         />
       )}
       {open === "reactivate" && (
@@ -134,6 +181,13 @@ export function TenantActionsPanel({
           label="Extend grace period by (days)"
           isPending={isPending}
           onSubmit={(reason, days) => runDaysAction(adjustGracePeriodAction.bind(null, tenantId), reason, days)}
+        />
+      )}
+      {open === "grantCredit" && (
+        <ReasonAmountForm
+          label={`Credit amount (${currency})`}
+          isPending={isPending}
+          onSubmit={(reason, amount) => runCreditAction(reason, amount)}
         />
       )}
 
@@ -212,6 +266,53 @@ function ReasonDaysForm({
           min={1}
           value={days}
           onChange={(e) => setDays(e.target.value)}
+          required
+          className="mt-1 w-full rounded border border-white/10 bg-white/5 px-2 py-1.5 text-sm outline-none focus:border-white/30"
+        />
+      </div>
+      <button type="submit" disabled={isPending} className="rounded bg-white/20 px-3 py-1.5 text-sm hover:bg-white/30">
+        {isPending ? "Saving..." : "Confirm"}
+      </button>
+    </form>
+  );
+}
+
+function ReasonAmountForm({
+  label,
+  isPending,
+  onSubmit,
+}: {
+  label: string;
+  isPending: boolean;
+  onSubmit: (reason: string, amount: string) => void;
+}) {
+  const [reason, setReason] = useState("");
+  const [amount, setAmount] = useState("");
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSubmit(reason, amount);
+      }}
+      className="mt-3 flex flex-wrap items-end gap-2"
+    >
+      <div className="flex-1">
+        <label className="text-xs text-white/50">Reason</label>
+        <input
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          required
+          className="mt-1 w-full rounded border border-white/10 bg-white/5 px-2 py-1.5 text-sm outline-none focus:border-white/30"
+        />
+      </div>
+      <div className="w-28">
+        <label className="text-xs text-white/50">{label}</label>
+        <input
+          type="number"
+          min={0.01}
+          step={0.01}
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
           required
           className="mt-1 w-full rounded border border-white/10 bg-white/5 px-2 py-1.5 text-sm outline-none focus:border-white/30"
         />

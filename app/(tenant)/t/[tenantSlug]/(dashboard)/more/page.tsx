@@ -1,6 +1,7 @@
 import Link from "next/link";
 import {
   Bell,
+  Building2,
   ChevronRight,
   CircleHelp,
   CreditCard,
@@ -17,8 +18,10 @@ import type { LucideIcon } from "lucide-react";
 
 import { signOutAction } from "@/features/auth/actions/sign-out";
 import { Button } from "@/components/ui/button";
+import { PlatformAdminService } from "@/services/PlatformAdminService";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
 /**
  * The "More" menu (spec S12), regrouped in the UX-efficiency pass:
@@ -65,23 +68,28 @@ export default async function MorePage({
     .eq("slug", tenantSlug)
     .single();
 
-  const [canManageApprovals, canManageRoles, canCreateUsers, canEditUsers, canManageImports, canManageSettings] = tenant
-    ? await Promise.all([
-        can("approvals.manage", { tenantId: tenant.id }),
-        can("roles.manage", { tenantId: tenant.id }),
-        can("users.create", { tenantId: tenant.id }),
-        can("users.edit", { tenantId: tenant.id }),
-        can("imports.manage", { tenantId: tenant.id }),
-        can("settings.manage", { tenantId: tenant.id }),
-      ])
-    : [false, false, false, false, false, false];
+  const [canManageApprovals, canManageRoles, canCreateUsers, canEditUsers, canManageImports, canManageSettings, isPlatformAdmin] =
+    tenant && user
+      ? await Promise.all([
+          can("approvals.manage", { tenantId: tenant.id }),
+          can("roles.manage", { tenantId: tenant.id }),
+          can("users.create", { tenantId: tenant.id }),
+          can("users.edit", { tenantId: tenant.id }),
+          can("imports.manage", { tenantId: tenant.id }),
+          can("settings.manage", { tenantId: tenant.id }),
+          new PlatformAdminService(createServiceRoleClient()).isPlatformAdmin(user.id),
+        ])
+      : [false, false, false, false, false, false, false];
 
   const isBillingOwner = tenant?.billing_owner_profile_id === user?.id;
 
-  const adminItems: { label: string; icon: LucideIcon; href?: string }[] = [
+  const adminItems: { label: string; icon: LucideIcon; href?: string; absoluteHref?: string }[] = [
     ...(canManageApprovals ? [{ label: "Approvals", icon: ShieldCheck, href: "approvals" }] : []),
     ...(canManageRoles ? [{ label: "Roles", icon: UserCog, href: "roles" }] : []),
     ...(canCreateUsers || canEditUsers ? [{ label: "Users", icon: Users, href: "users" }] : []),
+    // Platform-admin-only shortcut into the separate /admin shell -- not
+    // a tenant-scoped route, so it carries absoluteHref instead of href.
+    ...(isPlatformAdmin ? [{ label: "Tenants", icon: Building2, absoluteHref: "/admin/tenants" }] : []),
     ...(canManageImports ? [{ label: "Imports", icon: Upload, href: "imports" }] : []),
     ...(isBillingOwner || canManageSettings ? [{ label: "Billing", icon: CreditCard, href: "billing" }] : []),
     ...(canManageSettings ? [{ label: "Settings", icon: Settings, href: "settings" }] : []),
@@ -116,16 +124,16 @@ function MenuSection({
   items,
   tenantSlug,
 }: {
-  items: { label: string; icon: LucideIcon; href?: string }[];
+  items: { label: string; icon: LucideIcon; href?: string; absoluteHref?: string }[];
   tenantSlug: string;
 }) {
   return (
     <div className="divide-y rounded-lg border">
-      {items.map(({ label, icon: Icon, href }) =>
-        href ? (
+      {items.map(({ label, icon: Icon, href, absoluteHref }) =>
+        href || absoluteHref ? (
           <Link
             key={label}
-            href={`/t/${tenantSlug}/${href}`}
+            href={absoluteHref ?? `/t/${tenantSlug}/${href}`}
             className="flex items-center justify-between px-4 py-3 text-sm hover:bg-muted"
           >
             <span className="flex items-center gap-3">

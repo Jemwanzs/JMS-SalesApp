@@ -18,10 +18,10 @@ export function AnniversaryReviewQueue({ wishes }: { wishes: AnniversaryWishView
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  function onSend(wishId: string) {
+  function onSend(wishId: string, tenantId: string) {
     setError(null);
     startTransition(async () => {
-      const result = await sendAnniversaryWishAction(wishId, drafts[wishId] ?? "");
+      const result = await sendAnniversaryWishAction(tenantId, wishId, drafts[wishId] ?? "");
       if (result.error) {
         setError(result.error);
         return;
@@ -30,10 +30,10 @@ export function AnniversaryReviewQueue({ wishes }: { wishes: AnniversaryWishView
     });
   }
 
-  function onSkip(wishId: string) {
+  function onSkip(wishId: string, tenantId: string) {
     setError(null);
     startTransition(async () => {
-      const result = await skipAnniversaryWishAction(wishId);
+      const result = await skipAnniversaryWishAction(tenantId, wishId);
       if (result.error) {
         setError(result.error);
         return;
@@ -66,7 +66,7 @@ export function AnniversaryReviewQueue({ wishes }: { wishes: AnniversaryWishView
           <div className="mt-2 flex gap-2">
             <button
               type="button"
-              onClick={() => onSend(w.id)}
+              onClick={() => onSend(w.id, w.tenantId)}
               disabled={isPending}
               className="rounded bg-emerald-500/20 px-3 py-1.5 text-sm text-emerald-300 hover:bg-emerald-500/30"
             >
@@ -74,7 +74,7 @@ export function AnniversaryReviewQueue({ wishes }: { wishes: AnniversaryWishView
             </button>
             <button
               type="button"
-              onClick={() => onSkip(w.id)}
+              onClick={() => onSkip(w.id, w.tenantId)}
               disabled={isPending}
               className="rounded bg-white/10 px-3 py-1.5 text-sm hover:bg-white/20"
             >
