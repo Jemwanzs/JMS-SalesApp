@@ -1,9 +1,7 @@
 import Link from "next/link";
 import {
-  Bell,
   Building2,
   ChevronRight,
-  CircleHelp,
   CreditCard,
   Lock,
   LogOut,
@@ -34,20 +32,21 @@ import { createServiceRoleClient } from "@/lib/supabase/service-role";
  * (4c) is a real, always-present link -- every signed-in user manages
  * their own sessions/login history there regardless of permissions (RLS
  * gates the tenant-wide activity section within the page itself, not
- * this menu entry). Approvals (2g), Roles (4a), Users (4b), Imports
- * (Phase 5), Billing (Phase 6), and Settings (Phase 7d's anniversary
- * wish-mode toggle, its first real setting) are all appended
- * conditionally instead, only for users who actually hold approvals.
- * manage/roles.manage/(users.create or users.edit)/imports.manage/
- * (billing owner or settings.manage)/settings.manage -- unlike Security
- * they aren't meant to be visible-but-disabled for everyone, since most
- * users will never have anything to review or manage there.
+ * this menu entry). Notifications and Help were removed from this list
+ * (they only ever rendered as disabled "Coming soon" rows) per explicit
+ * request -- re-add once those features actually ship. Approvals (2g),
+ * Roles (4a), Users (4b), Imports (Phase 5), Billing (Phase 6), and
+ * Settings (Phase 7d's anniversary wish-mode toggle, its first real
+ * setting) are all appended conditionally instead, only for users who
+ * actually hold approvals.manage/roles.manage/(users.create or users.
+ * edit)/imports.manage/(billing owner or settings.manage)/settings.manage
+ * -- unlike Security they aren't meant to be visible-but-disabled for
+ * everyone, since most users will never have anything to review or
+ * manage there.
  */
 const EVERYDAY_ITEMS: { label: string; icon: LucideIcon; href?: string }[] = [
   { label: "Products", icon: Package, href: "products" },
   { label: "Security", icon: Lock, href: "security" },
-  { label: "Notifications", icon: Bell },
-  { label: "Help", icon: CircleHelp },
 ];
 
 export default async function MorePage({
