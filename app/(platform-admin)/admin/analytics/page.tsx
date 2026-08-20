@@ -43,7 +43,7 @@ export default async function PlatformAnalyticsPage() {
     <div>
       <h1 className="mb-6 text-xl font-semibold">Platform Analytics</h1>
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3">
         {summaryCards.map((card) => (
           <div key={card.label} className="rounded-lg border border-white/10 bg-white/5 p-4">
             <p className="text-2xl font-semibold tabular-nums">{card.value}</p>

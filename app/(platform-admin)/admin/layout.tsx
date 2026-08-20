@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { PlatformAdminBottomNav } from "@/features/platform-admin/components/platform-admin-bottom-nav";
 import { PlatformAdminService } from "@/services/PlatformAdminService";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
@@ -9,7 +9,14 @@ import { createServiceRoleClient } from "@/lib/supabase/service-role";
  * Entirely separate shell from the tenant app (spec S92: "completely
  * separate from ordinary tenant navigation") — no shared Logo/nav
  * component, no TenantProvider, reached only by typing /admin directly
- * (never linked from tenant navigation).
+ * (never linked from tenant navigation). Mobile-first, matching the
+ * rest of this project's own established pattern (app/(tenant)/t/
+ * [tenantSlug]/layout.tsx's `max-w-[430px]` centered column + bottom
+ * tab bar): this shell used to be a full-bleed desktop dashboard with a
+ * horizontal nav row that simply didn't fit a phone screen. Same
+ * `contain-layout` trick as the tenant shell so a portaled Dialog/Sheet
+ * stays within this narrow column instead of centering on the whole
+ * browser window on a wide viewport.
  *
  * The is_platform_admin check MUST run through the service-role client
  * — platform_admins has no RLS policy granting the authenticated role
@@ -39,30 +46,18 @@ export default async function PlatformAdminLayout({
   }
 
   return (
-    <div className="min-h-screen bg-[#0B1220] text-[#F2F1EC]">
-      <header className="flex items-center justify-between border-b border-white/10 px-6 py-4">
-        <div className="flex items-center gap-6">
-          <span className="text-sm font-semibold tracking-wide">
-            PLATFORM ADMIN
-          </span>
-          <nav className="flex items-center gap-4 text-sm text-white/70">
-            <Link href="/admin" className="hover:text-white">
-              Dashboard
-            </Link>
-            <Link href="/admin/tenants" className="hover:text-white">
-              Tenants
-            </Link>
-            <Link href="/admin/analytics" className="hover:text-white">
-              Analytics
-            </Link>
-            <Link href="/admin/anniversaries" className="hover:text-white">
-              Anniversaries
-            </Link>
-          </nav>
-        </div>
-        <span className="text-xs text-white/50">{user.email}</span>
-      </header>
-      <main className="p-6">{children}</main>
+    <div className="flex min-h-screen w-full justify-center bg-[#05070D]">
+      <div
+        id="platform-admin-shell"
+        className="relative flex w-full max-w-[430px] flex-col contain-layout bg-[#0B1220] text-[#F2F1EC]"
+      >
+        <header className="border-b border-white/10 px-4 py-4">
+          <p className="text-sm font-semibold tracking-wide">PLATFORM ADMIN</p>
+          <p className="mt-0.5 truncate text-xs text-white/50">{user.email}</p>
+        </header>
+        <main className="flex-1 p-4">{children}</main>
+        <PlatformAdminBottomNav />
+      </div>
     </div>
   );
 }

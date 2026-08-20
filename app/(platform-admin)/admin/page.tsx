@@ -28,7 +28,7 @@ export default async function PlatformAdminDashboardPage() {
   return (
     <div>
       <h1 className="mb-6 text-xl font-semibold">Dashboard</h1>
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4">
         {cards.map((card) => (
           <div
             key={card.label}

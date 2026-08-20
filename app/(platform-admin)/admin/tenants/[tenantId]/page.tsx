@@ -66,7 +66,7 @@ export default async function PlatformAdminTenantDetailPage({
         <p className="text-sm text-white/50">/{detail.slug}</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3">
         {[
           { label: "Status", value: detail.status },
           { label: "Subscription", value: detail.subscriptionStatus ?? "—" },
@@ -116,8 +116,8 @@ export default async function PlatformAdminTenantDetailPage({
         <div className="divide-y divide-white/5 rounded-lg border border-white/10">
           {credits.length === 0 && <p className="p-4 text-sm text-white/50">No credits granted yet.</p>}
           {credits.map((c) => (
-            <div key={c.id} className="flex items-center justify-between p-3 text-sm">
-              <div>
+            <div key={c.id} className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 p-3 text-sm">
+              <div className="min-w-0">
                 <span>
                   {c.currency} {c.amount.toFixed(2)}
                 </span>
@@ -159,11 +159,11 @@ export default async function PlatformAdminTenantDetailPage({
         <div className="divide-y divide-white/5 rounded-lg border border-white/10">
           {payments.length === 0 && <p className="p-4 text-sm text-white/50">No payments yet.</p>}
           {payments.map((p) => (
-            <div key={p.id} className="flex items-center justify-between p-3 text-sm">
+            <div key={p.id} className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 p-3 text-sm">
               <span>
                 {p.currency} {p.amount.toFixed(2)}
               </span>
-              <span className="text-white/50">{new Date(p.paidAt ?? p.createdAt).toLocaleString()}</span>
+              <span className="text-xs text-white/50">{new Date(p.paidAt ?? p.createdAt).toLocaleString()}</span>
               <span className={p.status === "success" ? "text-emerald-300" : "text-red-300"}>{p.status}</span>
             </div>
           ))}
