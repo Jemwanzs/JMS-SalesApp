@@ -183,6 +183,7 @@ export class AnalyticsService {
     const { data: products, error } = await this.supabase
       .from("products")
       .select("id, name, image_url, status")
+      .eq("tenant_id", tenantId)
       .in("id", productIds);
 
     if (error) {
@@ -205,5 +206,45 @@ export class AnalyticsService {
       })
       .sort((a, b) => b.totalRevenue - a.totalRevenue)
       .slice(0, limit);
+  }
+
+  /**
+   * Unlike getProductPerformance above, this is tenant-wide by design and
+   * NOT permission-gated -- the Capture Sales landing page shows product-
+   * performance ranking (Gold/Silver/Bronze) to every user who can record
+   * a sale, regardless of whether they hold analytics.products. One query
+   * pass covers both windows since "today" is always a subset of the
+   * wider window passed in.
+   */
+  async getProductRevenueTotals(
+    tenantId: string,
+    windowRange: DateRangeInput,
+    todayDate: string
+  ): Promise<{ windowRevenue: Map<string, number>; todayRevenue: Map<string, number> }> {
+    const { data, error } = await this.supabase
+      .from("sales")
+      .select("product_id, actual_amount, sale_date")
+      .eq("tenant_id", tenantId)
+      .gte("sale_date", windowRange.from)
+      .lte("sale_date", windowRange.to)
+      .neq("status", "voided")
+      .neq("status", "corrected");
+
+    if (error) {
+      throw new Error(`AnalyticsService.getProductRevenueTotals: ${error.message}`);
+    }
+
+    const windowRevenue = new Map<string, number>();
+    const todayRevenue = new Map<string, number>();
+
+    for (const sale of data ?? []) {
+      const amount = Number(sale.actual_amount);
+      windowRevenue.set(sale.product_id, (windowRevenue.get(sale.product_id) ?? 0) + amount);
+      if (sale.sale_date === todayDate) {
+        todayRevenue.set(sale.product_id, (todayRevenue.get(sale.product_id) ?? 0) + amount);
+      }
+    }
+
+    return { windowRevenue, todayRevenue };
   }
 }

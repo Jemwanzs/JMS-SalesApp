@@ -26,6 +26,13 @@ import type { Database, MembershipStatus } from "@/types/database.types";
  * listUsers()/setActive()/setUserRole() are RLS-respecting-client-safe —
  * tenant_memberships_select is is_tenant_member-gated (any member can
  * see the roster), *_update/insert are gated on users.edit/create.
+ *
+ * acceptInvite() MUST also be called with a service-role client (see
+ * lib/supabase/service-role.ts) — a newly-invited user holds no role/
+ * permission on themselves yet (tenant_memberships_update is gated on
+ * users.edit), so flipping their own membership from 'invited' to
+ * 'active' on first login is the same class of bootstrapping problem
+ * TenantService's onboarding sequence solves for a brand-new owner.
  */
 export interface TenantUserSummary {
   membershipId: string;
@@ -43,12 +50,21 @@ export interface InviteUserInput {
   fullName: string;
   roleId: string;
   invitedBy: string;
+  redirectTo: string;
 }
 
 export interface InviteUserResult {
   membershipId: string;
   profileId: string;
   isNewUser: boolean;
+}
+
+export interface PendingInvite {
+  membershipId: string;
+  tenantId: string;
+  tenantSlug: string;
+  tenantName: string;
+  roleName: string | null;
 }
 
 export class UserService {
@@ -84,7 +100,7 @@ export class UserService {
     } else {
       const { data: created, error: inviteError } = await this.supabase.auth.admin.inviteUserByEmail(
         input.email,
-        { data: { full_name: input.fullName } }
+        { data: { full_name: input.fullName }, redirectTo: input.redirectTo }
       );
 
       if (inviteError || !created.user) {
@@ -142,6 +158,94 @@ export class UserService {
     if (error) {
       throw new Error(`UserService.setActive: ${error.message}`);
     }
+  }
+
+  /**
+   * Completes onboarding for a just-invited user: flips their pending
+   * membership to 'active'. The `status = 'invited'` clause in the WHERE
+   * is a defense-in-depth guard, not an optimization -- it's what makes
+   * this safe to call as service-role: it can only ever complete a
+   * genuine pending invite, never reactivate a disabled member or
+   * silently no-op an already-active one into looking "accepted".
+   * Throws if no row matched (link reused, already accepted, or a
+   * tampered membershipId), so the caller can show a clean error instead
+   * of a false "welcome" redirect.
+   */
+  async acceptInvite(tenantId: string, membershipId: string): Promise<void> {
+    const { data, error } = await this.supabase
+      .from("tenant_memberships")
+      .update({ status: "active" })
+      .eq("tenant_id", tenantId)
+      .eq("id", membershipId)
+      .eq("status", "invited")
+      .select("id");
+
+    if (error) {
+      throw new Error(`UserService.acceptInvite: ${error.message}`);
+    }
+    if (!data || data.length === 0) {
+      throw new Error("This invitation has already been used or is no longer valid.");
+    }
+  }
+
+  /**
+   * The invite/confirm onboarding page's data source. Resolves the most
+   * recently created pending invite if a profile somehow has more than
+   * one -- a documented v1 limitation (no multi-invite picker UI), not
+   * an oversight, matching setUserRole's own "one role for now" scoping
+   * note above.
+   */
+  async getPendingInvite(profileId: string): Promise<PendingInvite | null> {
+    const { data: membership, error: membershipError } = await this.supabase
+      .from("tenant_memberships")
+      .select("id, tenant_id")
+      .eq("profile_id", profileId)
+      .eq("status", "invited")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (membershipError) {
+      throw new Error(`UserService.getPendingInvite: ${membershipError.message}`);
+    }
+    if (!membership) {
+      return null;
+    }
+
+    const { data: tenant } = await this.supabase
+      .from("tenants")
+      .select("name, slug")
+      .eq("id", membership.tenant_id)
+      .maybeSingle();
+
+    if (!tenant) {
+      return null;
+    }
+
+    const { data: assignment } = await this.supabase
+      .from("user_role_assignments")
+      .select("role_id")
+      .eq("tenant_membership_id", membership.id)
+      .limit(1)
+      .maybeSingle();
+
+    let roleName: string | null = null;
+    if (assignment) {
+      const { data: role } = await this.supabase
+        .from("roles")
+        .select("name")
+        .eq("id", assignment.role_id)
+        .maybeSingle();
+      roleName = role?.name ?? null;
+    }
+
+    return {
+      membershipId: membership.id,
+      tenantId: membership.tenant_id,
+      tenantSlug: tenant.slug,
+      tenantName: tenant.name,
+      roleName,
+    };
   }
 
   /**

@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { AnniversaryWishCard } from "@/features/settings/components/anniversary-wish-card";
+import { ProductRankingCard } from "@/features/settings/components/product-ranking-card";
+import { QuantityFieldCard } from "@/features/settings/components/quantity-field-card";
 import { SaleNumberTemplateCard } from "@/features/settings/components/sale-number-template-card";
 import { AnniversaryService } from "@/services/AnniversaryService";
 import { TenantService } from "@/services/TenantService";
@@ -40,10 +42,13 @@ export default async function SettingsPage({
   }
 
   const tenantService = new TenantService(supabase);
-  const [currentMode, saleNumberTemplate, primaryLocation] = await Promise.all([
+  const [currentMode, saleNumberTemplate, primaryLocation, productRankingEnabled, showDailySalesVolume, quantityEnabled] = await Promise.all([
     new AnniversaryService(supabase).getWishMode(tenantId),
     tenantService.getSetting<string>(tenantId, "sale_number_template"),
     supabase.from("locations").select("code").eq("tenant_id", tenantId).order("created_at", { ascending: true }).limit(1).maybeSingle(),
+    tenantService.getSetting<boolean>(tenantId, "product_ranking_enabled"),
+    tenantService.getSetting<boolean>(tenantId, "show_daily_sales_volume"),
+    tenantService.getSetting<boolean>(tenantId, "quantity_enabled"),
   ]);
 
   return (
@@ -56,6 +61,13 @@ export default async function SettingsPage({
         sampleLocationCode={primaryLocation.data?.code ?? null}
       />
       <AnniversaryWishCard tenantId={tenantId} tenantSlug={tenantSlug} anniversaryDate={tenant!.anniversary_date} currentMode={currentMode} />
+      <ProductRankingCard
+        tenantId={tenantId}
+        tenantSlug={tenantSlug}
+        initialRankingEnabled={productRankingEnabled ?? true}
+        initialShowDailyVolume={showDailySalesVolume ?? false}
+      />
+      <QuantityFieldCard tenantId={tenantId} tenantSlug={tenantSlug} initialEnabled={quantityEnabled ?? true} />
     </div>
   );
 }

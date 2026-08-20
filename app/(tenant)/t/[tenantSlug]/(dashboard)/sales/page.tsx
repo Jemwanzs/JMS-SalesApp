@@ -4,9 +4,13 @@ import { OpenBusinessDayButton } from "@/features/sales/components/open-business
 import { ProductGrid } from "@/features/sales/components/product-grid";
 import { ReopenBusinessDayDialog } from "@/features/sales/components/reopen-business-day-dialog";
 import { SalesVisibilityBadge } from "@/features/sales/components/sales-visibility-badge";
+import { AnalyticsService } from "@/services/AnalyticsService";
 import { BusinessDayService } from "@/services/BusinessDayService";
 import { ProductService } from "@/services/ProductService";
+import { TenantService } from "@/services/TenantService";
 import { can } from "@/lib/permissions/can";
+import { todayString, trailingDaysRange } from "@/lib/utils/date-ranges";
+import { rankProducts } from "@/lib/utils/product-ranking";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
@@ -43,7 +47,7 @@ export default async function SalesPage({
 
   const { data: tenant } = await supabase
     .from("tenants")
-    .select("id")
+    .select("id, timezone")
     .eq("slug", tenantSlug)
     .single();
 
@@ -93,6 +97,7 @@ export default async function SalesPage({
         <SalesCaptureBody
           tenantId={tenant!.id}
           tenantSlug={tenantSlug}
+          timezone={tenant!.timezone}
           locationId={location.id}
           businessDayId={businessDay.id}
           supabase={supabase}
@@ -137,23 +142,59 @@ export default async function SalesPage({
 async function SalesCaptureBody({
   tenantId,
   tenantSlug,
+  timezone,
   locationId,
   businessDayId,
   supabase,
 }: {
   tenantId: string;
   tenantSlug: string;
+  timezone: string;
   locationId: string;
   businessDayId: string;
   supabase: Awaited<ReturnType<typeof createClient>>;
 }) {
   const productService = new ProductService(supabase);
-  const products = await productService.listActive(tenantId);
+  const tenantService = new TenantService(supabase);
+
+  const [products, rankingEnabledSetting, showDailyVolumeSetting, quantityEnabledSetting] = await Promise.all([
+    productService.listActive(tenantId),
+    tenantService.getSetting<boolean>(tenantId, "product_ranking_enabled"),
+    tenantService.getSetting<boolean>(tenantId, "show_daily_sales_volume"),
+    tenantService.getSetting<boolean>(tenantId, "quantity_enabled"),
+  ]);
+
+  const rankingEnabled = rankingEnabledSetting ?? true;
+  const showDailyVolume = showDailyVolumeSetting ?? false;
+  const quantityEnabled = quantityEnabledSetting ?? true;
+
+  let rankedProducts: ReturnType<typeof rankProducts> = products.map((p) => ({
+    ...p,
+    tier: null,
+    thirtyDayRevenue: 0,
+  }));
+  let todayRevenue = new Map<string, number>();
+
+  if (rankingEnabled || showDailyVolume) {
+    const today = todayString(timezone);
+    const { windowRevenue, todayRevenue: todayMap } = await new AnalyticsService(supabase).getProductRevenueTotals(
+      tenantId,
+      trailingDaysRange(30, timezone),
+      today
+    );
+    todayRevenue = todayMap;
+    if (rankingEnabled) {
+      rankedProducts = rankProducts(products, windowRevenue);
+    }
+  }
 
   return (
     <div className="-mx-6 mt-4 flex flex-1 flex-col">
       <ProductGrid
-        products={products}
+        products={rankedProducts}
+        showDailyVolume={showDailyVolume}
+        todayRevenue={todayRevenue}
+        quantityEnabled={quantityEnabled}
         tenantId={tenantId}
         tenantSlug={tenantSlug}
         locationId={locationId}

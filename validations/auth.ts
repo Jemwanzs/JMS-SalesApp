@@ -55,3 +55,16 @@ export const updatePasswordSchema = z
   });
 
 export type UpdatePasswordInput = z.infer<typeof updatePasswordSchema>;
+
+export const acceptInviteSchema = z
+  .object({
+    fullName: z.string().trim().min(1, "Name is required"),
+    password: passwordSchema,
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  });
+
+export type AcceptInviteInput = z.infer<typeof acceptInviteSchema>;

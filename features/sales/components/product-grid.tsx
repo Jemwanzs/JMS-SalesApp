@@ -4,16 +4,31 @@ import { useState } from "react";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
 
-import { RecordSaleSheet } from "@/features/sales/components/record-sale-sheet";
+import { RecordSaleDialog } from "@/features/sales/components/record-sale-dialog";
 import { ProductPhotoThumbnail } from "@/features/products/components/product-photo-viewer";
+import { Badge } from "@/components/ui/badge";
+import type { ProductTier } from "@/lib/utils/product-ranking";
 import type { Product } from "@/services/ProductService";
 import type { RecordSaleState } from "@/features/sales/actions/record-sale";
 
+const TIER_LABEL: Record<ProductTier, string> = {
+  gold: "🥇 Gold",
+  silver: "🥈 Silver",
+  bronze: "🥉 Bronze",
+};
+
+const TIER_BADGE_CLASS: Record<ProductTier, string> = {
+  gold: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200",
+  silver: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200",
+  bronze: "bg-orange-100 text-orange-900 dark:bg-orange-950 dark:text-orange-200",
+};
+
 /**
- * Product list + the record-sale bottom sheet (spec S14-S18: tap
- * product -> enter amount -> Record Sale -> confirmation -> back to
- * Capture Sales, no intermediate navigation -- closing the sheet IS
- * "back to Capture Sales" since we never left this screen).
+ * Product list + the record-sale dialog (spec S14-S18: tap product ->
+ * enter amount -> Record Sale -> confirmation -> back to Capture Sales,
+ * no intermediate navigation -- closing the dialog IS "back to Capture
+ * Sales" since we never left this screen). The dialog was a bottom sheet
+ * until item 7's fix -- centered now, see record-sale-dialog.tsx.
  *
  * Row layout (image + name/description, price, a dedicated tap target)
  * replaced the earlier 2-column square-card grid -- denser and faster to
@@ -26,12 +41,18 @@ import type { RecordSaleState } from "@/features/sales/actions/record-sale";
  */
 export function ProductGrid({
   products,
+  showDailyVolume = false,
+  todayRevenue,
+  quantityEnabled = true,
   tenantId,
   tenantSlug,
   locationId,
   businessDayId,
 }: {
-  products: Product[];
+  products: (Product & { tier?: ProductTier | null })[];
+  showDailyVolume?: boolean;
+  todayRevenue?: Map<string, number>;
+  quantityEnabled?: boolean;
   tenantId: string;
   tenantSlug: string;
   locationId: string;
@@ -85,7 +106,14 @@ export function ProductGrid({
               showName={product.showNameInPhotoView}
             />
             <div className="min-w-0 flex-1">
-              <p className="truncate font-medium">{product.name}</p>
+              <div className="flex items-center gap-2">
+                <p className="truncate font-medium">{product.name}</p>
+                {product.tier && (
+                  <Badge className={`shrink-0 ${TIER_BADGE_CLASS[product.tier]}`}>
+                    {TIER_LABEL[product.tier]}
+                  </Badge>
+                )}
+              </div>
               {product.description && (
                 <p className="line-clamp-2 text-sm text-muted-foreground">
                   {product.description}
@@ -94,6 +122,11 @@ export function ProductGrid({
               {product.showExpectedPrice && product.expectedPrice !== null && (
                 <p className="mt-0.5 text-sm font-medium tabular-nums">
                   {product.expectedPrice.toFixed(2)}
+                </p>
+              )}
+              {showDailyVolume && (todayRevenue?.get(product.id) ?? 0) > 0 && (
+                <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
+                  {todayRevenue!.get(product.id)!.toFixed(2)} today
                 </p>
               )}
             </div>
@@ -112,12 +145,13 @@ export function ProductGrid({
         ))}
       </div>
 
-      <RecordSaleSheet
+      <RecordSaleDialog
         product={selected}
         tenantId={tenantId}
         tenantSlug={tenantSlug}
         locationId={locationId}
         businessDayId={businessDayId}
+        quantityEnabled={quantityEnabled}
         onOpenChange={(open) => !open && setSelected(null)}
         onRecorded={onRecorded}
       />

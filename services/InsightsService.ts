@@ -193,6 +193,7 @@ export class InsightsService {
       .from("products")
       .select("name")
       .eq("id", topProductId)
+      .eq("tenant_id", day.tenant_id)
       .maybeSingle();
     const name = product?.name ?? "A product";
 

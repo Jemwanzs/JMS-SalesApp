@@ -87,6 +87,7 @@ export class SalesService {
       .from("products")
       .select("name, image_url, expected_price")
       .eq("id", input.productId)
+      .eq("tenant_id", input.tenantId)
       .single();
 
     if (productError || !product) {

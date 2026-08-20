@@ -82,3 +82,17 @@ export function isSingleDay(range: DateRange): boolean {
 export function todayString(timezone: string): string {
   return ymd(nowInTimezone(timezone));
 }
+
+/**
+ * A rolling N-day window ending today (inclusive), in the tenant's local
+ * time -- unlike the calendar-bound presets above (this_month/last_month
+ * reset on the 1st), this always covers exactly `days` calendar days
+ * regardless of where "today" falls. Used for product-performance
+ * ranking (docs pending -- Phase 5's Gold/Silver/Bronze tiering), which
+ * needs a sustained-performance window, not a calendar-month one.
+ */
+export function trailingDaysRange(days: number, timezone: string): DateRange {
+  const today = nowInTimezone(timezone);
+  const start = addDays(today, -(days - 1));
+  return { from: ymd(start), to: ymd(today) };
+}

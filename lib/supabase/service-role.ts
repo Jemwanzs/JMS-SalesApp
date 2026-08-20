@@ -30,6 +30,16 @@ import type { Database } from "@/types/database.types";
  *     profile crosses tenant boundaries, which profiles_select RLS
  *     deliberately blocks for an ordinary tenant admin's RLS-respecting
  *     client — see UserService's own header comment)
+ *   - UserService.acceptInvite / getPendingInvite (a newly-invited user
+ *     holds no role/permission on themselves yet — same class of
+ *     bootstrapping problem as TenantService's onboarding sequence and
+ *     ApprovalService's auto-approval writes. getPendingInvite also
+ *     needs it for reads alone: tenants_select/roles_select/
+ *     user_role_assignments_select all gate on is_tenant_member, which
+ *     requires an ACTIVE membership — an invited user can see their own
+ *     tenant_memberships row via profile_id = auth.uid(), but not the
+ *     tenant's name or their assigned role's name, until after they
+ *     accept — see UserService's own header comment)
  *   - SecurityService's writes (logLoginEvent/createSession/
  *     revokeOtherSessions) — login_events/sessions have RLS enabled with
  *     zero write policies (a FAILED login attempt has no authenticated

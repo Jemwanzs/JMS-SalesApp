@@ -4,24 +4,25 @@ import { useEffect, useState, useTransition } from "react";
 
 import { recordSaleAction, type RecordSaleState } from "@/features/sales/actions/record-sale";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
 import type { Product } from "@/services/ProductService";
 
-export function RecordSaleSheet({
+export function RecordSaleDialog({
   product,
   tenantId,
   tenantSlug,
   locationId,
   businessDayId,
+  quantityEnabled,
   onOpenChange,
   onRecorded,
 }: {
@@ -30,6 +31,7 @@ export function RecordSaleSheet({
   tenantSlug: string;
   locationId: string;
   businessDayId: string;
+  quantityEnabled: boolean;
   onOpenChange: (open: boolean) => void;
   onRecorded: (sale: NonNullable<RecordSaleState["sale"]>) => void;
 }) {
@@ -61,7 +63,13 @@ export function RecordSaleSheet({
     const formData = new FormData();
     formData.set("productId", product.id);
     formData.set("actualAmount", amount);
-    formData.set("quantity", quantity);
+    // Quantity is always sent, forced to "" when the field is hidden --
+    // recordSaleSchema already treats "" as "not provided" (validations/
+    // sale.ts), but FormData.get() on a key that was never set() returns
+    // null, which fails that schema on both branches. Omitting the key
+    // entirely (rather than sending "") would break every submission
+    // while quantityEnabled is false.
+    formData.set("quantity", quantityEnabled ? quantity : "");
     formData.set("notes", notes);
     formData.set("idempotencyKey", idempotencyKey);
 
@@ -92,20 +100,20 @@ export function RecordSaleSheet({
   }
 
   return (
-    <Sheet open={product !== null} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom">
+    <Dialog open={product !== null} onOpenChange={onOpenChange}>
+      <DialogContent>
         {product && (
           <>
-            <SheetHeader>
-              <SheetTitle>{product.name}</SheetTitle>
+            <DialogHeader>
+              <DialogTitle>{product.name}</DialogTitle>
               {product.expectedPrice !== null && product.showExpectedPrice && (
-                <SheetDescription>
+                <DialogDescription>
                   Expected price: {product.expectedPrice.toFixed(2)}
-                </SheetDescription>
+                </DialogDescription>
               )}
-            </SheetHeader>
+            </DialogHeader>
 
-            <form onSubmit={onSubmit} className="space-y-4 px-4">
+            <form onSubmit={onSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="amount">Amount sold</Label>
                 <Input
@@ -120,17 +128,19 @@ export function RecordSaleSheet({
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="quantity">Quantity</Label>
-                <Input
-                  id="quantity"
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={quantity}
-                  onChange={(e) => setQuantity(e.target.value)}
-                />
-              </div>
+              {quantityEnabled && (
+                <div className="space-y-2">
+                  <Label htmlFor="quantity">Quantity</Label>
+                  <Input
+                    id="quantity"
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={quantity}
+                    onChange={(e) => setQuantity(e.target.value)}
+                  />
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label htmlFor="notes">Notes (optional)</Label>
@@ -143,15 +153,15 @@ export function RecordSaleSheet({
 
               {error && <p className="text-sm text-destructive">{error}</p>}
 
-              <SheetFooter className="p-0">
+              <DialogFooter>
                 <Button type="submit" disabled={isPending} className="w-full">
                   {isPending ? "Recording..." : "Record Sale"}
                 </Button>
-              </SheetFooter>
+              </DialogFooter>
             </form>
           </>
         )}
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }
