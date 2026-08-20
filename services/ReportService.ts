@@ -56,6 +56,20 @@ export interface CorrectionsReportPayload {
 export class ReportService {
   constructor(private readonly supabase: SupabaseClient<Database>) {}
 
+  /**
+   * `businessDayId`-only lookup, no `tenant_id` filter, is safe ONLY
+   * because this is exclusively called via the service-role client from
+   * app/api/cron/outbox/route.ts with a businessDayId sourced from
+   * report_jobs.payload (DB-internal, never user-supplied) -- a security
+   * sweep flagged this as "fragile but currently safe": there is no RLS
+   * backstop at all here (service-role bypasses RLS), unlike the
+   * equivalent pattern elsewhere in this app. `tenant_id` genuinely
+   * isn't known until this query resolves it, so there's no earlier
+   * point to filter from. If this method is ever reused from a request-
+   * facing route instead of the trusted cron path, it would become a
+   * real cross-tenant read -- don't do that without adding an explicit
+   * tenant_id check against the caller's own session first.
+   */
   async generateDailyReport(businessDayId: string): Promise<string> {
     const { data: businessDay, error: dayError } = await this.supabase
       .from("business_days")
@@ -175,6 +189,8 @@ export class ReportService {
    * a high-volume figure where a timezone-boundary sale could visibly
    * move totals the way it would for the daily sales report).
    */
+  // Same businessDayId-only lookup, same "safe only via the trusted cron
+  // path" caveat as generateDailyReport above.
   async generateCorrectionsReport(businessDayId: string): Promise<string | null> {
     const { data: businessDay, error: dayError } = await this.supabase
       .from("business_days")

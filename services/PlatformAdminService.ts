@@ -138,10 +138,20 @@ export class PlatformAdminService {
    * not profiles.id -- every action-logging server action needs this
    * resolved once before calling suspend/reactivate/extendTrial/
    * adjustGracePeriod, which all take that id, not the caller's own
-   * auth.uid().
+   * auth.uid(). This is the sole enforcement gate for every platform-
+   * admin action (require-platform-admin.ts treats null the same
+   * whether it means "not an admin" or "the query itself failed") --
+   * failing closed on a real error is the right call security-wise, but
+   * a genuine outage here silently reads as "Not authorized" with
+   * nothing to debug from. Logging the error (not swallowing it
+   * entirely) doesn't change that fail-closed behavior, just makes an
+   * outage distinguishable from an access denial in the server logs.
    */
   async getPlatformAdminId(profileId: string): Promise<string | null> {
-    const { data } = await this.supabase.from("platform_admins").select("id").eq("profile_id", profileId).maybeSingle();
+    const { data, error } = await this.supabase.from("platform_admins").select("id").eq("profile_id", profileId).maybeSingle();
+    if (error) {
+      console.error(`PlatformAdminService.getPlatformAdminId: ${error.message}`);
+    }
     return data?.id ?? null;
   }
 

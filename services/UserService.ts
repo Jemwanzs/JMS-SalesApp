@@ -162,21 +162,31 @@ export class UserService {
 
   /**
    * Completes onboarding for a just-invited user: flips their pending
-   * membership to 'active'. The `status = 'invited'` clause in the WHERE
-   * is a defense-in-depth guard, not an optimization -- it's what makes
-   * this safe to call as service-role: it can only ever complete a
-   * genuine pending invite, never reactivate a disabled member or
-   * silently no-op an already-active one into looking "accepted".
-   * Throws if no row matched (link reused, already accepted, or a
-   * tampered membershipId), so the caller can show a clean error instead
-   * of a false "welcome" redirect.
+   * membership to 'active'. Three WHERE clauses, none optional: `status
+   * = 'invited'` (can only ever complete a genuine pending invite, never
+   * reactivate a disabled member or silently no-op an already-active one
+   * into looking "accepted"), `tenant_id` (scopes to the specific
+   * invite), and -- the one this method was missing until a security
+   * sweep caught it -- `profile_id = callerProfileId`. Without that
+   * third clause, this ran as service-role with `membershipId` taken as
+   * a plain, unverified argument: any authenticated user who learned or
+   * guessed another pending invite's tenantId+membershipId could flip
+   * THAT membership to active themselves, regardless of whose invite it
+   * was. It doesn't grant login as the target (updateUser() only ever
+   * touches the caller's own session), but it breaks the real invariant
+   * this flow depends on -- "active" is supposed to mean the actual
+   * invited person completed onboarding, not that anyone with the right
+   * two IDs did. Throws if no row matched (link reused, already
+   * accepted, wrong caller, or a tampered membershipId), so the caller
+   * gets a clean error instead of a false "welcome" redirect.
    */
-  async acceptInvite(tenantId: string, membershipId: string): Promise<void> {
+  async acceptInvite(tenantId: string, membershipId: string, callerProfileId: string): Promise<void> {
     const { data, error } = await this.supabase
       .from("tenant_memberships")
       .update({ status: "active" })
       .eq("tenant_id", tenantId)
       .eq("id", membershipId)
+      .eq("profile_id", callerProfileId)
       .eq("status", "invited")
       .select("id");
 

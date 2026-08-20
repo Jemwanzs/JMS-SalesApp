@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { previewSaleNumber, validateSaleNumberTemplate } from "@/lib/utils/sale-number-template";
+import { previewSaleNumber, SALE_NUMBER_TEMPLATE_TOKENS, validateSaleNumberTemplate } from "@/lib/utils/sale-number-template";
 
 const EXAMPLES = ["SALE-{YYYY}-{000001}", "{LOCATION}-{DDMMYYYY}-{00001}", "BRANCH-{YYYYMMDD}-{0001}"];
 
@@ -81,8 +81,7 @@ export function SaleNumberTemplateCard({
         </div>
 
         <p className="text-xs text-muted-foreground">
-          Placeholders: {"{YYYY}"} {"{YY}"} {"{MM}"} {"{DD}"} {"{DDMMYYYY}"} {"{YYYYMMDD}"} {"{LOCATION}"}, plus a zero-padded sequence like{" "}
-          {"{000001}"}.
+          Placeholders: {SALE_NUMBER_TEMPLATE_TOKENS.join(" ")}, plus a zero-padded sequence like {"{000001}"}.
         </p>
 
         <Button onClick={onSave} disabled={isPending || template === initialTemplate}>

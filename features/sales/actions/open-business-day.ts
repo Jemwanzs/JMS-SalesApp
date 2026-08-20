@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { AuditService } from "@/services/AuditService";
 import { BusinessDayService } from "@/services/BusinessDayService";
 import { AUDIT_ACTION } from "@/lib/audit/actions";
+import { assertCan } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
@@ -25,6 +26,12 @@ export async function openBusinessDayAction(
   const businessDayService = new BusinessDayService(supabase);
 
   try {
+    // business_days_write RLS (migration 0005) only checks "holds ANY
+    // business_day.* permission" -- a coarse ceiling, by its own header
+    // comment's admission, that the service layer is meant to narrow.
+    // Without this, a member holding only business_day.close/reopen
+    // (not .open) could still open a day via this action.
+    await assertCan("business_day.open", { tenantId });
     const day = await businessDayService.openDay(tenantId, locationId, user.id);
 
     await new AuditService(createServiceRoleClient())

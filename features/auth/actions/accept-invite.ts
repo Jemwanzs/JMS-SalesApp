@@ -58,7 +58,7 @@ export async function acceptInviteAction(
     }
 
     const serviceRole = createServiceRoleClient();
-    await new UserService(serviceRole).acceptInvite(tenantId, membershipId);
+    await new UserService(serviceRole).acceptInvite(tenantId, membershipId, user.id);
 
     await new AuditService(serviceRole)
       .log({

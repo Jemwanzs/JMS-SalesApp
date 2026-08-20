@@ -556,11 +556,15 @@ export class ImportService {
       throw new Error(`ImportService.resolveRow: row not found`);
     }
 
-    const { data: importRow } = await this.supabase
+    const { data: importRow, error: importRowError } = await this.supabase
       .from("imports")
       .select("type, uploaded_by")
       .eq("id", row.import_id)
       .single();
+
+    if (importRowError || !importRow) {
+      throw new Error(`ImportService.resolveRow: parent import not found`);
+    }
 
     const merged = { ...row.raw_data, ...correctedFields };
 
@@ -571,9 +575,9 @@ export class ImportService {
     // collides with another row gets caught the next time the whole
     // import is (re-)validated.
     const result =
-      importRow!.type === "products"
+      importRow.type === "products"
         ? validateProductRow(merged, await this.buildProductLookupContext(tenantId), new Set())
-        : validateSalesHistoryRow(merged, await this.buildLookupContext(tenantId, importRow!.uploaded_by), new Set());
+        : validateSalesHistoryRow(merged, await this.buildLookupContext(tenantId, importRow.uploaded_by), new Set());
 
     const { error: updateError } = await this.supabase
       .from("import_rows")

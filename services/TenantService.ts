@@ -301,7 +301,18 @@ export class TenantService {
     };
   }
 
-  /** Onboarding wizard Step 2's hours grid — replaces all 7 rows. */
+  /**
+   * Onboarding wizard Step 2's hours grid — replaces all 7 rows.
+   * `locationId` is a plain caller-supplied argument (unlike
+   * upsertPrimaryLocation/setLocationGeofence, which always look up the
+   * tenant's own location themselves) -- a security sweep flagged that
+   * location_hours' own RLS write policy only checks the INSERTED row's
+   * `tenant_id`, not that `location_id` actually belongs to it, so a
+   * mismatched pair would pass RLS. Verifying it here closes that gap at
+   * the one place it could matter, even though today's only caller
+   * (features/onboarding/actions/save-location-hours.ts) always passes
+   * an id it just got back from upsertPrimaryLocation.
+   */
   async setLocationHours(
     tenantId: string,
     locationId: string,
@@ -312,10 +323,22 @@ export class TenantService {
       closedAllDay: boolean;
     }[]
   ): Promise<void> {
+    const { data: location } = await this.supabase
+      .from("locations")
+      .select("id")
+      .eq("id", locationId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+
+    if (!location) {
+      throw new Error("TenantService.setLocationHours: location not found for this tenant");
+    }
+
     const { error: deleteError } = await this.supabase
       .from("location_hours")
       .delete()
-      .eq("location_id", locationId);
+      .eq("location_id", locationId)
+      .eq("tenant_id", tenantId);
 
     if (deleteError) {
       throw new Error(`TenantService.setLocationHours: ${deleteError.message}`);

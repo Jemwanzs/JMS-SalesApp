@@ -47,6 +47,12 @@ function weekBounds(ymd: string): { from: string; to: string } {
 export class InsightsService {
   constructor(private readonly supabase: SupabaseClient<Database>) {}
 
+  // businessDayId-only lookup, no tenant_id filter -- safe only because
+  // this runs via the service-role client from app/api/cron/outbox/
+  // route.ts with a DB-internal, never user-supplied businessDayId (same
+  // caveat as ReportService.generateDailyReport's own header comment;
+  // there's no RLS backstop here at all, unlike the pattern found
+  // elsewhere in this app, since service-role bypasses RLS entirely).
   async evaluateDailyInsights(businessDayId: string): Promise<number> {
     const { data: day, error: dayError } = await this.supabase
       .from("business_days")
