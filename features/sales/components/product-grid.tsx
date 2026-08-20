@@ -43,6 +43,7 @@ export function ProductGrid({
   products,
   showDailyVolume = false,
   todayRevenue,
+  showProductPrice = true,
   quantityEnabled = true,
   tenantId,
   tenantSlug,
@@ -52,6 +53,7 @@ export function ProductGrid({
   products: (Product & { tier?: ProductTier | null })[];
   showDailyVolume?: boolean;
   todayRevenue?: Map<string, number>;
+  showProductPrice?: boolean;
   quantityEnabled?: boolean;
   tenantId: string;
   tenantSlug: string;
@@ -119,7 +121,7 @@ export function ProductGrid({
                   {product.description}
                 </p>
               )}
-              {product.showExpectedPrice && product.expectedPrice !== null && (
+              {showProductPrice && product.showExpectedPrice && product.expectedPrice !== null && (
                 <p className="mt-0.5 text-sm font-medium tabular-nums">
                   {product.expectedPrice.toFixed(2)}
                 </p>

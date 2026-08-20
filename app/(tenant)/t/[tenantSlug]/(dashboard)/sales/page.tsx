@@ -181,15 +181,17 @@ async function SalesCaptureBody({
   const productService = new ProductService(supabase);
   const tenantService = new TenantService(supabase);
 
-  const [products, rankingEnabledSetting, showDailyVolumeSetting, quantityEnabledSetting] = await Promise.all([
+  const [products, rankingEnabledSetting, showDailyVolumeSetting, showProductPriceSetting, quantityEnabledSetting] = await Promise.all([
     productService.listActive(tenantId),
     tenantService.getSetting<boolean>(tenantId, "product_ranking_enabled"),
     tenantService.getSetting<boolean>(tenantId, "show_daily_sales_volume"),
+    tenantService.getSetting<boolean>(tenantId, "show_product_price_on_landing"),
     tenantService.getSetting<boolean>(tenantId, "quantity_enabled"),
   ]);
 
   const rankingEnabled = rankingEnabledSetting ?? true;
   const showDailyVolume = showDailyVolumeSetting ?? false;
+  const showProductPrice = showProductPriceSetting ?? true;
   const quantityEnabled = quantityEnabledSetting ?? true;
 
   let rankedProducts: ReturnType<typeof rankProducts> = products.map((p) => ({
@@ -218,6 +220,7 @@ async function SalesCaptureBody({
         products={rankedProducts}
         showDailyVolume={showDailyVolume}
         todayRevenue={todayRevenue}
+        showProductPrice={showProductPrice}
         quantityEnabled={quantityEnabled}
         tenantId={tenantId}
         tenantSlug={tenantSlug}

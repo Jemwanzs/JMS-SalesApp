@@ -5,34 +5,46 @@ import { toast } from "sonner";
 
 import { setProductRankingEnabledAction } from "@/features/settings/actions/set-product-ranking-enabled";
 import { setShowDailySalesVolumeAction } from "@/features/settings/actions/set-show-daily-sales-volume";
+import { setShowProductPriceAction } from "@/features/settings/actions/set-show-product-price";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 
 /**
- * Two independent toggles for the Capture Sales landing page (spec item
- * 5): Gold/Silver/Bronze ranking is trailing-30-day revenue, tenant-wide;
- * "today's sales amount" is a separate, always-resets-daily figure,
- * default OFF per the explicit "don't show the day's sales amounts by
- * default" requirement. "Preferred ordering" isn't a third setting here
- * -- turning ranking off falls back to the existing manually-reorderable
- * display_order (Products page, Move Up/Down).
+ * Three independent toggles for the Capture Sales landing page (spec
+ * item 5, plus a later addition): Gold/Silver/Bronze ranking is
+ * trailing-30-day revenue, tenant-wide; "today's sales amount" is a
+ * separate, always-resets-daily figure, default OFF per the explicit
+ * "don't show the day's sales amounts by default" requirement; "product
+ * price" governs the expected-price tag under each product's name on
+ * THIS page specifically -- a per-product show/hide flag
+ * (products.showExpectedPrice) already exists and still applies
+ * everywhere else (e.g. the Record Sale dialog's own price line); this
+ * tenant-wide switch is a second, coarser gate on top of it, scoped only
+ * to the landing page grid, default ON to match every tenant's existing
+ * behavior before this setting existed. "Preferred ordering" isn't a
+ * fourth setting here -- turning ranking off falls back to the existing
+ * manually-reorderable display_order (Products page, Move Up/Down).
  */
 export function ProductRankingCard({
   tenantId,
   tenantSlug,
   initialRankingEnabled,
   initialShowDailyVolume,
+  initialShowProductPrice,
 }: {
   tenantId: string;
   tenantSlug: string;
   initialRankingEnabled: boolean;
   initialShowDailyVolume: boolean;
+  initialShowProductPrice: boolean;
 }) {
   const [rankingEnabled, setRankingEnabled] = useState(initialRankingEnabled);
   const [showDailyVolume, setShowDailyVolume] = useState(initialShowDailyVolume);
+  const [showProductPrice, setShowProductPrice] = useState(initialShowProductPrice);
   const [isRankingPending, startRankingTransition] = useTransition();
   const [isVolumePending, startVolumeTransition] = useTransition();
+  const [isPricePending, startPriceTransition] = useTransition();
 
   function onToggleRanking(next: boolean) {
     setRankingEnabled(next);
@@ -53,6 +65,19 @@ export function ProductRankingCard({
       const result = await setShowDailySalesVolumeAction(tenantId, tenantSlug, next);
       if (result.error) {
         setShowDailyVolume(!next);
+        toast.error(result.error);
+        return;
+      }
+      toast.success("Saved");
+    });
+  }
+
+  function onTogglePrice(next: boolean) {
+    setShowProductPrice(next);
+    startPriceTransition(async () => {
+      const result = await setShowProductPriceAction(tenantId, tenantSlug, next);
+      if (result.error) {
+        setShowProductPrice(!next);
         toast.error(result.error);
         return;
       }
@@ -87,6 +112,18 @@ export function ProductRankingCard({
             checked={showDailyVolume}
             disabled={isVolumePending}
             onCheckedChange={onToggleVolume}
+          />
+        </div>
+
+        <div className="flex items-center justify-between gap-3 border-t pt-4">
+          <Label htmlFor="product-price-toggle" className="font-normal text-muted-foreground">
+            Show each product&rsquo;s price on the Capture Sales page
+          </Label>
+          <Switch
+            id="product-price-toggle"
+            checked={showProductPrice}
+            disabled={isPricePending}
+            onCheckedChange={onTogglePrice}
           />
         </div>
       </CardContent>

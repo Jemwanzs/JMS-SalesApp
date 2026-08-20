@@ -43,12 +43,21 @@ export default async function SettingsPage({
   }
 
   const tenantService = new TenantService(supabase);
-  const [currentMode, saleNumberTemplate, primaryLocation, productRankingEnabled, showDailySalesVolume, quantityEnabled] = await Promise.all([
+  const [
+    currentMode,
+    saleNumberTemplate,
+    primaryLocation,
+    productRankingEnabled,
+    showDailySalesVolume,
+    showProductPrice,
+    quantityEnabled,
+  ] = await Promise.all([
     new AnniversaryService(supabase).getWishMode(tenantId),
     tenantService.getSetting<string>(tenantId, "sale_number_template"),
     supabase.from("locations").select("code").eq("tenant_id", tenantId).order("created_at", { ascending: true }).limit(1).maybeSingle(),
     tenantService.getSetting<boolean>(tenantId, "product_ranking_enabled"),
     tenantService.getSetting<boolean>(tenantId, "show_daily_sales_volume"),
+    tenantService.getSetting<boolean>(tenantId, "show_product_price_on_landing"),
     tenantService.getSetting<boolean>(tenantId, "quantity_enabled"),
   ]);
 
@@ -68,6 +77,7 @@ export default async function SettingsPage({
         tenantSlug={tenantSlug}
         initialRankingEnabled={productRankingEnabled ?? true}
         initialShowDailyVolume={showDailySalesVolume ?? false}
+        initialShowProductPrice={showProductPrice ?? true}
       />
       <QuantityFieldCard tenantId={tenantId} tenantSlug={tenantSlug} initialEnabled={quantityEnabled ?? true} />
     </div>
