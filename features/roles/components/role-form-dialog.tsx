@@ -29,6 +29,14 @@ function groupByModule(catalog: PermissionCatalogItem[]) {
   return groups;
 }
 
+function setsEqual(a: Set<string>, b: Set<string>) {
+  if (a.size !== b.size) return false;
+  for (const item of a) {
+    if (!b.has(item)) return false;
+  }
+  return true;
+}
+
 /**
  * Create/edit in one dialog -- `role` present means edit mode. Both
  * modes submit name/description/permissionKeys together (RoleService.
@@ -58,6 +66,16 @@ export function RoleFormDialog({
   const [isPending, startTransition] = useTransition();
 
   const grouped = groupByModule(catalog);
+
+  // Create mode has no baseline to diff against -- always "dirty" there,
+  // gated only by the required-name check. Edit mode disables Save until
+  // something actually differs from the role as loaded, so a no-op open-
+  // then-close-without-changing-anything doesn't fire an update.
+  const isDirty =
+    !role ||
+    name !== role.name ||
+    description !== (role.description ?? "") ||
+    !setsEqual(selected, new Set(role.permissionKeys));
 
   function toggle(key: string) {
     setSelected((prev) => {
@@ -163,7 +181,7 @@ export function RoleFormDialog({
 
           {error && <p className="text-sm text-destructive">{error}</p>}
           <DialogFooter>
-            <Button type="submit" disabled={isPending}>
+            <Button type="submit" disabled={isPending || !isDirty}>
               {isPending ? "Saving..." : role ? "Save changes" : "Create role"}
             </Button>
           </DialogFooter>

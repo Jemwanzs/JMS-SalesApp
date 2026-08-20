@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 
+import { AnniversaryCelebrationDialog } from "@/features/sales/components/anniversary-celebration-dialog";
 import { OpenBusinessDayButton } from "@/features/sales/components/open-business-day-button";
 import { ProductGrid } from "@/features/sales/components/product-grid";
 import { ReopenBusinessDayDialog } from "@/features/sales/components/reopen-business-day-dialog";
 import { SalesVisibilityBadge } from "@/features/sales/components/sales-visibility-badge";
 import { AnalyticsService } from "@/services/AnalyticsService";
+import { AnniversaryService } from "@/services/AnniversaryService";
 import { BusinessDayService } from "@/services/BusinessDayService";
 import { ProductService } from "@/services/ProductService";
 import { TenantService } from "@/services/TenantService";
@@ -74,13 +76,30 @@ export default async function SalesPage({
   });
 
   const canCapture = businessDay?.status === "open" || businessDay?.status === "reopened";
-  const [canOpenDay, canReopenDay] = await Promise.all([
+  const [canOpenDay, canReopenDay, activeWish] = await Promise.all([
     can("business_day.open", { tenantId: tenant!.id }),
     can("business_day.reopen", { tenantId: tenant!.id }),
+    new AnniversaryService(supabase).getActiveWish(tenant!.id).catch(() => null),
   ]);
+
+  // The tenant layout shell already shows a small, low-key banner for any
+  // wish sent in the last 7 days -- this is the louder, one-day-only
+  // celebration specifically on the landing page, active only on the
+  // actual anniversary day itself (tenant-timezone-scoped), not the whole
+  // trailing week. Every member of this tenant sees it (not gated by
+  // role) since it's a whole-business celebration, not an admin tool;
+  // getActiveWish is already tenant_id-scoped and RLS-gated, so it can
+  // never surface another tenant's wish here.
+  const todayDateKey = todayString(tenant!.timezone);
+  const wishSentToday =
+    activeWish?.sentAt != null &&
+    new Intl.DateTimeFormat("en-CA", { timeZone: tenant!.timezone }).format(new Date(activeWish.sentAt)) === todayDateKey;
 
   return (
     <div className="flex flex-1 flex-col p-6">
+      {wishSentToday && activeWish && (
+        <AnniversaryCelebrationDialog wishId={`${activeWish.id}-${todayDateKey}`} message={activeWish.message} />
+      )}
       <p className="text-sm text-muted-foreground">{today}</p>
       <h1 className="mt-1 text-xl font-semibold">Good day, {firstName}</h1>
 

@@ -41,6 +41,11 @@ export function GeofenceRestrictionCard({
   const [radiusMeters, setRadiusMeters] = useState(initialRadiusMeters?.toString() ?? "150");
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  const isFenceDirty =
+    latitude !== (initialLatitude?.toString() ?? "") ||
+    longitude !== (initialLongitude?.toString() ?? "") ||
+    radiusMeters !== (initialRadiusMeters?.toString() ?? "150");
+
   function onToggle(next: boolean) {
     setEnabled(next);
     startToggleTransition(async () => {
@@ -141,7 +146,7 @@ export function GeofenceRestrictionCard({
             <Button type="button" size="sm" variant="outline" onClick={useCurrentLocation}>
               Use my current location
             </Button>
-            <Button type="submit" size="sm" disabled={isSavePending}>
+            <Button type="submit" size="sm" disabled={isSavePending || !isFenceDirty}>
               {isSavePending ? "Saving..." : "Save"}
             </Button>
           </div>

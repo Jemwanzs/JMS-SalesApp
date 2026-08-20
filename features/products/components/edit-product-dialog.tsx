@@ -48,6 +48,12 @@ export function EditProductDialog({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
+  const isDirty =
+    name !== product.name ||
+    description !== (product.description ?? "") ||
+    expectedPrice !== (product.expectedPrice !== null ? String(product.expectedPrice) : "0") ||
+    showNameInPhotoView !== product.showNameInPhotoView;
+
   function onImageChange(next: ProductImageValue | null) {
     setImage(next);
     startTransition(async () => {
@@ -143,7 +149,7 @@ export function EditProductDialog({
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <DialogFooter>
-            <Button type="submit" disabled={isPending}>
+            <Button type="submit" disabled={isPending || !isDirty}>
               {isPending ? "Saving..." : "Save changes"}
             </Button>
           </DialogFooter>

@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { signOutOtherSessionsAction } from "@/features/security/actions/sign-out-other-sessions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CollapsibleCard } from "@/components/shared/collapsible-card";
 import type { SessionSummary } from "@/services/SecurityService";
 
 export function SessionList({
@@ -35,36 +35,34 @@ export function SessionList({
   const hasOtherActive = sessions.some((s) => s.id !== currentSessionId && !s.revokedAt);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Where you&rsquo;re signed in</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {sessions.length === 0 && (
-          <p className="text-sm text-muted-foreground">No session history yet.</p>
-        )}
-        {sessions.map((session) => (
-          <div key={session.id} className="flex items-center justify-between gap-3 text-sm">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <span className="truncate font-medium">{session.device}</span>
-                {session.id === currentSessionId && <Badge variant="secondary">This device</Badge>}
-                {session.revokedAt && <Badge variant="destructive">Signed out</Badge>}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {session.ip ?? "Unknown IP"} · last seen{" "}
-                {new Date(session.lastSeenAt).toLocaleString()}
-              </p>
+    <CollapsibleCard
+      title="Where you're signed in"
+      meta={`${sessions.length} session${sessions.length === 1 ? "" : "s"}`}
+    >
+      {sessions.length === 0 && (
+        <p className="text-sm text-muted-foreground">No session history yet.</p>
+      )}
+      {sessions.map((session) => (
+        <div key={session.id} className="flex items-center justify-between gap-3 text-sm">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="truncate font-medium">{session.device}</span>
+              {session.id === currentSessionId && <Badge variant="secondary">This device</Badge>}
+              {session.revokedAt && <Badge variant="destructive">Signed out</Badge>}
             </div>
+            <p className="text-xs text-muted-foreground">
+              {session.ip ?? "Unknown IP"} · last seen{" "}
+              {new Date(session.lastSeenAt).toLocaleString()}
+            </p>
           </div>
-        ))}
+        </div>
+      ))}
 
-        {hasOtherActive && (
-          <Button variant="outline" size="sm" disabled={isPending} onClick={onSignOutOthers}>
-            {isPending ? "Signing out..." : "Sign out of other devices"}
-          </Button>
-        )}
-      </CardContent>
-    </Card>
+      {hasOtherActive && (
+        <Button variant="outline" size="sm" disabled={isPending} onClick={onSignOutOthers}>
+          {isPending ? "Signing out..." : "Sign out of other devices"}
+        </Button>
+      )}
+    </CollapsibleCard>
   );
 }

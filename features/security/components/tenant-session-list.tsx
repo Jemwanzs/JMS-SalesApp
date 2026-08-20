@@ -5,7 +5,7 @@ import { toast } from "sonner";
 
 import { forceSignOutUserAction } from "@/features/security/actions/force-sign-out-user";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CollapsibleCard } from "@/components/shared/collapsible-card";
 import type { SessionSummary } from "@/services/SecurityService";
 
 type TenantSession = SessionSummary & { profileId: string; who: string };
@@ -59,33 +59,31 @@ export function TenantSessionList({
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Who else is signed in</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {byProfile.size === 0 && <p className="text-sm text-muted-foreground">No other active sessions right now.</p>}
-        {[...byProfile.entries()].map(([profileId, { who, sessionCount }]) => (
-          <div key={profileId} className="flex items-center justify-between gap-3 text-sm">
-            <div className="min-w-0">
-              <p className="truncate font-medium">{who}</p>
-              <p className="text-xs text-muted-foreground">
-                {sessionCount} active session{sessionCount === 1 ? "" : "s"}
-              </p>
-            </div>
-            {profileId !== currentUserId && (
-              <Button
-                variant="destructive"
-                size="sm"
-                disabled={isPending && pendingProfileId === profileId}
-                onClick={() => onForceSignOut(profileId, who)}
-              >
-                {isPending && pendingProfileId === profileId ? "Signing out..." : "Force sign out"}
-              </Button>
-            )}
+    <CollapsibleCard
+      title="Who else is signed in"
+      meta={`${byProfile.size} member${byProfile.size === 1 ? "" : "s"}`}
+    >
+      {byProfile.size === 0 && <p className="text-sm text-muted-foreground">No other active sessions right now.</p>}
+      {[...byProfile.entries()].map(([profileId, { who, sessionCount }]) => (
+        <div key={profileId} className="flex items-center justify-between gap-3 text-sm">
+          <div className="min-w-0">
+            <p className="truncate font-medium">{who}</p>
+            <p className="text-xs text-muted-foreground">
+              {sessionCount} active session{sessionCount === 1 ? "" : "s"}
+            </p>
           </div>
-        ))}
-      </CardContent>
-    </Card>
+          {profileId !== currentUserId && (
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={isPending && pendingProfileId === profileId}
+              onClick={() => onForceSignOut(profileId, who)}
+            >
+              {isPending && pendingProfileId === profileId ? "Signing out..." : "Force sign out"}
+            </Button>
+          )}
+        </div>
+      ))}
+    </CollapsibleCard>
   );
 }
