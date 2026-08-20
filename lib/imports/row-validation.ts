@@ -236,10 +236,12 @@ export function validateSalesHistoryRow(
     }
   }
 
-  // --- Sales Person (optional -> uploader; provided-but-unknown is an error) ---
+  // --- Sales Person (required -- must match a sales.create-holding member) ---
   const salesPersonRaw = cellToString(get("salesPerson"));
-  let recordedBy = ctx.uploadedBy;
-  if (salesPersonRaw) {
+  let recordedBy: string | null = null;
+  if (!salesPersonRaw) {
+    errors.push("Sales person is required");
+  } else {
     const member = ctx.members.find(
       (m) =>
         m.email.toLowerCase() === salesPersonRaw.toLowerCase() ||
@@ -277,7 +279,7 @@ export function validateSalesHistoryRow(
 
   const notes = cellToString(get("notes")) || null;
 
-  if (errors.length > 0 || !saleDate || !matchedProduct || amount == null) {
+  if (errors.length > 0 || !saleDate || !matchedProduct || amount == null || !recordedBy) {
     return { valid: false, errors };
   }
 

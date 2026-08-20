@@ -51,14 +51,20 @@ const SALES_HISTORY_TEMPLATE_COLUMNS = [
   { header: "Sale Date", required: true, example: "2024-03-15" },
   { header: "Sale Time", required: false, example: "14:30" },
   { header: "Product Name", required: true, example: "Espresso" },
-  { header: "Product Code", required: false, example: "ESP-001" },
   { header: "Amount", required: true, example: 4.5 },
   { header: "Quantity", required: false, example: 1 },
-  { header: "Sales Person", required: false, example: "jane@example.com" },
+  { header: "Sales Person", required: true, example: "jane@example.com" },
   { header: "Location", required: false, example: "Main" },
   { header: "Existing Reference", required: false, example: "POS-10293" },
   { header: "Notes", required: false, example: "" },
 ] as const;
+
+// Warm cream, used only to mark a required column's header cell -- purely
+// visual, doesn't affect parsing (mapHeaders matches on text, not fill).
+const REQUIRED_HEADER_FILL = "FFFFF2CC";
+const OPTIONAL_HEADER_FILL = "FFE5E7EB";
+/** Data-validation dropdowns apply to this many data rows below the header. */
+const TEMPLATE_DATA_ROW_COUNT = 1000;
 
 const PRODUCTS_TEMPLATE_COLUMNS = [
   { header: "Product Name", required: true, example: "Espresso" },
@@ -67,6 +73,21 @@ const PRODUCTS_TEMPLATE_COLUMNS = [
   { header: "Expected Price", required: false, example: 4.5 },
   { header: "Image URL", required: false, example: "" },
 ] as const;
+
+/** Applies an Excel dropdown (data-validation list) to every data row of one column, referencing a range on the hidden Lists sheet. */
+function applyListValidation(sheet: ExcelJS.Worksheet, colIndex: number, range: string): void {
+  for (let row = 2; row <= TEMPLATE_DATA_ROW_COUNT + 1; row++) {
+    sheet.getCell(row, colIndex).dataValidation = {
+      type: "list",
+      allowBlank: true,
+      formulae: [range],
+      showErrorMessage: true,
+      errorStyle: "warning",
+      errorTitle: "Not in the list",
+      error: "Pick a value from the dropdown so it matches exactly -- typing a close match won't import correctly.",
+    };
+  }
+}
 
 export interface ImportSummary {
   id: string;
@@ -92,8 +113,30 @@ export interface ImportRowView {
 export class ImportService {
   constructor(private readonly supabase: SupabaseClient<Database>) {}
 
-  /** docs/12's "Historical sales template" table, as a real downloadable .xlsx. */
-  async generateSalesHistoryTemplate(): Promise<Buffer> {
+  /**
+   * docs/12's "Historical sales template" table, as a real downloadable
+   * .xlsx -- now tenant-specific (product-enhancements batch): Product
+   * Name and Sales Person are real Excel dropdowns backed by this
+   * tenant's own active catalog and its `sales.create`-holding members,
+   * on a hidden "Lists" sheet (dataValidation formulae can reference a
+   * hidden sheet's range fine; inline list formulae would hit Excel's
+   * 255-char limit and break on names containing commas). Product Code
+   * is dropped entirely -- Product Name's dropdown makes exact-name
+   * matching reliable enough that a separate SKU column added more
+   * confusion than value. Required columns' header cells are filled
+   * warm cream instead of the neutral gray optional columns get, so
+   * "what do I have to fill in" is visible without opening the
+   * Instructions sheet at all.
+   */
+  async generateSalesHistoryTemplate(tenantId: string): Promise<Buffer> {
+    const [{ data: products }, salesPeople] = await Promise.all([
+      this.supabase.from("products").select("name").eq("tenant_id", tenantId).eq("status", "active").order("name"),
+      this.listSalesCapturePeople(tenantId),
+    ]);
+
+    const productNames = [...new Set((products ?? []).map((p) => p.name))];
+    const salesPersonEmails = salesPeople.map((m) => m.email);
+
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Sales History");
 
@@ -102,7 +145,8 @@ export class ImportService {
     // normalized header text, and this is the same template our own
     // parser reads back, so anything that would make a header not
     // round-trip is a bug, not a cosmetic choice. Which columns are
-    // required lives on the Instructions sheet instead.
+    // required also lives on the Instructions sheet, in addition to the
+    // header-cell coloring below.
     sheet.columns = SALES_HISTORY_TEMPLATE_COLUMNS.map((c) => ({
       header: c.header,
       key: c.header,
@@ -111,11 +155,35 @@ export class ImportService {
 
     const headerRow = sheet.getRow(1);
     headerRow.font = { bold: true };
-    headerRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE5E7EB" } };
+    SALES_HISTORY_TEMPLATE_COLUMNS.forEach((c, i) => {
+      headerRow.getCell(i + 1).fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: c.required ? REQUIRED_HEADER_FILL : OPTIONAL_HEADER_FILL },
+      };
+    });
 
     sheet.addRow(Object.fromEntries(SALES_HISTORY_TEMPLATE_COLUMNS.map((c) => [c.header, c.example])));
     const exampleRow = sheet.getRow(2);
     exampleRow.font = { italic: true, color: { argb: "FF6B7280" } };
+
+    // Hidden reference lists the two dropdowns point at -- kept on a
+    // separate sheet (not inline formulae) so a long catalog or a
+    // product name containing a comma both work correctly.
+    const listsSheet = workbook.addWorksheet("Lists");
+    listsSheet.state = "veryHidden";
+    listsSheet.getColumn(1).values = ["Product Names", ...productNames];
+    listsSheet.getColumn(2).values = ["Sales People", ...salesPersonEmails];
+
+    const productNameColIndex = SALES_HISTORY_TEMPLATE_COLUMNS.findIndex((c) => c.header === "Product Name") + 1;
+    const salesPersonColIndex = SALES_HISTORY_TEMPLATE_COLUMNS.findIndex((c) => c.header === "Sales Person") + 1;
+
+    if (productNames.length > 0) {
+      applyListValidation(sheet, productNameColIndex, `Lists!$A$2:$A$${productNames.length + 1}`);
+    }
+    if (salesPersonEmails.length > 0) {
+      applyListValidation(sheet, salesPersonColIndex, `Lists!$B$2:$B$${salesPersonEmails.length + 1}`);
+    }
 
     const notesSheet = workbook.addWorksheet("Instructions");
     notesSheet.columns = [
@@ -127,11 +195,17 @@ export class ImportService {
     notesSheet.addRows([
       { column: "Sale Date", required: "Yes", notes: "Format: YYYY-MM-DD (e.g. 2024-03-15). Cannot be a future date." },
       { column: "Sale Time", required: "No", notes: "Format: HH:MM (24-hour). Defaults to midday if left blank." },
-      { column: "Product Name", required: "Yes*", notes: "Must exactly match an existing product name, unless Product Code is provided instead." },
-      { column: "Product Code", required: "Recommended", notes: "Matched against each product's SKU -- more reliable than name matching." },
+      { column: "Product Name", required: "Yes", notes: "Pick from the dropdown -- it lists this business's active products. Must match one exactly." },
       { column: "Amount", required: "Yes", notes: "The total amount charged for the sale (not a per-unit price). Must be 0 or more." },
       { column: "Quantity", required: "No", notes: "Informational only -- a positive number." },
-      { column: "Sales Person", required: "No", notes: "Must match a team member's email or full name exactly. Defaults to whoever uploads the file if left blank." },
+      {
+        column: "Sales Person",
+        required: "Yes",
+        notes:
+          salesPersonEmails.length > 0
+            ? "Pick from the dropdown -- it lists team members who can record sales. Must match one exactly."
+            : "No team member currently holds sales-recording permission for this business -- assign one under Users before importing.",
+      },
       { column: "Location", required: "No", notes: "Must match an existing location name exactly. Defaults to your primary location if left blank." },
       { column: "Existing Reference", required: "No", notes: "Your own external reference (e.g. a POS receipt number). Must be unique within this file." },
       { column: "Notes", required: "No", notes: "Free text, carried over onto the imported sale." },
@@ -139,6 +213,63 @@ export class ImportService {
 
     const buffer = await workbook.xlsx.writeBuffer();
     return Buffer.from(buffer);
+  }
+
+  /**
+   * Tenant members eligible to be picked as a historical sale's "Sales
+   * Person" -- active membership + a role granting sales.create,
+   * mirroring has_permission()'s own join shape (role_permissions ->
+   * user_role_assignments -> tenant_memberships) since this runs from
+   * the service-role client, outside any one user's auth.uid() context.
+   * Falls back to every active member if literally no one currently
+   * holds sales.create (a brand-new tenant before roles are assigned)
+   * so a historical import is never hard-blocked by that gap.
+   */
+  private async listSalesCapturePeople(
+    tenantId: string
+  ): Promise<{ profileId: string; email: string; fullName: string | null }[]> {
+    const { data: permission } = await this.supabase
+      .from("permissions")
+      .select("id")
+      .eq("key", "sales.create")
+      .maybeSingle();
+
+    let eligibleMembershipIds: Set<string> | null = null;
+
+    if (permission) {
+      const { data: roles } = await this.supabase
+        .from("role_permissions")
+        .select("role_id")
+        .eq("permission_id", permission.id);
+      const roleIds = [...new Set((roles ?? []).map((r) => r.role_id))];
+
+      if (roleIds.length > 0) {
+        const { data: assignments } = await this.supabase
+          .from("user_role_assignments")
+          .select("tenant_membership_id")
+          .eq("tenant_id", tenantId)
+          .in("role_id", roleIds);
+        eligibleMembershipIds = new Set((assignments ?? []).map((a) => a.tenant_membership_id));
+      }
+    }
+
+    let membershipsQuery = this.supabase
+      .from("tenant_memberships")
+      .select("id, profile_id")
+      .eq("tenant_id", tenantId)
+      .eq("status", "active");
+    if (eligibleMembershipIds && eligibleMembershipIds.size > 0) {
+      membershipsQuery = membershipsQuery.in("id", [...eligibleMembershipIds]);
+    }
+    const { data: memberships } = await membershipsQuery;
+
+    const profileIds = (memberships ?? []).map((m) => m.profile_id);
+    if (profileIds.length === 0) return [];
+
+    const { data: profiles } = await this.supabase.from("profiles").select("id, email, full_name").in("id", profileIds);
+    return (profiles ?? [])
+      .map((p) => ({ profileId: p.id, email: p.email, fullName: p.full_name }))
+      .sort((a, b) => a.email.localeCompare(b.email));
   }
 
   /** docs/10-products.md's bulk product-catalog template. */
@@ -813,29 +944,18 @@ export class ImportService {
   }
 
   private async buildLookupContext(tenantId: string, uploadedBy: string): Promise<ImportLookupContext> {
-    const [{ data: products }, { data: locations }, { data: memberships }, { data: primaryLocation }] =
-      await Promise.all([
-        this.supabase.from("products").select("id, name, sku, image_url, expected_price").eq("tenant_id", tenantId),
-        this.supabase.from("locations").select("id, name").eq("tenant_id", tenantId),
-        this.supabase
-          .from("tenant_memberships")
-          .select("profile_id")
-          .eq("tenant_id", tenantId)
-          .eq("status", "active"),
-        this.supabase
-          .from("locations")
-          .select("id")
-          .eq("tenant_id", tenantId)
-          .order("created_at", { ascending: true })
-          .limit(1)
-          .maybeSingle(),
-      ]);
-
-    const memberProfileIds = (memberships ?? []).map((m) => m.profile_id);
-    const { data: memberProfiles } =
-      memberProfileIds.length > 0
-        ? await this.supabase.from("profiles").select("id, full_name, email").in("id", memberProfileIds)
-        : { data: [] };
+    const [{ data: products }, { data: locations }, members, { data: primaryLocation }] = await Promise.all([
+      this.supabase.from("products").select("id, name, sku, image_url, expected_price").eq("tenant_id", tenantId),
+      this.supabase.from("locations").select("id, name").eq("tenant_id", tenantId),
+      this.listSalesCapturePeople(tenantId),
+      this.supabase
+        .from("locations")
+        .select("id")
+        .eq("tenant_id", tenantId)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle(),
+    ]);
 
     return {
       products: (products ?? []).map((p) => ({
@@ -846,11 +966,10 @@ export class ImportService {
         expectedPrice: p.expected_price,
       })),
       locations: locations ?? [],
-      members: (memberProfiles ?? []).map((p) => ({
-        profileId: p.id,
-        fullName: p.full_name,
-        email: p.email,
-      })),
+      // Scoped to sales.create holders (same set the template's own
+      // dropdown offers) -- see listSalesCapturePeople's header comment
+      // for the fallback when no one currently holds it.
+      members,
       defaultLocationId: primaryLocation?.id ?? "",
       uploadedBy,
       todayYmd: new Date().toISOString().slice(0, 10),

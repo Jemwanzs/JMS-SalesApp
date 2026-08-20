@@ -20,13 +20,14 @@ Download Template -> Populate Data -> Upload -> Validation -> Preview
 | Sale Date | Yes |
 | Sale Time | Optional |
 | Product Name | Yes |
-| Product Code | Recommended |
 | Amount | Yes |
 | Quantity | Optional |
-| Sales Person | Optional |
+| Sales Person | Yes |
 | Location | Optional |
 | Existing Reference | Optional |
 | Notes | Optional |
+
+Product Name and Sales Person are real Excel dropdowns in the generated template (a hidden "Lists" sheet, tenant-specific: this tenant's own active products, and members holding `sales.create`) — picking from the list is how exact-match validation stays reliable, which is also why the old separate "Product Code"/SKU column was dropped rather than kept alongside it. Required columns' header cells are filled a distinct color in the generated file itself, not just called out in the Instructions sheet.
 
 ## Validation rules (before import)
 
