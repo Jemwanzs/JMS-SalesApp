@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { AuditService } from "@/services/AuditService";
-import { UserService } from "@/services/UserService";
+import { UserService, type InviteUserResult } from "@/services/UserService";
 import { AUDIT_ACTION } from "@/lib/audit/actions";
 import { assertCan } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
@@ -15,6 +15,7 @@ export interface InviteUserState {
   error?: string;
   fieldErrors?: Partial<Record<keyof InviteUserInput, string>>;
   success?: boolean;
+  membershipId?: string;
 }
 
 export async function inviteUserAction(
@@ -42,6 +43,8 @@ export async function inviteUserAction(
     return { error: "Not signed in" };
   }
 
+  let result: InviteUserResult;
+
   try {
     await assertCan("users.create", { tenantId });
 
@@ -54,7 +57,7 @@ export async function inviteUserAction(
     const serviceRole = createServiceRoleClient();
     const userService = new UserService(serviceRole);
 
-    const result = await userService.inviteUser({
+    result = await userService.inviteUser({
       tenantId,
       email: parsed.data.email,
       fullName: parsed.data.fullName,
@@ -79,5 +82,5 @@ export async function inviteUserAction(
 
   revalidatePath(`/t/${tenantSlug}/users`);
 
-  return { success: true };
+  return { success: true, membershipId: result.membershipId };
 }

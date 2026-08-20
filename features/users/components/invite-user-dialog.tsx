@@ -17,6 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import type { TenantUserSummary } from "@/services/UserService";
 
 export function InviteUserDialog({
   tenantId,
@@ -27,7 +28,7 @@ export function InviteUserDialog({
   tenantId: string;
   tenantSlug: string;
   roles: { id: string; name: string }[];
-  onInvited: () => void;
+  onInvited: (user: TenantUserSummary) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
@@ -56,13 +57,21 @@ export function InviteUserDialog({
         setError(Object.values(result.fieldErrors)[0] ?? "Please check your entries");
         return;
       }
-      if (result.success) {
+      if (result.success && result.membershipId) {
         toast.success("Invitation sent");
         setOpen(false);
+        onInvited({
+          membershipId: result.membershipId,
+          profileId: "",
+          fullName,
+          email,
+          status: "invited",
+          isCurrentUser: false,
+          roleNames: [roles.find((r) => r.id === roleId)?.name ?? ""],
+        });
         setEmail("");
         setFullName("");
         setRoleId("");
-        onInvited();
       }
     });
   }

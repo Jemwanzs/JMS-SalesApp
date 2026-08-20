@@ -5,6 +5,7 @@ import { SaleHistoryList } from "@/features/sales/components/sale-history-list";
 import { SalesService } from "@/services/SalesService";
 import { TenantService } from "@/services/TenantService";
 import { can } from "@/lib/permissions/can";
+import { todayString } from "@/lib/utils/date-ranges";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
@@ -43,11 +44,12 @@ export default async function SalesHistoryPage({
 
   const { data: tenant } = await supabase
     .from("tenants")
-    .select("id")
+    .select("id, timezone")
     .eq("slug", tenantSlug)
     .single();
 
   const tenantId = tenant!.id;
+  const today = todayString(tenant!.timezone);
   const hasFilters = Boolean(from || to || q);
 
   const [sales, canVoid, canReverse, canEditWindow, canCorrectHistorical, requiresDownloadPasscode] = await Promise.all([
@@ -67,7 +69,7 @@ export default async function SalesHistoryPage({
   return (
     <div className="flex flex-1 flex-col p-6">
       <h1 className="mb-4 text-xl font-semibold">Sales History</h1>
-      <SaleHistoryFilters />
+      <SaleHistoryFilters todayDate={today} />
       <SaleHistoryList
         sales={sales}
         tenantId={tenantId}

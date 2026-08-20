@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 
 import { ImportDetail } from "@/features/imports/components/import-detail";
+import { BackLink } from "@/components/shared/back-link";
 import { ImportService } from "@/services/ImportService";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
@@ -44,6 +45,7 @@ export default async function ImportDetailPage({
 
   return (
     <div className="flex flex-1 flex-col gap-4 p-6">
+      <BackLink href={`/t/${tenantSlug}/imports`} label="Imports" />
       <h1 className="text-xl font-semibold">{importSummary.fileName}</h1>
       <ImportDetail tenantId={tenantId} tenantSlug={tenantSlug} importSummary={importSummary} rows={rows} />
     </div>

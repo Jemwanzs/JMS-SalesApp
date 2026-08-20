@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { archiveProductAction } from "@/features/products/actions/archive-product";
 import { reorderProductsAction } from "@/features/products/actions/reorder-products";
 import { setProductStatusAction } from "@/features/products/actions/set-product-status";
+import { AddProductForm } from "@/features/products/components/add-product-form";
 import { EditProductDialog } from "@/features/products/components/edit-product-dialog";
 import { ProductPhotoThumbnail } from "@/features/products/components/product-photo-viewer";
 import { Badge } from "@/components/ui/badge";
@@ -62,6 +63,10 @@ export function ProductManagementList({
     setItems((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
   }
 
+  function onCreated(created: Product) {
+    setItems((prev) => [...prev, created]);
+  }
+
   function onToggleStatus(product: Product) {
     const nextStatus = product.status === "active" ? "inactive" : "active";
     const formData = new FormData();
@@ -99,17 +104,17 @@ export function ProductManagementList({
     });
   }
 
-  if (items.length === 0) {
-    return (
-      <p className="mt-6 text-sm text-muted-foreground">
-        No products yet. Add your first one above.
-      </p>
-    );
-  }
-
   return (
-    <div className="mt-6 divide-y rounded-lg border">
-      {items.map((product, index) => (
+    <>
+      <AddProductForm tenantId={tenantId} tenantSlug={tenantSlug} onCreated={onCreated} />
+
+      {items.length === 0 ? (
+        <p className="mt-6 text-sm text-muted-foreground">
+          No products yet. Add your first one above.
+        </p>
+      ) : (
+        <div className="mt-6 divide-y rounded-lg border">
+          {items.map((product, index) => (
         <div key={product.id} className="flex items-center gap-3 p-3">
           {canEdit && (
             <div className="flex shrink-0 flex-col">
@@ -187,7 +192,9 @@ export function ProductManagementList({
             </div>
           )}
         </div>
-      ))}
-    </div>
+          ))}
+        </div>
+      )}
+    </>
   );
 }

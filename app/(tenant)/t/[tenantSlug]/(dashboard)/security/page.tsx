@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { BackLink } from "@/components/shared/back-link";
 import { cookies } from "next/headers";
 
 import { DownloadSecurityCard } from "@/features/security/components/download-security-card";
@@ -95,6 +96,7 @@ export default async function SecurityPage({
 
   return (
     <div className="flex flex-1 flex-col gap-4 p-6">
+      <BackLink href={`/t/${tenantSlug}/more`} label="More" />
       <h1 className="text-xl font-semibold">Security</h1>
       <MfaEnrollment />
       {canManageSettings && (

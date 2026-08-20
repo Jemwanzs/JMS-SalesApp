@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { BackLink } from "@/components/shared/back-link";
 import type { Metadata } from "next";
 
 import { ApprovalsInboxList } from "@/features/sales/components/approvals-inbox-list";
@@ -40,6 +41,7 @@ export default async function ApprovalsPage({
 
   return (
     <div className="flex flex-1 flex-col p-6">
+      <BackLink href={`/t/${tenantSlug}/more`} label="More" />
       <h1 className="mb-4 text-xl font-semibold">Approvals</h1>
       <ApprovalsInboxList requests={requests} tenantSlug={tenantSlug} />
     </div>

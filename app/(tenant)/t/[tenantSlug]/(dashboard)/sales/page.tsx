@@ -37,19 +37,22 @@ export default async function SalesPage({
   const { tenantSlug } = await params;
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // getUser() and the tenant lookup are independent (the latter only
+  // needs tenantSlug from the URL) -- run them together rather than
+  // waiting on getUser() first for no reason.
+  const [
+    {
+      data: { user },
+    },
+    { data: tenant },
+  ] = await Promise.all([
+    supabase.auth.getUser(),
+    supabase.from("tenants").select("id, timezone").eq("slug", tenantSlug).single(),
+  ]);
 
   const { data: profile } = user
     ? await supabase.from("profiles").select("full_name").eq("id", user.id).maybeSingle()
     : { data: null };
-
-  const { data: tenant } = await supabase
-    .from("tenants")
-    .select("id, timezone")
-    .eq("slug", tenantSlug)
-    .single();
 
   const { data: locationRow } = await supabase
     .from("locations")
@@ -71,8 +74,10 @@ export default async function SalesPage({
   });
 
   const canCapture = businessDay?.status === "open" || businessDay?.status === "reopened";
-  const canOpenDay = await can("business_day.open", { tenantId: tenant!.id });
-  const canReopenDay = await can("business_day.reopen", { tenantId: tenant!.id });
+  const [canOpenDay, canReopenDay] = await Promise.all([
+    can("business_day.open", { tenantId: tenant!.id }),
+    can("business_day.reopen", { tenantId: tenant!.id }),
+  ]);
 
   return (
     <div className="flex flex-1 flex-col p-6">

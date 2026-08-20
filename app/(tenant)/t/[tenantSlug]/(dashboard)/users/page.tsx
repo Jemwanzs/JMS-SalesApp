@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { BackLink } from "@/components/shared/back-link";
 import { redirect } from "next/navigation";
 
 import { UserList } from "@/features/users/components/user-list";
@@ -55,6 +56,7 @@ export default async function UsersPage({
 
   return (
     <div className="flex flex-1 flex-col p-6">
+      <BackLink href={`/t/${tenantSlug}/more`} label="More" />
       <h1 className="mb-4 text-xl font-semibold">Users</h1>
       <UserList
         users={users}

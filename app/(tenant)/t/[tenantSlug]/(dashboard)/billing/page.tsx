@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { BackLink } from "@/components/shared/back-link";
 import { redirect } from "next/navigation";
 
 import { BillingStatusCard } from "@/features/billing/components/billing-status-card";
@@ -55,6 +56,7 @@ export default async function BillingPage({
 
   return (
     <div className="flex flex-1 flex-col gap-4 p-6">
+      <BackLink href={`/t/${tenantSlug}/more`} label="More" />
       <h1 className="text-xl font-semibold">Billing</h1>
       {subscription && (
         <BillingStatusCard

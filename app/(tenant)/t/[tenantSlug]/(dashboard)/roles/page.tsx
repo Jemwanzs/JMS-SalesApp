@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { BackLink } from "@/components/shared/back-link";
 import { redirect } from "next/navigation";
 
 import { RoleList } from "@/features/roles/components/role-list";
@@ -47,6 +48,7 @@ export default async function RolesPage({
 
   return (
     <div className="flex flex-1 flex-col p-6">
+      <BackLink href={`/t/${tenantSlug}/more`} label="More" />
       <h1 className="mb-4 text-xl font-semibold">Roles</h1>
       <RoleList roles={roles} catalog={catalog} tenantId={tenantId} tenantSlug={tenantSlug} />
     </div>

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { AuditService } from "@/services/AuditService";
-import { ProductService } from "@/services/ProductService";
+import { ProductService, type Product } from "@/services/ProductService";
 import { AUDIT_ACTION } from "@/lib/audit/actions";
 import { assertCan } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
@@ -15,6 +15,7 @@ export interface CreateProductState {
   error?: string;
   fieldErrors?: Partial<Record<keyof CreateProductInput, string>>;
   success?: boolean;
+  product?: Product;
 }
 
 export async function createProductAction(
@@ -55,11 +56,12 @@ export async function createProductAction(
   }
 
   const productService = new ProductService(supabase);
+  let product: Product;
 
   try {
     await assertCan("products.create", { tenantId });
 
-    const product = await productService.create(tenantId, {
+    product = await productService.create(tenantId, {
       id: typeof id === "string" && id ? id : undefined,
       name: parsed.data.name,
       expectedPrice: Number(parsed.data.expectedPrice),
@@ -88,5 +90,5 @@ export async function createProductAction(
   revalidatePath(`/t/${tenantSlug}/products`);
   revalidatePath(`/t/${tenantSlug}/sales`);
 
-  return { success: true };
+  return { success: true, product };
 }

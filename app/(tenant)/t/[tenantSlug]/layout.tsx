@@ -99,8 +99,10 @@ export default async function TenantLayout({
     }
   }
 
-  const permissions = await getMyPermissions(tenant.id);
-  const activeWish = await new AnniversaryService(supabase).getActiveWish(tenant.id).catch(() => null);
+  const [permissions, activeWish] = await Promise.all([
+    getMyPermissions(tenant.id),
+    new AnniversaryService(supabase).getActiveWish(tenant.id).catch(() => null),
+  ]);
 
   return (
     <TenantProvider

@@ -4,7 +4,6 @@ import {
   ChevronRight,
   CircleHelp,
   CreditCard,
-  History,
   Lock,
   LogOut,
   Package,
@@ -22,26 +21,27 @@ import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 
 /**
- * The "More" menu (spec S12): Products, Sales History, Notifications,
- * Settings, Help, Logout. Products (2a) and Sales History (2i, void/
- * correct actions from 2e) now link to real pages; Notifications (13-
- * notifications.md) is still shown disabled rather than omitted, so the
- * full menu shape stays visible. Security (4c) is a real, always-present
- * link -- every signed-in user manages their own sessions/login history
- * there regardless of permissions (RLS gates the tenant-wide activity
- * section within the page itself, not this menu entry). Approvals (2g),
- * Roles (4a), Users (4b), Imports (Phase 5), Billing (Phase 6), and
- * Settings (Phase 7d's anniversary wish-mode toggle, its first real
- * setting) are all appended conditionally instead, only for users who
- * actually hold approvals.manage/roles.manage/(users.create or users.
- * edit)/imports.manage/(billing owner or settings.manage)/settings.manage
- * -- unlike Security they aren't meant to be visible-but-disabled for
- * everyone, since most users will never have anything to review or
- * manage there.
+ * The "More" menu (spec S12), regrouped in the UX-efficiency pass:
+ * everyday items (Products, Security -- Sales History moved to the
+ * bottom nav) in their own section, admin/rare items (Approvals, Roles,
+ * Users, Imports, Billing, Settings) in a second, visually distinct
+ * section, so an admin's 9+ item list doesn't read as one undifferentiated
+ * stack. Notifications (13-notifications.md) is still shown disabled
+ * rather than omitted, so the full menu shape stays visible. Security
+ * (4c) is a real, always-present link -- every signed-in user manages
+ * their own sessions/login history there regardless of permissions (RLS
+ * gates the tenant-wide activity section within the page itself, not
+ * this menu entry). Approvals (2g), Roles (4a), Users (4b), Imports
+ * (Phase 5), Billing (Phase 6), and Settings (Phase 7d's anniversary
+ * wish-mode toggle, its first real setting) are all appended
+ * conditionally instead, only for users who actually hold approvals.
+ * manage/roles.manage/(users.create or users.edit)/imports.manage/
+ * (billing owner or settings.manage)/settings.manage -- unlike Security
+ * they aren't meant to be visible-but-disabled for everyone, since most
+ * users will never have anything to review or manage there.
  */
-const MENU_ITEMS: { label: string; icon: LucideIcon; href?: string }[] = [
+const EVERYDAY_ITEMS: { label: string; icon: LucideIcon; href?: string }[] = [
   { label: "Products", icon: Package, href: "products" },
-  { label: "Sales History", icon: History, href: "sales-history" },
   { label: "Security", icon: Lock, href: "security" },
   { label: "Notifications", icon: Bell },
   { label: "Help", icon: CircleHelp },
@@ -78,8 +78,7 @@ export default async function MorePage({
 
   const isBillingOwner = tenant?.billing_owner_profile_id === user?.id;
 
-  const menuItems = [
-    ...MENU_ITEMS,
+  const adminItems: { label: string; icon: LucideIcon; href?: string }[] = [
     ...(canManageApprovals ? [{ label: "Approvals", icon: ShieldCheck, href: "approvals" }] : []),
     ...(canManageRoles ? [{ label: "Roles", icon: UserCog, href: "roles" }] : []),
     ...(canCreateUsers || canEditUsers ? [{ label: "Users", icon: Users, href: "users" }] : []),
@@ -92,37 +91,16 @@ export default async function MorePage({
     <div className="flex flex-1 flex-col p-6">
       <h1 className="mb-4 text-xl font-semibold">More</h1>
 
-      <div className="divide-y rounded-lg border">
-        {menuItems.map(({ label, icon: Icon, href }) =>
-          href ? (
-            <Link
-              key={label}
-              href={`/t/${tenantSlug}/${href}`}
-              className="flex items-center justify-between px-4 py-3 text-sm hover:bg-muted"
-            >
-              <span className="flex items-center gap-3">
-                <Icon className="h-4 w-4" />
-                {label}
-              </span>
-              <ChevronRight className="h-4 w-4 text-muted-foreground" />
-            </Link>
-          ) : (
-            <div
-              key={label}
-              className="flex items-center justify-between px-4 py-3 text-sm text-muted-foreground"
-            >
-              <span className="flex items-center gap-3">
-                <Icon className="h-4 w-4" />
-                {label}
-              </span>
-              <span className="flex items-center gap-1 text-xs">
-                Coming soon
-                <ChevronRight className="h-4 w-4" />
-              </span>
-            </div>
-          )
-        )}
-      </div>
+      <MenuSection items={EVERYDAY_ITEMS} tenantSlug={tenantSlug} />
+
+      {adminItems.length > 0 && (
+        <>
+          <p className="mb-2 mt-6 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Team &amp; business
+          </p>
+          <MenuSection items={adminItems} tenantSlug={tenantSlug} />
+        </>
+      )}
 
       <form action={signOutAction} className="mt-6">
         <Button type="submit" variant="outline" className="w-full">
@@ -130,6 +108,48 @@ export default async function MorePage({
           Log out
         </Button>
       </form>
+    </div>
+  );
+}
+
+function MenuSection({
+  items,
+  tenantSlug,
+}: {
+  items: { label: string; icon: LucideIcon; href?: string }[];
+  tenantSlug: string;
+}) {
+  return (
+    <div className="divide-y rounded-lg border">
+      {items.map(({ label, icon: Icon, href }) =>
+        href ? (
+          <Link
+            key={label}
+            href={`/t/${tenantSlug}/${href}`}
+            className="flex items-center justify-between px-4 py-3 text-sm hover:bg-muted"
+          >
+            <span className="flex items-center gap-3">
+              <Icon className="h-4 w-4" />
+              {label}
+            </span>
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          </Link>
+        ) : (
+          <div
+            key={label}
+            className="flex items-center justify-between px-4 py-3 text-sm text-muted-foreground"
+          >
+            <span className="flex items-center gap-3">
+              <Icon className="h-4 w-4" />
+              {label}
+            </span>
+            <span className="flex items-center gap-1 text-xs">
+              Coming soon
+              <ChevronRight className="h-4 w-4" />
+            </span>
+          </div>
+        )
+      )}
     </div>
   );
 }

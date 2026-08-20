@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { InviteUserDialog } from "@/features/users/components/invite-user-dialog";
@@ -33,10 +32,13 @@ export function UserList({
   canCreate: boolean;
   canEdit: boolean;
 }) {
-  const router = useRouter();
   const [items, setItems] = useState(users);
   const [isPending, startTransition] = useTransition();
   const roleIdByName = new Map(roles.map((r) => [r.name, r.id]));
+
+  function onInvited(user: TenantUserSummary) {
+    setItems((prev) => [...prev, user]);
+  }
 
   function onToggleActive(user: TenantUserSummary) {
     const nextActive = user.status !== "active";
@@ -75,7 +77,7 @@ export function UserList({
   return (
     <div className="space-y-4">
       {canCreate && (
-        <InviteUserDialog tenantId={tenantId} tenantSlug={tenantSlug} roles={roles} onInvited={() => router.refresh()} />
+        <InviteUserDialog tenantId={tenantId} tenantSlug={tenantSlug} roles={roles} onInvited={onInvited} />
       )}
 
       <div className="divide-y rounded-lg border">

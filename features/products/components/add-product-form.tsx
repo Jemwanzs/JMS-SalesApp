@@ -21,14 +21,17 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import type { Product } from "@/services/ProductService";
 import { createProductSchema, type CreateProductInput } from "@/validations/product";
 
 export function AddProductForm({
   tenantId,
   tenantSlug,
+  onCreated,
 }: {
   tenantId: string;
   tenantSlug: string;
+  onCreated?: (product: Product) => void;
 }) {
   const [isPending, startTransition] = useTransition();
   // Pre-generated so an image can be uploaded to its final Storage path
@@ -63,6 +66,9 @@ export function AddProductForm({
       }
 
       if (result.success) {
+        if (result.product) {
+          onCreated?.(result.product);
+        }
         form.reset({ name: "", expectedPrice: "0", imageUrl: "" });
         setImage(null);
         setProductId(crypto.randomUUID());

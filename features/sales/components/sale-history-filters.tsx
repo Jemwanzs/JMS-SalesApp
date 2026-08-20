@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
  * SalesService.listRecent's own query, not filtered client-side out of an
  * already-truncated 50/100-row page.
  */
-export function SaleHistoryFilters() {
+export function SaleHistoryFilters({ todayDate }: { todayDate: string }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -26,6 +26,7 @@ export function SaleHistoryFilters() {
   const hasFilters = Boolean(
     searchParams.get("from") || searchParams.get("to") || searchParams.get("q"),
   );
+  const isToday = searchParams.get("from") === todayDate && searchParams.get("to") === todayDate;
 
   function apply(e: React.FormEvent) {
     e.preventDefault();
@@ -36,6 +37,15 @@ export function SaleHistoryFilters() {
 
     startTransition(() => {
       router.push(params.size ? `${pathname}?${params.toString()}` : pathname);
+    });
+  }
+
+  function goToday() {
+    setFrom(todayDate);
+    setTo(todayDate);
+    setQ("");
+    startTransition(() => {
+      router.push(`${pathname}?from=${todayDate}&to=${todayDate}`);
     });
   }
 
@@ -53,6 +63,17 @@ export function SaleHistoryFilters() {
       onSubmit={apply}
       className="mb-4 flex flex-col gap-3 rounded-lg border p-3"
     >
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          size="sm"
+          variant={isToday ? "default" : "outline"}
+          disabled={isPending}
+          onClick={goToday}
+        >
+          Today
+        </Button>
+      </div>
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1">
           <Label htmlFor="sh-from" className="text-xs">

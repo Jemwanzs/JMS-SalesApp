@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, FileText, Menu, ShoppingCart } from "lucide-react";
+import { BarChart3, FileText, History, Menu, ShoppingCart } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -17,15 +17,24 @@ interface NavItem {
 }
 
 /**
- * Persistent bottom nav (spec S12): Sales, Analytics, Reports, More.
- * "Users only see modules permitted by their assigned access rights" is
- * enforced here at the nav level, not just at the destination page --
- * defense in depth alongside the RLS/route-level checks each page will
- * apply. A Sales User (no reports.view grant by default, see
- * docs/06-roles-permissions.md) correctly never sees a Reports tab.
+ * Persistent bottom nav (spec S12, widened in the UX-efficiency pass):
+ * Sales, Sales History, Analytics, Reports, More. "Users only see
+ * modules permitted by their assigned access rights" is enforced here
+ * at the nav level, not just at the destination page -- defense in
+ * depth alongside the RLS/route-level checks each page will apply. A
+ * Sales User (no reports.view grant by default, see docs/06-roles-
+ * permissions.md) correctly never sees a Reports tab.
+ *
+ * Sales History was promoted from a More-menu-only entry to a full tab:
+ * it was the everyday destination with the worst click-depth in the
+ * original audit (2 taps to reach, no "today" shortcut once there) --
+ * `permission: null` matches its prior unconditional visibility in
+ * more/page.tsx's own MENU_ITEMS (RLS's sales.view_own/view_all split
+ * already governs what rows the page itself can show, same as before).
  */
 const NAV_ITEMS: NavItem[] = [
   { href: "sales", label: "Sales", icon: ShoppingCart, permission: "sales.view_own" },
+  { href: "sales-history", label: "History", icon: History, permission: null },
   { href: "analytics", label: "Analytics", icon: BarChart3, permission: "analytics.view_own" },
   { href: "reports", label: "Reports", icon: FileText, permission: "reports.view" },
   { href: "more", label: "More", icon: Menu, permission: null },

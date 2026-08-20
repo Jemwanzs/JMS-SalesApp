@@ -42,15 +42,15 @@ export default async function AnalyticsPage({
   const { preset, from, to } = await searchParams;
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const { data: tenant } = await supabase
-    .from("tenants")
-    .select("id, timezone")
-    .eq("slug", tenantSlug)
-    .single();
+  const [
+    {
+      data: { user },
+    },
+    { data: tenant },
+  ] = await Promise.all([
+    supabase.auth.getUser(),
+    supabase.from("tenants").select("id, timezone").eq("slug", tenantSlug).single(),
+  ]);
 
   const tenantId = tenant!.id;
   const timezone = tenant!.timezone;
@@ -77,20 +77,17 @@ export default async function AnalyticsPage({
   let productPerformance: Awaited<ReturnType<AnalyticsService["getProductPerformance"]>> = [];
   let insights: Awaited<ReturnType<InsightsService["listRecent"]>> = [];
 
+  // None of these three depend on each other's result -- fetch them
+  // together instead of one-at-a-time (same "independent, so parallel"
+  // reasoning as the permission checks above).
   try {
-    kpis = await analyticsService.getKpis(tenantId, range, today, perms, user!.id);
-    if (perms.products) {
-      productPerformance = await analyticsService.getProductPerformance(
-        tenantId,
-        range,
-        today,
-        perms,
-        user!.id
-      );
-    }
-    if (viewAll) {
-      insights = await new InsightsService(supabase).listRecent(tenantId);
-    }
+    [kpis, productPerformance, insights] = await Promise.all([
+      analyticsService.getKpis(tenantId, range, today, perms, user!.id),
+      perms.products
+        ? analyticsService.getProductPerformance(tenantId, range, today, perms, user!.id)
+        : Promise.resolve([]),
+      viewAll ? new InsightsService(supabase).listRecent(tenantId) : Promise.resolve([]),
+    ]);
   } catch (err) {
     errorMessage = err instanceof Error ? err.message : "Could not load analytics";
   }

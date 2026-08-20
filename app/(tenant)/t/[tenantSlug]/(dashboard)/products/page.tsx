@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
+import { BackLink } from "@/components/shared/back-link";
 
-import { AddProductForm } from "@/features/products/components/add-product-form";
 import { ProductManagementList } from "@/features/products/components/product-management-list";
 import { ProductService } from "@/services/ProductService";
 import { can } from "@/lib/permissions/can";
@@ -44,9 +44,8 @@ export default async function ProductsPage({
 
   return (
     <div className="flex flex-1 flex-col p-6">
+      <BackLink href={`/t/${tenantSlug}/more`} label="More" />
       <h1 className="mb-4 text-xl font-semibold">Products</h1>
-
-      <AddProductForm tenantId={tenantId} tenantSlug={tenantSlug} />
 
       <ProductManagementList
         products={products}
