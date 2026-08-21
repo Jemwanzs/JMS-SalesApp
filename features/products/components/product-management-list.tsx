@@ -142,59 +142,61 @@ export function ProductManagementList({
           {visibleItems.map((product) => {
             const index = items.findIndex((p) => p.id === product.id);
             return (
-        <div key={product.id} className="flex items-center gap-3 p-3">
-          {canEdit && !product.isSystem && (
-            <div className="flex shrink-0 flex-col">
-              <button
-                type="button"
-                aria-label="Move up"
-                disabled={index === 0 || isPending}
-                onClick={() => onMove(product.id, -1)}
-                className="text-muted-foreground hover:text-foreground disabled:opacity-30"
-              >
-                <ChevronUp className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                aria-label="Move down"
-                disabled={index === items.length - 1 || isPending}
-                onClick={() => onMove(product.id, 1)}
-                className="text-muted-foreground hover:text-foreground disabled:opacity-30"
-              >
-                <ChevronDown className="h-4 w-4" />
-              </button>
-            </div>
-          )}
-          <ProductPhotoThumbnail
-            imageUrl={product.imageUrl}
-            productName={product.name}
-            showName={product.showNameInPhotoView}
-            className="border"
-          />
+        <div key={product.id} className="flex flex-col gap-2 p-3">
+          <div className="flex items-center gap-3">
+            {canEdit && !product.isSystem && (
+              <div className="flex shrink-0 flex-col">
+                <button
+                  type="button"
+                  aria-label="Move up"
+                  disabled={index === 0 || isPending}
+                  onClick={() => onMove(product.id, -1)}
+                  className="text-muted-foreground hover:text-foreground disabled:opacity-30"
+                >
+                  <ChevronUp className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Move down"
+                  disabled={index === items.length - 1 || isPending}
+                  onClick={() => onMove(product.id, 1)}
+                  className="text-muted-foreground hover:text-foreground disabled:opacity-30"
+                >
+                  <ChevronDown className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+            <ProductPhotoThumbnail
+              imageUrl={product.imageUrl}
+              productName={product.name}
+              showName={product.showNameInPhotoView}
+              className="border"
+            />
 
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <p className="truncate text-sm font-medium">{product.name}</p>
-              {product.isSystem ? (
-                <Badge variant="secondary">System</Badge>
-              ) : (
-                <Badge variant={product.status === "active" ? "default" : "secondary"}>
-                  {product.status}
-                </Badge>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <p className="truncate text-sm font-medium">{product.name}</p>
+                {product.isSystem ? (
+                  <Badge variant="secondary">System</Badge>
+                ) : (
+                  <Badge variant={product.status === "active" ? "default" : "secondary"}>
+                    {product.status}
+                  </Badge>
+                )}
+              </div>
+              {product.expectedPrice !== null && (
+                <p className="truncate text-xs text-muted-foreground tabular-nums">
+                  {product.expectedPrice.toFixed(2)}
+                </p>
               )}
             </div>
-            {product.expectedPrice !== null && (
-              <p className="text-xs text-muted-foreground tabular-nums">
-                {product.expectedPrice.toFixed(2)}
-              </p>
-            )}
           </div>
 
           {product.isSystem ? (
-            <p className="shrink-0 text-xs text-muted-foreground">Always last, not editable</p>
+            <p className="text-right text-xs text-muted-foreground">Always last, not editable</p>
           ) : (
             (canEdit || canArchive) && (
-              <div className="flex shrink-0 gap-2">
+              <div className="flex flex-wrap justify-end gap-2">
                 {canEdit && (
                   <EditProductDialog
                     product={product}
