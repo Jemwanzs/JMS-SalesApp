@@ -2,20 +2,11 @@ import fs from "node:fs";
 import path from "node:path";
 import Image from "next/image";
 
-const CANDIDATE_FILES = [
-  "photo-1.jpg",
-  "photo-2.jpg",
-  "photo-3.jpg",
-  "photo-4.jpg",
-  "photo-5.jpg",
-  "photo-6.jpg",
-  "photo-1.png",
-  "photo-2.png",
-  "photo-3.png",
-  "photo-4.png",
-  "photo-5.png",
-  "photo-6.png",
-];
+const CANDIDATE_FILES = Array.from({ length: 6 }, (_, i) => i + 1).flatMap((n) => [
+  `photo-${n}.jpg`,
+  `photo-${n}.jpeg`,
+  `photo-${n}.png`,
+]);
 
 // Hand-authored scatter -- NOT Math.random() at render time, which
 // would render differently on the server vs. the client and break
@@ -48,8 +39,8 @@ const TILES = [
  * shows a broken image; falls back to a soft cream gradient when none
  * have been added yet, so the page still looks finished either way.
  *
- * Drop real photos in as public/login-bg/photo-1.jpg, photo-2.jpg, etc.
- * (jpg or png, any name from that fixed list) and they take over
+ * Drop real photos in as public/login-bg/photo-1.jpg, photo-2.jpeg, etc.
+ * (jpg/jpeg/png, any name from that fixed list) and they take over
  * automatically -- no code change needed.
  */
 export function AuthBackground() {
@@ -60,19 +51,19 @@ export function AuthBackground() {
     return (
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-br from-[#f5ead2] via-[#faf3e6] to-[#efe0c2] dark:from-[#241d15] dark:via-[#1b1611] dark:to-[#100d09]"
+        className="pointer-events-none absolute inset-0 bg-gradient-to-br from-[#f5ead2] via-[#faf3e6] to-[#efe0c2] dark:from-[#241d15] dark:via-[#1b1611] dark:to-[#100d09]"
       />
     );
   }
 
   return (
-    <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
+    <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
       {TILES.map((tile, i) => {
         const file = available[i % available.length];
         return (
           <div
             key={i}
-            className="absolute overflow-hidden rounded-2xl opacity-40 blur-[2px] saturate-75"
+            className="absolute overflow-hidden rounded-2xl opacity-80 blur-[1.5px] saturate-90"
             style={{
               top: tile.top,
               left: tile.left,
@@ -85,7 +76,7 @@ export function AuthBackground() {
           </div>
         );
       })}
-      <div className="absolute inset-0 bg-background/55" />
+      <div className="absolute inset-0 bg-background/25" />
     </div>
   );
 }
