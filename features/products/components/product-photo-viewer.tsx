@@ -83,7 +83,7 @@ function ProductPhotoViewer({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger render={children as React.ReactElement} />
-      <DialogContent className="sm:max-w-md" showCloseButton>
+      <DialogContent showCloseButton>
         <DialogTitle className="sr-only">{productName} photo</DialogTitle>
         <div className="overflow-hidden rounded-xl">
           <Image

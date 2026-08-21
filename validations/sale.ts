@@ -5,6 +5,10 @@ export const recordSaleSchema = z.object({
   actualAmount: z.coerce.number().positive("Enter an amount greater than 0"),
   quantity: z.union([z.coerce.number().positive(), z.literal("")]),
   notes: z.string().trim().max(500).optional(),
+  // Required only when productId resolves to the "Others" system product
+  // -- SalesService.recordSale is the one place that knows that, so it's
+  // optional at the schema level and enforced there instead.
+  manualProductName: z.string().trim().max(200).optional(),
   idempotencyKey: z.uuid(),
 });
 

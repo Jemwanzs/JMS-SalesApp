@@ -134,7 +134,7 @@ export function RoleFormDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger render={trigger} />
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{role ? `Edit ${role.name}` : "New role"}</DialogTitle>
           <DialogDescription>

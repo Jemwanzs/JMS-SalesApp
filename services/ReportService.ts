@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "@/types/database.types";
+import { cleanProductName, normalizeProductNameKey } from "@/lib/utils/normalize-product-name";
 
 /**
  * ReportService — scheduled report generation. Daily sales report + a
@@ -30,6 +31,18 @@ export interface DailyReportPayload {
   topProduct: { name: string; revenue: number } | null;
   topSalesPerson: { name: string; revenue: number } | null;
   vsPreviousDay: { previousGrossSales: number; changePercent: number | null } | null;
+}
+
+export interface DailySalesSummaryProduct {
+  name: string;
+  quantity: number | null;
+  amount: number;
+}
+
+export interface DailySalesSummary {
+  totalSalesAmount: number;
+  transactionCount: number;
+  products: DailySalesSummaryProduct[];
 }
 
 export interface CorrectionsReportEntry {
@@ -99,7 +112,7 @@ export class ReportService {
     const transactionCount = aggregates.transactionCount ?? 0;
     const averageSale = transactionCount > 0 ? grossSales / transactionCount : 0;
 
-    const topProduct = topBy(sales ?? [], (s) => s.product_name_snapshot);
+    const topProduct = topByNormalizedName(sales ?? []);
 
     let topSalesPerson: DailyReportPayload["topSalesPerson"] = null;
     const topRecorder = topBy(sales ?? [], (s) => s.recorded_by);
@@ -169,6 +182,59 @@ export class ReportService {
     }
 
     return report.id;
+  }
+
+  /**
+   * On-demand Daily Sales Summary for the poster/PDF feature (Product
+   * Enhancements #7) -- unlike generateDailyReport above, this reads
+   * `sales` directly for the given date rather than through business_
+   * days.aggregates (there can be more than one location/business day
+   * for a single tenant-wide date), isn't written to the `reports`
+   * table, and is triggered synchronously by a user action rather than
+   * the cron outbox. Always reflects whatever's in `sales` at the
+   * moment it's called, per the spec's own "latest sales records
+   * available at the time of generation" wording. Grouped by
+   * normalizeProductNameKey so "Others" entries (Product Enhancements
+   * #2, free-text names) with only case/whitespace differences roll up
+   * into one line instead of several -- same convention as
+   * topByNormalizedName above.
+   */
+  async getDailySalesSummary(tenantId: string, date: string): Promise<DailySalesSummary> {
+    const { data, error } = await this.supabase
+      .from("sales")
+      .select("product_name_snapshot, actual_amount, quantity")
+      .eq("tenant_id", tenantId)
+      .eq("sale_date", date)
+      .neq("status", "voided")
+      .neq("status", "corrected");
+
+    if (error) {
+      throw new Error(`ReportService.getDailySalesSummary: ${error.message}`);
+    }
+
+    const rows = data ?? [];
+    const totalSalesAmount = rows.reduce((sum, s) => sum + Number(s.actual_amount), 0);
+
+    const byName = new Map<string, { amount: number; quantity: number | null; displayName: string }>();
+    for (const row of rows) {
+      const key = normalizeProductNameKey(row.product_name_snapshot);
+      const entry = byName.get(key) ?? {
+        amount: 0,
+        quantity: null,
+        displayName: cleanProductName(row.product_name_snapshot),
+      };
+      entry.amount += Number(row.actual_amount);
+      if (row.quantity !== null) {
+        entry.quantity = (entry.quantity ?? 0) + Number(row.quantity);
+      }
+      byName.set(key, entry);
+    }
+
+    const products = [...byName.values()]
+      .map((p) => ({ name: p.displayName, quantity: p.quantity, amount: p.amount }))
+      .sort((a, b) => b.amount - a.amount);
+
+    return { totalSalesAmount, transactionCount: rows.length, products };
   }
 
   /**
@@ -358,6 +424,35 @@ function topBy<T>(
   for (const [key, revenue] of totals) {
     if (!best || revenue > best.revenue) {
       best = { key, revenue };
+    }
+  }
+  return best;
+}
+
+/**
+ * Same shape as topBy above, but groups product_name_snapshot values by
+ * normalizeProductNameKey first -- "Sugar" / "sugar " / "Sugar" (the
+ * free-text names the "Others" system product produces, Product
+ * Enhancements #2) would otherwise be counted as separate products here.
+ * `.key` on the result is still the display-facing name (the first
+ * cleaned spelling seen for that normalized group), not the raw
+ * lowercase grouping key.
+ */
+function topByNormalizedName(
+  rows: { product_name_snapshot: string; actual_amount: number }[]
+): { key: string; revenue: number } | null {
+  const totals = new Map<string, { revenue: number; displayName: string }>();
+  for (const row of rows) {
+    const key = normalizeProductNameKey(row.product_name_snapshot);
+    const entry = totals.get(key) ?? { revenue: 0, displayName: cleanProductName(row.product_name_snapshot) };
+    entry.revenue += Number(row.actual_amount);
+    totals.set(key, entry);
+  }
+
+  let best: { key: string; revenue: number } | null = null;
+  for (const { revenue, displayName } of totals.values()) {
+    if (!best || revenue > best.revenue) {
+      best = { key: displayName, revenue };
     }
   }
   return best;

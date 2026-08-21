@@ -259,6 +259,32 @@ export class UserService {
   }
 
   /**
+   * Changes only `profiles.full_name` -- email, role, permissions, and
+   * account identity are untouched (spec: Product Enhancements #3).
+   * Delegates to the update_teammate_name SECURITY DEFINER function
+   * (migration 0033) rather than a raw `.update()` -- a plain RLS UPDATE
+   * policy can restrict which ROWS this touches but not which COLUMNS,
+   * so a generic policy would let a Tenant Admin change a teammate's
+   * email/phone/etc, not just their name (a security-sweep finding; see
+   * migration 0033's header for what it replaced). The function
+   * re-derives "caller holds users.edit and shares an active tenant
+   * membership with an ACTIVE target" itself, so this can only ever
+   * touch someone who has actually accepted their invite and completed
+   * onboarding, matching the spec's "after the user has accepted the
+   * invitation" scoping for free.
+   */
+  async updateProfileName(targetProfileId: string, fullName: string): Promise<void> {
+    const { error } = await this.supabase.rpc("update_teammate_name", {
+      p_target_profile_id: targetProfileId,
+      p_full_name: fullName,
+    });
+
+    if (error) {
+      throw new Error(`UserService.updateProfileName: ${error.message}`);
+    }
+  }
+
+  /**
    * Full replace of this membership's role assignments, same "whole
    * desired state, not a diff" convention as RoleService.
    * setRolePermissions -- a member holds exactly one role in this UI

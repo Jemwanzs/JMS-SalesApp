@@ -30,17 +30,17 @@ function DailyReportCard({ periodStart, payload }: { periodStart: string; payloa
           <span className="font-medium tabular-nums">{payload.averageSale.toFixed(2)}</span>
         </div>
         {payload.topProduct && (
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Top Product</span>
-            <span className="font-medium">
+          <div className="flex justify-between gap-2">
+            <span className="shrink-0 text-muted-foreground">Top Product</span>
+            <span className="min-w-0 truncate font-medium">
               {payload.topProduct.name} ({payload.topProduct.revenue.toFixed(2)})
             </span>
           </div>
         )}
         {payload.topSalesPerson && (
-          <div className="flex justify-between">
-            <span className="text-muted-foreground">Top Sales Person</span>
-            <span className="font-medium">{payload.topSalesPerson.name}</span>
+          <div className="flex justify-between gap-2">
+            <span className="shrink-0 text-muted-foreground">Top Sales Person</span>
+            <span className="min-w-0 truncate font-medium">{payload.topSalesPerson.name}</span>
           </div>
         )}
         {payload.vsPreviousDay && (

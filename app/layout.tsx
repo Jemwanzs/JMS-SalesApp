@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist_Mono, Outfit } from "next/font/google";
 import "./globals.css";
 
+import { DisableContextMenu } from "@/components/shared/disable-context-menu";
 import { ServiceWorkerRegistration } from "@/components/shared/service-worker-registration";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -43,6 +44,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         {children}
         <Toaster />
         <ServiceWorkerRegistration />
+        <DisableContextMenu />
       </body>
     </html>
   );

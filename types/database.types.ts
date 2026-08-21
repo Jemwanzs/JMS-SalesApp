@@ -301,6 +301,7 @@ export interface Database {
           image_url: string | null;
           display_order: number;
           status: ProductStatus;
+          is_system: boolean;
           created_by: string | null;
           created_at: string;
           updated_at: string;
@@ -929,6 +930,10 @@ export interface Database {
           p_duration_minutes: number;
         };
         Returns: RequestTemporaryAccessResult;
+      };
+      update_teammate_name: {
+        Args: { p_target_profile_id: string; p_full_name: string };
+        Returns: void;
       };
     };
   };

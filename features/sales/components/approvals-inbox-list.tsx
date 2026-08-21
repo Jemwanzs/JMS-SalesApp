@@ -33,20 +33,22 @@ export function ApprovalsInboxList({
     <div className="divide-y rounded-lg border">
       {items.map((request) => (
         <div key={request.id} className="flex items-start justify-between gap-3 p-4">
-          <div>
+          <div className="min-w-0 flex-1">
             <p className="text-sm font-medium">{TYPE_LABEL[request.type] ?? request.type}</p>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground break-words">
               Reason: {String(request.requestPayload.reason ?? "—")}
             </p>
             <p className="text-xs text-muted-foreground">
               Requested {new Date(request.createdAt).toLocaleString()}
             </p>
           </div>
-          <ApprovalRowActions
-            approvalRequestId={request.id}
-            tenantSlug={tenantSlug}
-            onResolved={() => setItems((prev) => prev.filter((r) => r.id !== request.id))}
-          />
+          <div className="shrink-0">
+            <ApprovalRowActions
+              approvalRequestId={request.id}
+              tenantSlug={tenantSlug}
+              onResolved={() => setItems((prev) => prev.filter((r) => r.id !== request.id))}
+            />
+          </div>
         </div>
       ))}
     </div>

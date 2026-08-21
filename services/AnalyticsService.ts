@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "@/types/database.types";
+import { cleanProductName, normalizeProductNameKey } from "@/lib/utils/normalize-product-name";
 
 /**
  * AnalyticsService — KPI queries, product-performance ranking. See
@@ -22,6 +23,14 @@ import type { Database } from "@/types/database.types";
  * product_name_snapshot -- see docs/08-sales-engine.md's snapshot-vs-
  * current decision log. A renamed product's history still shows its old
  * name in Sales History, but rolls up under its current name here.
+ *
+ * Exception: the system "Others" product (Product Enhancements #2) is
+ * never grouped by product_id -- every "Others" sale carries the
+ * manually-typed name as its own product_name_snapshot, so those sales
+ * are broken back out and grouped by that name instead (normalized via
+ * normalizeProductNameKey so case/whitespace variants of the same typed
+ * name collapse together), each becoming its own synthetic entry. The
+ * literal "Others" catalog row itself never appears in any result here.
  *
  * Aggregation happens in application code after a bounded raw-row fetch,
  * the same pattern BusinessDayService.closeDay already uses for daily
@@ -101,7 +110,7 @@ export class AnalyticsService {
     // the pair to correctly net to zero.
     let query = this.supabase
       .from("sales")
-      .select("product_id, actual_amount, recorded_by")
+      .select("product_id, actual_amount, recorded_by, product_name_snapshot")
       .eq("tenant_id", tenantId)
       .gte("sale_date", range.from)
       .lte("sale_date", range.to)
@@ -117,6 +126,16 @@ export class AnalyticsService {
       throw new Error(`AnalyticsService: ${error.message}`);
     }
     return data ?? [];
+  }
+
+  private async getSystemProductId(tenantId: string): Promise<string | null> {
+    const { data } = await this.supabase
+      .from("products")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .eq("is_system", true)
+      .maybeSingle();
+    return data?.id ?? null;
   }
 
   async getKpis(
@@ -142,6 +161,19 @@ export class AnalyticsService {
 
     const amounts = sales.map((s) => Number(s.actual_amount));
     const totalSales = amounts.reduce((sum, a) => sum + a, 0);
+    const systemProductId = await this.getSystemProductId(tenantId);
+
+    // An "Others" sale doesn't count as the literal system product --
+    // each distinct (normalized) manually-typed name counts as its own
+    // product instead, same substitution getProductPerformance below
+    // makes for the ranked list.
+    const distinctProducts = new Set(
+      sales.map((s) =>
+        systemProductId && s.product_id === systemProductId
+          ? `other:${normalizeProductNameKey(s.product_name_snapshot)}`
+          : `id:${s.product_id}`
+      )
+    );
 
     return {
       totalSales,
@@ -149,7 +181,7 @@ export class AnalyticsService {
       averageSale: totalSales / sales.length,
       highestSale: Math.max(...amounts),
       lowestSale: Math.min(...amounts),
-      productsSoldCount: new Set(sales.map((s) => s.product_id)).size,
+      productsSoldCount: distinctProducts.size,
       activeSalesUsersCount: perms.allUsers
         ? new Set(sales.map((s) => s.recorded_by)).size
         : null,
@@ -171,8 +203,25 @@ export class AnalyticsService {
     const sales = await this.fetchSales(tenantId, range, timezoneToday, perms, currentUserId);
     if (sales.length === 0) return [];
 
+    const systemProductId = await this.getSystemProductId(tenantId);
+
     const byProduct = new Map<string, { revenue: number; count: number }>();
+    const byOthersName = new Map<string, { revenue: number; count: number; displayName: string }>();
+
     for (const sale of sales) {
+      if (systemProductId && sale.product_id === systemProductId) {
+        const key = normalizeProductNameKey(sale.product_name_snapshot);
+        const entry = byOthersName.get(key) ?? {
+          revenue: 0,
+          count: 0,
+          displayName: cleanProductName(sale.product_name_snapshot),
+        };
+        entry.revenue += Number(sale.actual_amount);
+        entry.count += 1;
+        byOthersName.set(key, entry);
+        continue;
+      }
+
       const entry = byProduct.get(sale.product_id) ?? { revenue: 0, count: 0 };
       entry.revenue += Number(sale.actual_amount);
       entry.count += 1;
@@ -180,11 +229,14 @@ export class AnalyticsService {
     }
 
     const productIds = [...byProduct.keys()];
-    const { data: products, error } = await this.supabase
-      .from("products")
-      .select("id, name, image_url, status")
-      .eq("tenant_id", tenantId)
-      .in("id", productIds);
+    const { data: products, error } =
+      productIds.length > 0
+        ? await this.supabase
+            .from("products")
+            .select("id, name, image_url, status")
+            .eq("tenant_id", tenantId)
+            .in("id", productIds)
+        : { data: [], error: null };
 
     if (error) {
       throw new Error(`AnalyticsService.getProductPerformance: ${error.message}`);
@@ -192,18 +244,31 @@ export class AnalyticsService {
 
     const productById = new Map((products ?? []).map((p) => [p.id, p]));
 
-    return [...byProduct.entries()]
-      .map(([productId, agg]) => {
-        const product = productById.get(productId);
-        return {
-          productId,
-          name: product?.name ?? "(deleted product)",
-          imageUrl: product?.image_url ?? null,
-          status: product?.status ?? "archived",
-          totalRevenue: agg.revenue,
-          saleCount: agg.count,
-        };
-      })
+    const catalogItems: ProductPerformanceItem[] = [...byProduct.entries()].map(([productId, agg]) => {
+      const product = productById.get(productId);
+      return {
+        productId,
+        name: product?.name ?? "(deleted product)",
+        imageUrl: product?.image_url ?? null,
+        status: product?.status ?? "archived",
+        totalRevenue: agg.revenue,
+        saleCount: agg.count,
+      };
+    });
+
+    // Synthetic entries -- not real catalog rows, so productId/status are
+    // placeholders (unused by the one consumer, ProductPerformanceList,
+    // beyond productId as a React key).
+    const othersItems: ProductPerformanceItem[] = [...byOthersName.entries()].map(([key, agg]) => ({
+      productId: `other:${key}`,
+      name: agg.displayName,
+      imageUrl: null,
+      status: "active",
+      totalRevenue: agg.revenue,
+      saleCount: agg.count,
+    }));
+
+    return [...catalogItems, ...othersItems]
       .sort((a, b) => b.totalRevenue - a.totalRevenue)
       .slice(0, limit);
   }
@@ -221,7 +286,9 @@ export class AnalyticsService {
     windowRange: DateRangeInput,
     todayDate: string
   ): Promise<{ windowRevenue: Map<string, number>; todayRevenue: Map<string, number> }> {
-    const { data, error } = await this.supabase
+    const systemProductId = await this.getSystemProductId(tenantId);
+
+    let query = this.supabase
       .from("sales")
       .select("product_id, actual_amount, sale_date")
       .eq("tenant_id", tenantId)
@@ -229,6 +296,16 @@ export class AnalyticsService {
       .lte("sale_date", windowRange.to)
       .neq("status", "voided")
       .neq("status", "corrected");
+
+    // The "Others" system product is never a rankable catalog product
+    // (Product Enhancements #2) -- exclude it here so it never earns a
+    // Gold/Silver/Bronze tier or a "revenue today" line on the Record
+    // Sale grid (both driven off this map, see rankProducts/ProductGrid).
+    if (systemProductId) {
+      query = query.neq("product_id", systemProductId);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       throw new Error(`AnalyticsService.getProductRevenueTotals: ${error.message}`);

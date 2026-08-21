@@ -29,6 +29,7 @@ export async function recordSaleAction(
     actualAmount: formData.get("actualAmount"),
     quantity: formData.get("quantity"),
     notes: formData.get("notes"),
+    manualProductName: formData.get("manualProductName") || undefined,
     idempotencyKey: formData.get("idempotencyKey"),
   });
 
@@ -58,6 +59,7 @@ export async function recordSaleAction(
       actualAmount: parsed.data.actualAmount,
       quantity: parsed.data.quantity === "" ? null : parsed.data.quantity,
       notes: parsed.data.notes || null,
+      manualProductName: parsed.data.manualProductName || null,
       recordedBy: user.id,
       idempotencyKey: parsed.data.idempotencyKey,
     });

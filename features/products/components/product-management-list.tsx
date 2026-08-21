@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp, Search } from "lucide-react";
 import { toast } from "sonner";
 
 import { archiveProductAction } from "@/features/products/actions/archive-product";
@@ -12,6 +12,7 @@ import { EditProductDialog } from "@/features/products/components/edit-product-d
 import { ProductPhotoThumbnail } from "@/features/products/components/product-photo-viewer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import type { Product } from "@/services/ProductService";
 
 /**
@@ -41,10 +42,16 @@ export function ProductManagementList({
 }) {
   const [items, setItems] = useState(products);
   const [isPending, startTransition] = useTransition();
+  const [search, setSearch] = useState("");
 
-  function onMove(index: number, direction: -1 | 1) {
+  const visibleItems = search.trim()
+    ? items.filter((p) => p.name.toLowerCase().includes(search.trim().toLowerCase()))
+    : items;
+
+  function onMove(productId: string, direction: -1 | 1) {
+    const index = items.findIndex((p) => p.id === productId);
     const targetIndex = index + direction;
-    if (targetIndex < 0 || targetIndex >= items.length) return;
+    if (index === -1 || targetIndex < 0 || targetIndex >= items.length) return;
 
     const reordered = [...items];
     [reordered[index], reordered[targetIndex]] = [reordered[targetIndex], reordered[index]];
@@ -112,21 +119,37 @@ export function ProductManagementList({
     <>
       <AddProductForm tenantId={tenantId} tenantSlug={tenantSlug} onCreated={onCreated} />
 
+      {items.length > 0 && (
+        <div className="relative mt-4">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search products"
+            className="pl-9"
+          />
+        </div>
+      )}
+
       {items.length === 0 ? (
         <p className="mt-6 text-sm text-muted-foreground">
           No products yet. Add your first one above.
         </p>
+      ) : visibleItems.length === 0 ? (
+        <p className="mt-6 text-sm text-muted-foreground">No products match &quot;{search}&quot;.</p>
       ) : (
         <div className="mt-6 divide-y rounded-lg border">
-          {items.map((product, index) => (
+          {visibleItems.map((product) => {
+            const index = items.findIndex((p) => p.id === product.id);
+            return (
         <div key={product.id} className="flex items-center gap-3 p-3">
-          {canEdit && (
+          {canEdit && !product.isSystem && (
             <div className="flex shrink-0 flex-col">
               <button
                 type="button"
                 aria-label="Move up"
                 disabled={index === 0 || isPending}
-                onClick={() => onMove(index, -1)}
+                onClick={() => onMove(product.id, -1)}
                 className="text-muted-foreground hover:text-foreground disabled:opacity-30"
               >
                 <ChevronUp className="h-4 w-4" />
@@ -135,7 +158,7 @@ export function ProductManagementList({
                 type="button"
                 aria-label="Move down"
                 disabled={index === items.length - 1 || isPending}
-                onClick={() => onMove(index, 1)}
+                onClick={() => onMove(product.id, 1)}
                 className="text-muted-foreground hover:text-foreground disabled:opacity-30"
               >
                 <ChevronDown className="h-4 w-4" />
@@ -152,9 +175,13 @@ export function ProductManagementList({
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <p className="truncate text-sm font-medium">{product.name}</p>
-              <Badge variant={product.status === "active" ? "default" : "secondary"}>
-                {product.status}
-              </Badge>
+              {product.isSystem ? (
+                <Badge variant="secondary">System</Badge>
+              ) : (
+                <Badge variant={product.status === "active" ? "default" : "secondary"}>
+                  {product.status}
+                </Badge>
+              )}
             </div>
             {product.expectedPrice !== null && (
               <p className="text-xs text-muted-foreground tabular-nums">
@@ -163,42 +190,47 @@ export function ProductManagementList({
             )}
           </div>
 
-          {(canEdit || canArchive) && (
-            <div className="flex shrink-0 gap-2">
-              {canEdit && (
-                <EditProductDialog
-                  product={product}
-                  tenantId={tenantId}
-                  tenantSlug={tenantSlug}
-                  canDelete={canArchive}
-                  onUpdated={onUpdated}
-                  onDeleted={onDeleted}
-                />
-              )}
-              {canEdit && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={isPending}
-                  onClick={() => onToggleStatus(product)}
-                >
-                  {product.status === "active" ? "Deactivate" : "Activate"}
-                </Button>
-              )}
-              {canArchive && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={isPending}
-                  onClick={() => onArchive(product)}
-                >
-                  Archive
-                </Button>
-              )}
-            </div>
+          {product.isSystem ? (
+            <p className="shrink-0 text-xs text-muted-foreground">Always last, not editable</p>
+          ) : (
+            (canEdit || canArchive) && (
+              <div className="flex shrink-0 gap-2">
+                {canEdit && (
+                  <EditProductDialog
+                    product={product}
+                    tenantId={tenantId}
+                    tenantSlug={tenantSlug}
+                    canDelete={canArchive}
+                    onUpdated={onUpdated}
+                    onDeleted={onDeleted}
+                  />
+                )}
+                {canEdit && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isPending}
+                    onClick={() => onToggleStatus(product)}
+                  >
+                    {product.status === "active" ? "Deactivate" : "Activate"}
+                  </Button>
+                )}
+                {canArchive && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={isPending}
+                    onClick={() => onArchive(product)}
+                  >
+                    Archive
+                  </Button>
+                )}
+              </div>
+            )
           )}
         </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </>

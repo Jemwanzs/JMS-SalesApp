@@ -82,13 +82,13 @@ export function PlanPickerDialog({
       }}
     >
       <DialogTrigger render={<Button />}>{triggerLabel}</DialogTrigger>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Choose your plan</DialogTitle>
           <DialogDescription>Pick the access period that works for you. You&rsquo;re only charged once you confirm.</DialogDescription>
         </DialogHeader>
 
-        <div className="grid max-h-[60vh] grid-cols-1 gap-3 overflow-y-auto p-1 sm:grid-cols-2">
+        <div className="grid max-h-[60vh] grid-cols-1 gap-3 overflow-y-auto p-1">
           {plans.map((plan) => {
             const perDay = plan.price / plan.durationDays;
             const selected = selectedPlanId === plan.id;

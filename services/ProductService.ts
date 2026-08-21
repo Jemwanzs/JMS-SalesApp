@@ -3,8 +3,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, ProductStatus } from "@/types/database.types";
 
 const PRODUCT_SELECT =
-  "id, name, description, expected_price, show_expected_price, show_name_in_photo_view, image_url, display_order, status";
+  "id, name, description, expected_price, show_expected_price, show_name_in_photo_view, image_url, display_order, status, is_system";
 const IMAGE_BUCKET = "product-images";
+export const OTHERS_PRODUCT_NAME = "Others";
 
 /**
  * ProductService — CRUD, active/inactive/archived lifecycle (never
@@ -54,6 +55,7 @@ export interface Product {
   imageUrl: string | null;
   displayOrder: number;
   status: ProductStatus;
+  isSystem: boolean;
 }
 
 export class ProductService {
@@ -102,10 +104,66 @@ export class ProductService {
       }
     }
 
+    await this.ensureOthersProduct(tenantId, input.createdBy);
+
     return toProduct(data);
   }
 
+  /**
+   * The system "Others" product (spec: Product Enhancements #2) --
+   * ensured (not just created once) alongside every real product create
+   * so it's always present from the tenant's first product onward,
+   * idempotent via products_one_system_per_tenant (migration 0032):
+   * a concurrent call racing this insert just loses the unique-index
+   * collision harmlessly, since some call always wins and the "does one
+   * already exist" check above is what every caller actually relies on.
+   */
+  private async ensureOthersProduct(tenantId: string, createdBy: string): Promise<void> {
+    const { data: existing } = await this.supabase
+      .from("products")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .eq("is_system", true)
+      .maybeSingle();
+
+    if (existing) {
+      return;
+    }
+
+    const { error } = await this.supabase.from("products").insert({
+      tenant_id: tenantId,
+      name: OTHERS_PRODUCT_NAME,
+      is_system: true,
+      status: "active",
+      show_expected_price: false,
+      show_name_in_photo_view: true,
+      display_order: 0,
+      created_by: createdBy,
+    });
+
+    if (error && error.code !== "23505") {
+      throw new Error(`ProductService.ensureOthersProduct: ${error.message}`);
+    }
+  }
+
+  /** "Others" (is_system) can't be edited, deactivated, archived, or
+   * deleted -- see products_one_system_per_tenant's header comment. */
+  private async assertNotSystem(tenantId: string, productId: string): Promise<void> {
+    const { data } = await this.supabase
+      .from("products")
+      .select("is_system")
+      .eq("tenant_id", tenantId)
+      .eq("id", productId)
+      .maybeSingle();
+
+    if (data?.is_system) {
+      throw new Error('The "Others" product can\'t be edited or deleted.');
+    }
+  }
+
   async update(tenantId: string, productId: string, input: UpdateProductInput): Promise<Product> {
+    await this.assertNotSystem(tenantId, productId);
+
     const { data, error } = await this.supabase
       .from("products")
       .update({
@@ -127,12 +185,16 @@ export class ProductService {
     return toProduct(data);
   }
 
+  /** Ordered `is_system` last (spec: "Others" always appears after every
+   * configured product on Record Sale), then by display_order within
+   * each group. */
   async listActive(tenantId: string): Promise<Product[]> {
     const { data, error } = await this.supabase
       .from("products")
       .select(PRODUCT_SELECT)
       .eq("tenant_id", tenantId)
       .eq("status", "active")
+      .order("is_system", { ascending: true })
       .order("display_order", { ascending: true });
 
     if (error) {
@@ -150,6 +212,7 @@ export class ProductService {
       .select(PRODUCT_SELECT)
       .eq("tenant_id", tenantId)
       .in("status", ["active", "inactive"])
+      .order("is_system", { ascending: true })
       .order("display_order", { ascending: true });
 
     if (error) {
@@ -164,6 +227,8 @@ export class ProductService {
     productId: string,
     status: Extract<ProductStatus, "active" | "inactive">
   ): Promise<void> {
+    await this.assertNotSystem(tenantId, productId);
+
     const { error } = await this.supabase
       .from("products")
       .update({ status })
@@ -176,6 +241,8 @@ export class ProductService {
   }
 
   async archive(tenantId: string, productId: string): Promise<void> {
+    await this.assertNotSystem(tenantId, productId);
+
     const { error } = await this.supabase
       .from("products")
       .update({ status: "archived" })
@@ -196,6 +263,8 @@ export class ProductService {
    * orphaning historical sales data.
    */
   async delete(tenantId: string, productId: string): Promise<void> {
+    await this.assertNotSystem(tenantId, productId);
+
     const { data: existingSale, error: checkError } = await this.supabase
       .from("sales")
       .select("id")
@@ -232,6 +301,7 @@ export class ProductService {
     storagePath: string,
     publicUrl: string
   ): Promise<void> {
+    await this.assertNotSystem(tenantId, productId);
     await this.deletePrimaryImageRow(tenantId, productId);
 
     const { error: imageError } = await this.supabase.from("product_images").insert({
@@ -257,6 +327,7 @@ export class ProductService {
   }
 
   async removeImage(tenantId: string, productId: string): Promise<void> {
+    await this.assertNotSystem(tenantId, productId);
     await this.deletePrimaryImageRow(tenantId, productId);
 
     const { error } = await this.supabase
@@ -338,6 +409,7 @@ function toProduct(row: {
   image_url: string | null;
   display_order: number;
   status: ProductStatus;
+  is_system: boolean;
 }): Product {
   return {
     id: row.id,
@@ -349,5 +421,6 @@ function toProduct(row: {
     imageUrl: row.image_url,
     displayOrder: row.display_order,
     status: row.status,
+    isSystem: row.is_system,
   };
 }

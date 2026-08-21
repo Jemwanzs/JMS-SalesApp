@@ -204,8 +204,8 @@ export function SaleHistoryList({
           return (
             <div key={sale.id} className="flex flex-col gap-2 p-4">
               <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-medium">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">
                     {sale.productNameSnapshot}
                   </p>
                   <p className="text-xs text-muted-foreground">
@@ -216,7 +216,7 @@ export function SaleHistoryList({
                     })}
                   </p>
                 </div>
-                <div className="text-right">
+                <div className="shrink-0 text-right">
                   <p className="text-sm font-medium tabular-nums">
                     {sale.actualAmount.toFixed(2)}
                   </p>

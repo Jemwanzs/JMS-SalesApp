@@ -62,6 +62,12 @@ import type { Database } from "@/types/database.types";
  *     (getWishMode/listUpcoming) and the tenant's own settings.manage
  *     -gated setWishMode call go through the ordinary RLS-respecting
  *     client instead — see AnniversaryService's own header comment
+ *   - features/sales/actions/get-daily-sales-report.ts (Product
+ *     Enhancements #7's Daily Report/poster) — a business-wide summary
+ *     ("Business/Tenant Name", "Tenant Admin Email"), not a personal
+ *     one, so it must include every sale for the day regardless of
+ *     whether the caller holds sales.view_all or only sales.view_own;
+ *     gated by an explicit reports.view assertCan() check first
  *   - ImportService — confirming a sales_history import writes across
  *     import_rows + business_days + sales as one consistent bulk
  *     operation, and a historical business day is correctly 'closed'

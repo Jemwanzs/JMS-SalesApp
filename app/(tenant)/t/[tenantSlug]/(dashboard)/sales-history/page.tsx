@@ -26,6 +26,13 @@ export const metadata: Metadata = {
  * stays capped at 100 rows same as before; a filtered query raises the
  * cap to 500 since a narrowed date range/search is exactly when someone
  * wants more than the last 100 rows (e.g. exporting a month's CSV).
+ *
+ * Defaults to today's sales (spec: Product Enhancements #5) when the
+ * caller hasn't touched the date filter at all -- neither `from` nor
+ * `to` present in the URL. Setting either one (via SaleHistoryFilters'
+ * Apply/Today/Clear-then-Apply flow) is treated as an explicit range
+ * from then on, so a genuine "show me everything" or a custom range
+ * still works exactly as it did before this default was added.
  */
 export default async function SalesHistoryPage({
   params,
@@ -51,12 +58,13 @@ export default async function SalesHistoryPage({
   const tenantId = tenant!.id;
   const today = todayString(tenant!.timezone);
   const hasFilters = Boolean(from || to || q);
+  const hasDateFilter = Boolean(from || to);
 
   const [sales, canVoid, canReverse, canEditWindow, canCorrectHistorical, requiresDownloadPasscode] = await Promise.all([
     new SalesService(supabase).listRecent(tenantId, {
       limit: hasFilters ? 500 : 100,
-      dateFrom: from,
-      dateTo: to,
+      dateFrom: hasDateFilter ? from : today,
+      dateTo: hasDateFilter ? to : today,
       search: q,
     }),
     can("sales.void", { tenantId }),
@@ -69,7 +77,7 @@ export default async function SalesHistoryPage({
   return (
     <div className="flex flex-1 flex-col p-6">
       <h1 className="mb-4 text-xl font-semibold">Sales History</h1>
-      <SaleHistoryFilters todayDate={today} />
+      <SaleHistoryFilters tenantId={tenantId} todayDate={today} />
       <SaleHistoryList
         sales={sales}
         tenantId={tenantId}

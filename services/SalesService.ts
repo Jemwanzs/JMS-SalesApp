@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database, SaleStatus, VoidOrCorrectResult } from "@/types/database.types";
+import { cleanProductName } from "@/lib/utils/normalize-product-name";
 
 /**
  * SalesService — the highest-risk correctness surface in the app. Owns:
@@ -35,6 +36,12 @@ export interface RecordSaleInput {
   actualAmount: number;
   quantity?: number | null;
   notes?: string | null;
+  /** Required when productId resolves to the "Others" system product
+   * (spec: Product Enhancements #2) -- becomes the sale's own
+   * product_name_snapshot instead of the literal "Others" label, so
+   * reporting/analytics treat whatever the agent typed as the real
+   * product. Ignored for an ordinary catalog product. */
+  manualProductName?: string | null;
   recordedBy: string;
   idempotencyKey: string;
 }
@@ -85,13 +92,18 @@ export class SalesService {
 
     const { data: product, error: productError } = await this.supabase
       .from("products")
-      .select("name, image_url, expected_price")
+      .select("name, image_url, expected_price, is_system")
       .eq("id", input.productId)
       .eq("tenant_id", input.tenantId)
       .single();
 
     if (productError || !product) {
       throw new Error("SalesService.recordSale: product not found");
+    }
+
+    const manualName = input.manualProductName ? cleanProductName(input.manualProductName) : "";
+    if (product.is_system && !manualName) {
+      throw new Error("Enter a product name for this sale.");
     }
 
     const { data: inserted, error: insertError } = await this.supabase
@@ -101,7 +113,7 @@ export class SalesService {
         location_id: input.locationId,
         business_day_id: input.businessDayId,
         product_id: input.productId,
-        product_name_snapshot: product.name,
+        product_name_snapshot: product.is_system ? manualName : product.name,
         product_image_snapshot: product.image_url,
         expected_price_snapshot: product.expected_price,
         actual_amount: input.actualAmount,

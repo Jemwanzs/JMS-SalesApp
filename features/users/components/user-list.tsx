@@ -1,13 +1,16 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { Pencil } from "lucide-react";
 import { toast } from "sonner";
 
 import { InviteUserDialog } from "@/features/users/components/invite-user-dialog";
 import { setUserActiveAction } from "@/features/users/actions/set-user-active";
 import { setUserRoleAction } from "@/features/users/actions/set-user-role";
+import { updateUserNameAction } from "@/features/users/actions/update-user-name";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { TenantUserSummary } from "@/services/UserService";
 
@@ -34,7 +37,34 @@ export function UserList({
 }) {
   const [items, setItems] = useState(users);
   const [isPending, startTransition] = useTransition();
+  const [editingMembershipId, setEditingMembershipId] = useState<string | null>(null);
+  const [nameDraft, setNameDraft] = useState("");
   const roleIdByName = new Map(roles.map((r) => [r.name, r.id]));
+
+  function startEditingName(user: TenantUserSummary) {
+    setEditingMembershipId(user.membershipId);
+    setNameDraft(user.fullName ?? "");
+  }
+
+  function saveName(user: TenantUserSummary) {
+    const trimmed = nameDraft.trim();
+    if (!trimmed) {
+      toast.error("Enter a name");
+      return;
+    }
+    startTransition(async () => {
+      try {
+        await updateUserNameAction(tenantId, tenantSlug, user.profileId, trimmed);
+        setItems((prev) =>
+          prev.map((u) => (u.membershipId === user.membershipId ? { ...u, fullName: trimmed } : u))
+        );
+        setEditingMembershipId(null);
+        toast.success("Name updated");
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Could not update name");
+      }
+    });
+  }
 
   function onInvited(user: TenantUserSummary) {
     setItems((prev) => [...prev, user]);
@@ -84,11 +114,47 @@ export function UserList({
         {items.map((user) => (
           <div key={user.membershipId} className="flex items-center gap-3 p-3">
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <p className="truncate text-sm font-medium">{user.fullName ?? user.email}</p>
-                {user.isCurrentUser && <Badge variant="secondary">You</Badge>}
-                <Badge variant={STATUS_VARIANT[user.status]}>{user.status}</Badge>
-              </div>
+              {editingMembershipId === user.membershipId ? (
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={nameDraft}
+                    onChange={(e) => setNameDraft(e.target.value)}
+                    autoFocus
+                    className="h-8"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") saveName(user);
+                      if (e.key === "Escape") setEditingMembershipId(null);
+                    }}
+                  />
+                  <Button size="sm" disabled={isPending} onClick={() => saveName(user)}>
+                    Save
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={isPending}
+                    onClick={() => setEditingMembershipId(null)}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <p className="truncate text-sm font-medium">{user.fullName ?? user.email}</p>
+                  {user.isCurrentUser && <Badge variant="secondary">You</Badge>}
+                  <Badge variant={STATUS_VARIANT[user.status]}>{user.status}</Badge>
+                  {canEdit && !user.isCurrentUser && user.status === "active" && (
+                    <button
+                      type="button"
+                      aria-label="Edit name"
+                      onClick={() => startEditingName(user)}
+                      className="shrink-0 text-muted-foreground hover:text-foreground"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              )}
               <p className="truncate text-xs text-muted-foreground">{user.email}</p>
             </div>
 

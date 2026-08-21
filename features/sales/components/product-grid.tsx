@@ -4,9 +4,12 @@ import { useState } from "react";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
 
+import { Search } from "lucide-react";
+
 import { RecordSaleDialog } from "@/features/sales/components/record-sale-dialog";
 import { ProductPhotoThumbnail } from "@/features/products/components/product-photo-viewer";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import type { ProductTier } from "@/lib/utils/product-ranking";
 import type { Product } from "@/services/ProductService";
 import type { RecordSaleState } from "@/features/sales/actions/record-sale";
@@ -61,6 +64,11 @@ export function ProductGrid({
   businessDayId: string;
 }) {
   const [selected, setSelected] = useState<Product | null>(null);
+  const [search, setSearch] = useState("");
+
+  const visibleProducts = search.trim()
+    ? products.filter((p) => p.name.toLowerCase().includes(search.trim().toLowerCase()))
+    : products;
 
   function onRecorded(sale: NonNullable<RecordSaleState["sale"]>) {
     setSelected(null);
@@ -83,8 +91,22 @@ export function ProductGrid({
 
   return (
     <>
+      <div className="relative p-3">
+        <Search className="pointer-events-none absolute left-6 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search products"
+          className="pl-9"
+        />
+      </div>
+
+      {visibleProducts.length === 0 && (
+        <p className="p-8 text-center text-sm text-muted-foreground">No products match &quot;{search}&quot;.</p>
+      )}
+
       <div className="divide-y">
-        {products.map((product) => (
+        {visibleProducts.map((product) => (
           <div
             key={product.id}
             role="button"

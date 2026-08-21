@@ -39,6 +39,7 @@ export function RecordSaleDialog({
   const [amount, setAmount] = useState("");
   const [quantity, setQuantity] = useState("1");
   const [notes, setNotes] = useState("");
+  const [manualProductName, setManualProductName] = useState("");
   const [error, setError] = useState<string | null>(null);
   // Generated once per product selection (not per submit attempt) so a
   // double-tap, timeout retry, or refresh all carry the same key -- see
@@ -50,6 +51,7 @@ export function RecordSaleDialog({
       setAmount(product.expectedPrice ? String(product.expectedPrice) : "");
       setQuantity("1");
       setNotes("");
+      setManualProductName("");
       setError(null);
       setIdempotencyKey(crypto.randomUUID());
     }
@@ -58,11 +60,16 @@ export function RecordSaleDialog({
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!product) return;
+    if (product.isSystem && !manualProductName.trim()) {
+      setError("Enter a product name for this sale.");
+      return;
+    }
     setError(null);
 
     const formData = new FormData();
     formData.set("productId", product.id);
     formData.set("actualAmount", amount);
+    formData.set("manualProductName", product.isSystem ? manualProductName.trim() : "");
     // Quantity is always sent, forced to "" when the field is hidden --
     // recordSaleSchema already treats "" as "not provided" (validations/
     // sale.ts), but FormData.get() on a key that was never set() returns
@@ -114,6 +121,20 @@ export function RecordSaleDialog({
             </DialogHeader>
 
             <form onSubmit={onSubmit} className="space-y-4">
+              {product.isSystem && (
+                <div className="space-y-2">
+                  <Label htmlFor="manualProductName">Enter Product Name</Label>
+                  <Input
+                    id="manualProductName"
+                    value={manualProductName}
+                    onChange={(e) => setManualProductName(e.target.value)}
+                    placeholder="What did the customer buy?"
+                    autoFocus
+                    required
+                  />
+                </div>
+              )}
+
               <div className="space-y-2">
                 <Label htmlFor="amount">Amount sold</Label>
                 <Input
@@ -123,7 +144,7 @@ export function RecordSaleDialog({
                   step="0.01"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  autoFocus
+                  autoFocus={!product.isSystem}
                   required
                 />
               </div>
@@ -154,7 +175,11 @@ export function RecordSaleDialog({
               {error && <p className="text-sm text-destructive">{error}</p>}
 
               <DialogFooter>
-                <Button type="submit" disabled={isPending} className="w-full">
+                <Button
+                  type="submit"
+                  disabled={isPending || (product.isSystem && !manualProductName.trim())}
+                  className="w-full"
+                >
                   {isPending ? "Recording..." : "Record Sale"}
                 </Button>
               </DialogFooter>

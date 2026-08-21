@@ -154,9 +154,23 @@ export class InsightsService {
   }) {
     const { from, to } = weekBounds(day.business_date);
 
+    // The system "Others" product (Product Enhancements #2) isn't a real
+    // single product -- lumping every manually-typed sale under it would
+    // make it a spurious "top product" regardless of what was actually
+    // sold, so it's excluded here rather than eligible to trigger this
+    // rule (unlike AnalyticsService.getProductPerformance, this rule has
+    // no per-name breakout to fall back to -- a false "X% concentrated"
+    // warning naming "Others" would be actively misleading).
+    const { data: systemProduct } = await this.supabase
+      .from("products")
+      .select("id")
+      .eq("tenant_id", day.tenant_id)
+      .eq("is_system", true)
+      .maybeSingle();
+
     // Excludes 'corrected' too -- see AnalyticsService.getAnalytics's
     // own comment on this exact filter.
-    const { data: sales, error } = await this.supabase
+    let query = this.supabase
       .from("sales")
       .select("product_id, actual_amount")
       .eq("tenant_id", day.tenant_id)
@@ -165,6 +179,12 @@ export class InsightsService {
       .lte("sale_date", to)
       .neq("status", "voided")
       .neq("status", "corrected");
+
+    if (systemProduct) {
+      query = query.neq("product_id", systemProduct.id);
+    }
+
+    const { data: sales, error } = await query;
 
     if (error) {
       throw new Error(`InsightsService.productConcentration: ${error.message}`);

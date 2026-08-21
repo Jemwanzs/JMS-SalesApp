@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 
+import { DailyReportDialog } from "@/features/sales/components/daily-report-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,9 +12,10 @@ import { Label } from "@/components/ui/label";
  * Sets/clears sale-history's date-range + search filters as URL search
  * params (`from`/`to`/`q`) so the filtered list is server-rendered from
  * SalesService.listRecent's own query, not filtered client-side out of an
- * already-truncated 50/100-row page.
+ * already-truncated 50/100-row page. Also hosts the Daily Report trigger
+ * (Product Enhancements #7) -- "near the date/filter area" per spec.
  */
-export function SaleHistoryFilters({ todayDate }: { todayDate: string }) {
+export function SaleHistoryFilters({ tenantId, todayDate }: { tenantId: string; todayDate: string }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -26,7 +28,12 @@ export function SaleHistoryFilters({ todayDate }: { todayDate: string }) {
   const hasFilters = Boolean(
     searchParams.get("from") || searchParams.get("to") || searchParams.get("q"),
   );
-  const isToday = searchParams.get("from") === todayDate && searchParams.get("to") === todayDate;
+  const hasDateFilter = Boolean(searchParams.get("from") || searchParams.get("to"));
+  // No date filter at all means the page already defaulted to today
+  // (see sales-history/page.tsx) -- the button should read as active in
+  // that case too, not just when ?from=&to= are literally today's date.
+  const isToday =
+    !hasDateFilter || (searchParams.get("from") === todayDate && searchParams.get("to") === todayDate);
 
   function apply(e: React.FormEvent) {
     e.preventDefault();
@@ -63,7 +70,7 @@ export function SaleHistoryFilters({ todayDate }: { todayDate: string }) {
       onSubmit={apply}
       className="mb-4 flex flex-col gap-3 rounded-lg border p-3"
     >
-      <div className="flex gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Button
           type="button"
           size="sm"
@@ -73,6 +80,10 @@ export function SaleHistoryFilters({ todayDate }: { todayDate: string }) {
         >
           Today
         </Button>
+        <DailyReportDialog tenantId={tenantId} todayDate={todayDate} />
+        {!hasDateFilter && (
+          <span className="text-xs text-muted-foreground">Showing today&apos;s sales by default</span>
+        )}
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1">
