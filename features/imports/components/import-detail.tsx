@@ -77,8 +77,8 @@ export function ImportDetail({
               {isProducts ? (
                 <>
                   <TableHead>Name</TableHead>
-                  <TableHead>Code</TableHead>
                   <TableHead>Price</TableHead>
+                  <TableHead>Image URL</TableHead>
                 </>
               ) : (
                 <>
@@ -99,8 +99,8 @@ export function ImportDetail({
                 {isProducts ? (
                   <>
                     <TableCell>{cell(row.rawData.name)}</TableCell>
-                    <TableCell>{cell(row.rawData.sku)}</TableCell>
                     <TableCell>{cell(row.rawData.expectedPrice)}</TableCell>
+                    <TableCell className="max-w-[200px] truncate">{cell(row.rawData.imageUrl)}</TableCell>
                   </>
                 ) : (
                   <>

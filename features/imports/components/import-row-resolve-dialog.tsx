@@ -32,8 +32,6 @@ const SALES_HISTORY_FIELDS: { key: string; label: string }[] = [
 
 const PRODUCTS_FIELDS: { key: string; label: string }[] = [
   { key: "name", label: "Product Name" },
-  { key: "sku", label: "Product Code" },
-  { key: "description", label: "Description" },
   { key: "expectedPrice", label: "Expected Price" },
   { key: "imageUrl", label: "Image URL" },
 ];

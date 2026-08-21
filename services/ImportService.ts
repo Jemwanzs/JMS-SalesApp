@@ -10,7 +10,6 @@ import {
   validateProductRow,
   PRODUCT_COLUMN_KEYS,
   type ImportLookupContext,
-  type ProductImportLookupContext,
 } from "@/lib/imports/row-validation";
 
 /**
@@ -68,10 +67,8 @@ const TEMPLATE_DATA_ROW_COUNT = 1000;
 
 const PRODUCTS_TEMPLATE_COLUMNS = [
   { header: "Product Name", required: true, example: "Espresso" },
-  { header: "Product Code", required: false, example: "ESP-001" },
-  { header: "Description", required: false, example: "Single shot, house blend" },
-  { header: "Expected Price", required: false, example: 4.5 },
-  { header: "Image URL", required: false, example: "" },
+  { header: "Expected Price", required: true, example: 4.5 },
+  { header: "Image URL", required: true, example: "https://example.com/images/espresso.jpg" },
 ] as const;
 
 /** Applies an Excel dropdown (data-validation list) to every data row of one column, referencing a range on the hidden Lists sheet. */
@@ -272,7 +269,12 @@ export class ImportService {
       .sort((a, b) => a.email.localeCompare(b.email));
   }
 
-  /** docs/10-products.md's bulk product-catalog template. */
+  /** docs/10-products.md's bulk product-catalog template. Every column
+   * is required (Product Enhancements follow-up: Product Code and
+   * Description were dropped entirely, Expected Price and Image URL
+   * moved from optional to required) -- header cells all get the same
+   * warm-cream required fill as the sales-history template's required
+   * columns, so "everything here must be filled in" reads at a glance. */
   async generateProductsTemplate(): Promise<Buffer> {
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("Products");
@@ -280,12 +282,18 @@ export class ImportService {
     sheet.columns = PRODUCTS_TEMPLATE_COLUMNS.map((c) => ({
       header: c.header,
       key: c.header,
-      width: 24,
+      width: 28,
     }));
 
     const headerRow = sheet.getRow(1);
     headerRow.font = { bold: true };
-    headerRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE5E7EB" } };
+    PRODUCTS_TEMPLATE_COLUMNS.forEach((c, i) => {
+      headerRow.getCell(i + 1).fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: c.required ? REQUIRED_HEADER_FILL : OPTIONAL_HEADER_FILL },
+      };
+    });
 
     sheet.addRow(Object.fromEntries(PRODUCTS_TEMPLATE_COLUMNS.map((c) => [c.header, c.example])));
     const exampleRow = sheet.getRow(2);
@@ -300,10 +308,8 @@ export class ImportService {
     notesSheet.getRow(1).font = { bold: true };
     notesSheet.addRows([
       { column: "Product Name", required: "Yes", notes: "The product's display name." },
-      { column: "Product Code", required: "No", notes: "Your own SKU. Must be unique -- both within this file and against your existing catalog." },
-      { column: "Description", required: "No", notes: "Free text shown on the product's detail view." },
-      { column: "Expected Price", required: "No", notes: "Must be 0 or more if provided." },
-      { column: "Image URL", required: "No", notes: "A direct link (http/https) to an image. Leave blank to add a photo later from the product's page." },
+      { column: "Expected Price", required: "Yes", notes: "Must be 0 or more." },
+      { column: "Image URL", required: "Yes", notes: "A direct link (http/https) to an image." },
     ]);
 
     const buffer = await workbook.xlsx.writeBuffer();
@@ -392,9 +398,7 @@ export class ImportService {
       );
 
       const salesCtx = importRow.type === "products" ? null : await this.buildLookupContext(tenantId, importRow.uploaded_by);
-      const productsCtx = importRow.type === "products" ? await this.buildProductLookupContext(tenantId) : null;
       const seenReferences = new Set<string>();
-      const seenSkus = new Set<string>();
 
       const rowsToInsert: Database["public"]["Tables"]["import_rows"]["Insert"][] = [];
       let validCount = 0;
@@ -415,7 +419,7 @@ export class ImportService {
 
         const result =
           importRow.type === "products"
-            ? validateProductRow(raw, productsCtx!, seenSkus)
+            ? validateProductRow(raw)
             : validateSalesHistoryRow(raw, salesCtx!, seenReferences);
         if (result.valid) validCount++;
         else errorCount++;
@@ -568,15 +572,15 @@ export class ImportService {
 
     const merged = { ...row.raw_data, ...correctedFields };
 
-    // Duplicate-reference/duplicate-SKU detection is a whole-batch
-    // concern; re-checking it for one row in isolation would either
-    // always pass (nothing else in scope) or need every other row's
-    // value re-fetched for no real benefit -- a corrected value that
-    // collides with another row gets caught the next time the whole
-    // import is (re-)validated.
+    // Duplicate-reference detection is a whole-batch concern;
+    // re-checking it for one row in isolation would either always pass
+    // (nothing else in scope) or need every other row's value re-
+    // fetched for no real benefit -- a corrected value that collides
+    // with another row gets caught the next time the whole import is
+    // (re-)validated.
     const result =
       importRow.type === "products"
-        ? validateProductRow(merged, await this.buildProductLookupContext(tenantId), new Set())
+        ? validateProductRow(merged)
         : validateSalesHistoryRow(merged, await this.buildLookupContext(tenantId, importRow.uploaded_by), new Set());
 
     const { error: updateError } = await this.supabase
@@ -843,10 +847,8 @@ export class ImportService {
     for (const row of validRows) {
       const data = row.resolved_data as {
         name: string;
-        sku: string | null;
-        description: string | null;
-        expectedPrice: number | null;
-        imageUrl: string | null;
+        expectedPrice: number;
+        imageUrl: string;
       };
 
       const { data: inserted, error: insertError } = await this.supabase
@@ -854,8 +856,6 @@ export class ImportService {
         .insert({
           tenant_id: tenantId,
           name: data.name,
-          sku: data.sku,
-          description: data.description,
           expected_price: data.expectedPrice,
           image_url: data.imageUrl,
           display_order: nextDisplayOrder,
@@ -977,14 +977,6 @@ export class ImportService {
       defaultLocationId: primaryLocation?.id ?? "",
       uploadedBy,
       todayYmd: new Date().toISOString().slice(0, 10),
-    };
-  }
-
-  private async buildProductLookupContext(tenantId: string): Promise<ProductImportLookupContext> {
-    const { data: products } = await this.supabase.from("products").select("sku").eq("tenant_id", tenantId);
-
-    return {
-      existingSkus: new Set((products ?? []).flatMap((p) => (p.sku ? [p.sku.toLowerCase()] : []))),
     };
   }
 }

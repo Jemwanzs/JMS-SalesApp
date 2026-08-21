@@ -57,29 +57,21 @@ const COLUMN_KEYS = {
 };
 
 /** docs/10-products.md's bulk-upload column set -- no location/sales-person/
- * date concepts here, this is catalog data, not a transaction record. */
+ * date concepts here, this is catalog data, not a transaction record.
+ * Product Code and Description were dropped entirely (Product
+ * Enhancements follow-up): a bare SKU column added more confusion than
+ * value with no dropdown to keep it honest, and free-text descriptions
+ * belong on the product's own edit page, not a bulk-upload row. */
 export const PRODUCT_COLUMN_KEYS = {
   name: ["product name", "name"],
-  sku: ["product code", "sku", "code"],
-  description: ["description"],
   expectedPrice: ["expected price", "price"],
   imageUrl: ["image url", "image"],
 };
 
-export interface ProductImportLookupContext {
-  /** Lowercased SKUs already on the tenant's catalog -- a bulk-imported
-   * row reusing one is almost always a re-run of the same file, not a
-   * deliberate second product, so it's treated as an error even though
-   * the `products.sku` column itself carries no unique constraint. */
-  existingSkus: Set<string>;
-}
-
 export interface ValidatedProductRow {
   name: string;
-  sku: string | null;
-  description: string | null;
-  expectedPrice: number | null;
-  imageUrl: string | null;
+  expectedPrice: number;
+  imageUrl: string;
 }
 
 function normalizeHeader(header: string): string {
@@ -312,15 +304,13 @@ function parseUrl(value: string): string | null {
   }
 }
 
-/** docs/10-products.md's bulk-upload validation: name required; SKU/price/
- * image format checks only where a value is actually provided; SKU
- * uniqueness checked both within this file and against the tenant's
- * existing catalog (see ProductImportLookupContext for why). */
-export function validateProductRow(
-  raw: Record<string, unknown>,
-  ctx: ProductImportLookupContext,
-  seenSkus: Set<string>
-): RowValidationResult<ValidatedProductRow> {
+/** docs/10-products.md's bulk-upload validation -- all three remaining
+ * columns are required (Product Enhancements follow-up: Product Code
+ * and Description were dropped entirely, and Expected Price/Image URL
+ * moved from optional to required, so a bulk-imported product always
+ * has a real price and photo instead of relying on someone going back
+ * to fill those in later). */
+export function validateProductRow(raw: Record<string, unknown>): RowValidationResult<ValidatedProductRow> {
   const errors: string[] = [];
   const get = (field: keyof typeof PRODUCT_COLUMN_KEYS) => raw[field];
 
@@ -330,26 +320,12 @@ export function validateProductRow(
     errors.push("Product name is required");
   }
 
-  // --- SKU / Product Code (optional, unique within file + against existing catalog) ---
-  const skuRaw = cellToString(get("sku")) || null;
-  if (skuRaw) {
-    const key = skuRaw.toLowerCase();
-    if (seenSkus.has(key)) {
-      errors.push(`Duplicate product code in this file: "${skuRaw}"`);
-    } else if (ctx.existingSkus.has(key)) {
-      errors.push(`A product with this code already exists: "${skuRaw}"`);
-    } else {
-      seenSkus.add(key);
-    }
-  }
-
-  // --- Description (optional) ---
-  const description = cellToString(get("description")) || null;
-
-  // --- Expected Price (optional, non-negative) ---
+  // --- Expected Price (required, non-negative) ---
   const expectedPriceRaw = get("expectedPrice");
   let expectedPrice: number | null = null;
-  if (expectedPriceRaw != null && expectedPriceRaw !== "") {
+  if (expectedPriceRaw == null || expectedPriceRaw === "") {
+    errors.push("Expected price is required");
+  } else {
     expectedPrice = parseNumber(expectedPriceRaw);
     if (expectedPrice == null) {
       errors.push(`Invalid expected price format: "${cellToString(expectedPriceRaw)}"`);
@@ -359,23 +335,25 @@ export function validateProductRow(
     }
   }
 
-  // --- Image URL (optional, must be http(s)) ---
-  const imageUrlRaw = cellToString(get("imageUrl")) || null;
+  // --- Image URL (required, must be http(s)) ---
+  const imageUrlRaw = cellToString(get("imageUrl"));
   let imageUrl: string | null = null;
-  if (imageUrlRaw) {
+  if (!imageUrlRaw) {
+    errors.push("Image URL is required");
+  } else {
     imageUrl = parseUrl(imageUrlRaw);
     if (!imageUrl) {
       errors.push(`Invalid image URL: "${imageUrlRaw}"`);
     }
   }
 
-  if (errors.length > 0 || !name) {
+  if (errors.length > 0 || !name || expectedPrice == null || !imageUrl) {
     return { valid: false, errors };
   }
 
   return {
     valid: true,
     errors: [],
-    data: { name, sku: skuRaw, description, expectedPrice, imageUrl },
+    data: { name, expectedPrice, imageUrl },
   };
 }
