@@ -27,11 +27,19 @@ import { Logo } from "@/components/shared/logo";
  * (tried first, then explicitly asked to be warmed/lightened instead)
  * and not the same shade as the card, so the card still reads as a
  * distinct, slightly deeper surface floating above the page.
+ *
+ * `contain-layout` on the inner shell -- same trick app/(tenant)/t/
+ * [tenantSlug]/layout.tsx and the platform-admin shell already use --
+ * makes this div a containing block for `position: fixed` descendants,
+ * so AuthPromoBanner (login/signup only, rendered inside `children`)
+ * stays confined to this ~430px mobile-app-fit column even on a wide
+ * desktop viewport, instead of anchoring to the full browser window the
+ * way `fixed` normally would.
  */
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen w-full justify-center bg-[#fdfbf6] dark:bg-[#2d271d]">
-      <div className="relative flex w-full max-w-[430px] flex-col items-center justify-center overflow-hidden px-4 py-10">
+      <div className="relative flex w-full max-w-[430px] flex-col items-center justify-center overflow-hidden contain-layout px-4 py-10">
         <AuthBackground />
         <div className="relative z-10 w-full rounded-3xl border border-border/60 bg-background p-6 shadow-xl shadow-black/10 sm:p-8">
           <Logo className="mb-8" />

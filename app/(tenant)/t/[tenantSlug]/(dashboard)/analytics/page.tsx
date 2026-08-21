@@ -4,8 +4,10 @@ import { AnalyticsFilters } from "@/features/analytics/components/analytics-filt
 import { InsightsList } from "@/features/analytics/components/insights-list";
 import { KpiCards } from "@/features/analytics/components/kpi-cards";
 import { ProductPerformanceList } from "@/features/analytics/components/product-performance-list";
+import { UserPerformanceList } from "@/features/analytics/components/user-performance-list";
 import { AnalyticsService, type AnalyticsPermissions } from "@/services/AnalyticsService";
 import { InsightsService } from "@/services/InsightsService";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { resolvePreset, todayString, type DatePreset } from "@/lib/utils/date-ranges";
@@ -26,10 +28,16 @@ const VALID_PRESETS: DatePreset[] = [
 /**
  * Phase 3's first increment (docs/01-development-roadmap.md: "daily
  * aggregate computation on close [done, 2b/2f] -> KPI dashboard
- * (permission-gated date filters) -> product analytics"). User/location
- * breakdowns and scheduled reports are later Phase 3 increments, not
- * this one -- analytics.all_users only gates the one "Active Sales
- * Users" KPI tile here, not a full per-user table yet.
+ * (permission-gated date filters) -> product analytics"), later
+ * extended with a "User Performance" tab (Gold/Silver/Bronze ranking by
+ * sales agent, same idiom as Product Performance) -- gated on BOTH
+ * analytics.all_users (previously only used for the "Active Sales
+ * Users" KPI tile) and analytics.view_all (without it, every query here
+ * is silently scoped to the caller's own sales, which would make a
+ * cross-user ranking meaningless). The tab itself, not just its data,
+ * is hidden outright when either is missing -- same "hidden, not shown-
+ * disabled" convention AnalyticsFilters already uses for its own
+ * permission-gated controls.
  */
 export default async function AnalyticsPage({
   params,
@@ -75,16 +83,21 @@ export default async function AnalyticsPage({
   let errorMessage: string | null = null;
   let kpis = null;
   let productPerformance: Awaited<ReturnType<AnalyticsService["getProductPerformance"]>> = [];
+  let userPerformance: Awaited<ReturnType<AnalyticsService["getUserPerformance"]>> = [];
   let insights: Awaited<ReturnType<InsightsService["listRecent"]>> = [];
+  const canRankUsers = viewAll && allUsers;
 
-  // None of these three depend on each other's result -- fetch them
+  // None of these four depend on each other's result -- fetch them
   // together instead of one-at-a-time (same "independent, so parallel"
   // reasoning as the permission checks above).
   try {
-    [kpis, productPerformance, insights] = await Promise.all([
+    [kpis, productPerformance, userPerformance, insights] = await Promise.all([
       analyticsService.getKpis(tenantId, range, today, perms, user!.id),
       perms.products
         ? analyticsService.getProductPerformance(tenantId, range, today, perms, user!.id)
+        : Promise.resolve([]),
+      canRankUsers
+        ? analyticsService.getUserPerformance(tenantId, range, today, perms, user!.id)
         : Promise.resolve([]),
       viewAll ? new InsightsService(supabase).listRecent(tenantId) : Promise.resolve([]),
     ]);
@@ -103,7 +116,22 @@ export default async function AnalyticsPage({
         <div className="space-y-4">
           <InsightsList insights={insights} />
           {kpis && <KpiCards kpis={kpis} />}
-          <ProductPerformanceList items={productPerformance} />
+          {canRankUsers ? (
+            <Tabs defaultValue="products">
+              <TabsList>
+                <TabsTrigger value="products">Products</TabsTrigger>
+                <TabsTrigger value="users">User Performance</TabsTrigger>
+              </TabsList>
+              <TabsContent value="products">
+                <ProductPerformanceList items={productPerformance} />
+              </TabsContent>
+              <TabsContent value="users">
+                <UserPerformanceList items={userPerformance} />
+              </TabsContent>
+            </Tabs>
+          ) : (
+            <ProductPerformanceList items={productPerformance} />
+          )}
         </div>
       )}
     </div>

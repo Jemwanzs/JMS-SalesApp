@@ -70,6 +70,17 @@ export interface ProductPerformanceItem {
   saleCount: number;
 }
 
+export type PerformanceTier = "gold" | "silver" | "bronze";
+const TIER_ORDER: PerformanceTier[] = ["gold", "silver", "bronze"];
+
+export interface UserPerformanceItem {
+  profileId: string;
+  name: string;
+  totalRevenue: number;
+  saleCount: number;
+  tier: PerformanceTier | null;
+}
+
 export class AnalyticsService {
   constructor(private readonly supabase: SupabaseClient<Database>) {}
 
@@ -271,6 +282,67 @@ export class AnalyticsService {
     return [...catalogItems, ...othersItems]
       .sort((a, b) => b.totalRevenue - a.totalRevenue)
       .slice(0, limit);
+  }
+
+  /**
+   * Ranks sales agents/employees by revenue for the period, the same
+   * Gold/Silver/Bronze concept getProductPerformance's own consumer
+   * (product-grid.tsx) already uses for products. Requires BOTH
+   * analytics.view_all (to see every user's sales at all -- without it
+   * fetchSales silently scopes to just the caller's own rows, which
+   * would make a "ranking" meaningless) and analytics.all_users (the
+   * permission specifically for seeing sales broken down by who
+   * recorded them, previously only used to gate the KPI tile's
+   * "Active Sales Users" count).
+   */
+  async getUserPerformance(
+    tenantId: string,
+    range: DateRangeInput,
+    timezoneToday: string,
+    perms: AnalyticsPermissions,
+    currentUserId: string,
+    limit = 10
+  ): Promise<UserPerformanceItem[]> {
+    if (!perms.allUsers || !perms.viewAll) {
+      throw new Error("AnalyticsService.getUserPerformance: missing analytics.all_users or analytics.view_all");
+    }
+
+    const sales = await this.fetchSales(tenantId, range, timezoneToday, perms, currentUserId);
+    if (sales.length === 0) return [];
+
+    const byUser = new Map<string, { revenue: number; count: number }>();
+    for (const sale of sales) {
+      const entry = byUser.get(sale.recorded_by) ?? { revenue: 0, count: 0 };
+      entry.revenue += Number(sale.actual_amount);
+      entry.count += 1;
+      byUser.set(sale.recorded_by, entry);
+    }
+
+    const profileIds = [...byUser.keys()];
+    const { data: profiles, error } = await this.supabase
+      .from("profiles")
+      .select("id, full_name, email")
+      .in("id", profileIds);
+
+    if (error) {
+      throw new Error(`AnalyticsService.getUserPerformance: ${error.message}`);
+    }
+
+    const profileById = new Map((profiles ?? []).map((p) => [p.id, p]));
+
+    return [...byUser.entries()]
+      .map(([profileId, agg]) => {
+        const profile = profileById.get(profileId);
+        return {
+          profileId,
+          name: profile?.full_name ?? profile?.email ?? "Unknown",
+          totalRevenue: agg.revenue,
+          saleCount: agg.count,
+        };
+      })
+      .sort((a, b) => b.totalRevenue - a.totalRevenue)
+      .slice(0, limit)
+      .map((item, index) => ({ ...item, tier: TIER_ORDER[index] ?? null }));
   }
 
   /**
