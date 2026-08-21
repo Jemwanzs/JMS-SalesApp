@@ -24,7 +24,10 @@ import type { Database } from "@/types/database.types";
  * anniversary_wish_mode — distinct from SECURITY_SETTING_CHANGED, which
  * docs/05 scopes specifically to 4e/4f/4g's security toggles; the audit
  * vocabulary is documented as "non-exhaustive," so this is an addition,
- * not a deviation).
+ * not a deviation), ACCESS_RESTRICTION_BYPASSED (wired from features/
+ * auth/actions/sign-in.ts — a settings.manage holder's login overriding
+ * a working-hours/geofence block that would otherwise have applied, see
+ * AuthService.evaluateAccessGate's own header comment for why).
  *
  * Always constructed with the service-role client (added to
  * lib/supabase/service-role.ts's allowed-callers list) — audit_logs has

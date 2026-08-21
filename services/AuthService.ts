@@ -22,6 +22,19 @@ import { haversineDistanceMeters } from "@/lib/utils/geo";
  * is a client-side polling/timer concern, deliberately deferred rather
  * than built speculatively alongside the server-verifiable half.
  *
+ * Product Enhancements follow-up: whoever holds settings.manage for the
+ * tenant -- the SAME permission that gates turning these two toggles on
+ * in the first place (TenantService.setSetting's docblock) -- is exempt
+ * from a block either check would otherwise produce, so the person who
+ * configured "restrict everyone to business hours/the workplace" isn't
+ * locked out by their own toggle. Deliberately reuses settings.manage
+ * rather than a new permission: it's already scoped to Tenant
+ * Administrator by default (RoleService.DEFAULT_ROLE_GRANTS) and stays
+ * correct automatically if a tenant customizes who holds it. Checked
+ * ONLY when a block would otherwise fire (not on every login) so an
+ * ordinary, unrestricted sign-in never pays for the extra permissions
+ * round trip.
+ *
  * requestTemporaryAccess() is the geo-fencing escape hatch (docs/05's
  * "Temporary access requests" section, the Approval Engine's second
  * consumer after migration 0006's void/correct/reopen). It must run
@@ -40,6 +53,11 @@ export interface AccessGateResult {
   allowed: boolean;
   reason?: string;
   blockedBy?: "working_hours" | "geofence";
+  /** True when this login would otherwise have been blocked by
+   * blockedBy, but the caller holds settings.manage and was let through
+   * anyway -- callers use this to show a one-time "you're exempt as an
+   * admin" notice. */
+  bypassed?: boolean;
 }
 
 export class AuthService {
@@ -161,18 +179,28 @@ export class AuthService {
       return { allowed: true };
     }
 
+    let blocked: AccessGateResult | null = null;
+
     if (workingHoursRestricted) {
       const gate = await this.checkWorkingHours(input.tenantId, location);
-      if (!gate.allowed) {
-        return gate;
-      }
+      if (!gate.allowed) blocked = gate;
     }
 
-    if (geofenceRestricted) {
-      return await this.checkGeofence(input, location);
+    if (!blocked && geofenceRestricted) {
+      const gate = await this.checkGeofence(input, location);
+      if (!gate.allowed) blocked = gate;
     }
 
-    return { allowed: true };
+    if (!blocked) {
+      return { allowed: true };
+    }
+
+    const { data: permissions } = await this.supabase.rpc("get_my_permissions", {
+      p_tenant_id: input.tenantId,
+    });
+    const isExempt = (permissions ?? []).some((p) => p.permission_key === "settings.manage");
+
+    return isExempt ? { ...blocked, allowed: true, bypassed: true } : blocked;
   }
 
   private async checkWorkingHours(

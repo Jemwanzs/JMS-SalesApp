@@ -1,5 +1,7 @@
+import { Suspense } from "react";
 import { notFound, redirect } from "next/navigation";
 
+import { AdminBypassToast } from "@/components/shared/admin-bypass-toast";
 import { ImpersonationBanner } from "@/components/shared/impersonation-banner";
 import { Logo } from "@/components/shared/logo";
 import { TenantProvider } from "@/hooks/tenant-context";
@@ -138,6 +140,9 @@ export default async function TenantLayout({
             column on desktop instead of spanning/centering on the full
             browser window. */}
         <div id="app-shell" className="relative flex w-full max-w-[430px] flex-col contain-layout bg-background">
+          <Suspense fallback={null}>
+            <AdminBypassToast />
+          </Suspense>
           {impersonation && <ImpersonationBanner tenantId={tenant.id} impersonation={impersonation} />}
           <div className="border-b px-6 py-4">
             <Logo />

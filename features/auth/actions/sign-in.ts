@@ -94,6 +94,7 @@ export async function signInAction(
   }
 
   const tenant = await resolveActiveTenant(supabase, userId);
+  let bypassNotice: "working_hours" | "geofence" | undefined;
 
   if (tenant) {
     const rawLat = formData.get("latitude");
@@ -107,6 +108,23 @@ export async function signInAction(
       latitude: Number.isFinite(latitude) ? latitude : null,
       longitude: Number.isFinite(longitude) ? longitude : null,
     });
+
+    if (gate.allowed && gate.bypassed) {
+      bypassNotice = gate.blockedBy;
+      await auditService
+        .log({
+          tenantId: tenant.tenantId,
+          actorProfileId: userId,
+          action: AUDIT_ACTION.ACCESS_RESTRICTION_BYPASSED,
+          entityType: "session",
+          reason: gate.reason ?? null,
+          ipAddress: ip,
+          device: userAgent,
+          metadata: gate.blockedBy ? { blockedBy: gate.blockedBy } : null,
+        })
+        .catch(() => {});
+    }
+
     if (!gate.allowed) {
       // The password WAS correct -- signInWithPassword already
       // established a real session/cookies -- so it must be torn back
@@ -189,9 +207,10 @@ export async function signInAction(
     redirect("/no-tenant");
   }
 
+  const bypassQuery = bypassNotice ? `?adminBypass=${bypassNotice}` : "";
   redirect(
     tenant.needsOnboarding
-      ? `/t/${tenant.slug}/onboarding`
-      : `/t/${tenant.slug}/sales`
+      ? `/t/${tenant.slug}/onboarding${bypassQuery}`
+      : `/t/${tenant.slug}/sales${bypassQuery}`
   );
 }
