@@ -15,14 +15,21 @@ import { Logo } from "@/components/shared/logo";
  * just /login, so signup/reset-password/verify-email/invite-confirm all
  * stay visually consistent with it rather than looking like a
  * regression the moment someone navigates one step further.
+ *
+ * Both the background and the card live INSIDE the same max-w-[430px]
+ * column (not the full outer width) -- a follow-up fix so the photo
+ * wall stays confined to the app's own mobile-app-fit sizing on a wide
+ * desktop viewport instead of spreading across the whole browser width.
  */
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="relative flex min-h-screen w-full items-center justify-center overflow-hidden bg-background px-4 py-10">
-      <AuthBackground />
-      <div className="relative z-10 w-full max-w-[430px] rounded-3xl border border-border/60 bg-background p-6 shadow-xl shadow-black/10 sm:p-8">
-        <Logo className="mb-8" />
-        {children}
+    <div className="flex min-h-screen w-full justify-center bg-background">
+      <div className="relative flex w-full max-w-[430px] flex-col items-center justify-center overflow-hidden px-4 py-10">
+        <AuthBackground />
+        <div className="relative z-10 w-full rounded-3xl border border-border/60 bg-background p-6 shadow-xl shadow-black/10 sm:p-8">
+          <Logo className="mb-8" />
+          {children}
+        </div>
       </div>
     </div>
   );

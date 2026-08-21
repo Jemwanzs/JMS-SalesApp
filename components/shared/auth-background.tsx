@@ -10,24 +10,17 @@ const CANDIDATE_FILES = Array.from({ length: 6 }, (_, i) => i + 1).flatMap((n) =
 
 // Hand-authored scatter -- NOT Math.random() at render time, which
 // would render differently on the server vs. the client and break
-// hydration. Percent-based positions so the layout scales with the
-// viewport; each tile cycles through whichever photos actually exist
-// (see the fs check below), repeating them at different positions/
-// sizes/rotations so even one or two source photos fill the page like
-// a real photo wall.
+// hydration. Percent-based positions so the layout scales within the
+// mobile-width column (see the auth layout's own max-w-[430px] shell,
+// which this is confined to -- not the full browser viewport on a
+// wider screen). Deliberately capped at 4 tiles, framing the card's
+// corners rather than covering the whole page -- each cycles through
+// whichever photos actually exist (see the fs check below).
 const TILES = [
-  { top: "-4%", left: "4%", size: 150, rotate: -12 },
-  { top: "1%", left: "60%", size: 130, rotate: 9 },
-  { top: "15%", left: "-6%", size: 170, rotate: 6 },
-  { top: "18%", left: "80%", size: 120, rotate: -8 },
-  { top: "34%", left: "30%", size: 140, rotate: 14 },
-  { top: "32%", left: "-5%", size: 110, rotate: -6 },
-  { top: "48%", left: "68%", size: 160, rotate: -14 },
-  { top: "60%", left: "5%", size: 130, rotate: 10 },
-  { top: "68%", left: "38%", size: 120, rotate: -9 },
-  { top: "76%", left: "78%", size: 150, rotate: 7 },
-  { top: "88%", left: "14%", size: 140, rotate: -11 },
-  { top: "90%", left: "56%", size: 130, rotate: 13 },
+  { top: "2%", left: "3%", size: 150, rotate: -10 },
+  { top: "1%", left: "58%", size: 130, rotate: 9 },
+  { top: "80%", left: "4%", size: 140, rotate: -9 },
+  { top: "82%", left: "56%", size: 140, rotate: 12 },
 ] as const;
 
 /**
