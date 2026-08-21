@@ -38,9 +38,11 @@ function resolvePhoto(publicDir: string, base: string): string | null {
  * app/(auth)/layout.tsx). Reads whichever of the four named photos
  * actually exist under public/login-bg/ at request time -- a plain
  * Node fs check, safe here since this only ever renders server-side --
- * so a missing photo never shows a broken image; falls back to a soft
- * cream gradient when none of the four exist yet, so the page still
- * looks finished either way.
+ * so a missing photo never shows a broken image; falls back to a plain
+ * bg-card (white) fill when none of the four exist yet, matching the
+ * auth layout's own page-background token, so the page still looks
+ * finished either way. The 25%-opacity bg-card wash painted over the
+ * tiles themselves softens them to blend with that same white surround.
  *
  * Drop real photos in as public/login-bg/photo-1.jpg (or .jpeg/.png),
  * photo-2.*, photo-3.*, photo-4.* and they take over automatically --
@@ -53,12 +55,7 @@ export function AuthBackground() {
   );
 
   if (tiles.length === 0) {
-    return (
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 bg-gradient-to-br from-[#f5ead2] via-[#faf3e6] to-[#efe0c2] dark:from-[#241d15] dark:via-[#1b1611] dark:to-[#100d09]"
-      />
-    );
+    return <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-card" />;
   }
 
   return (
@@ -78,7 +75,7 @@ export function AuthBackground() {
           <Image src={`/login-bg/${tile.file}`} alt="" fill sizes="200px" className="object-cover" />
         </div>
       ))}
-      <div className="absolute inset-0 bg-background/25" />
+      <div className="absolute inset-0 bg-card/25" />
     </div>
   );
 }
