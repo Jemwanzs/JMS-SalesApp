@@ -244,11 +244,24 @@ export class AuthService {
     const openTime = special?.open_time ?? weekly?.open_time ?? null;
     const closeTime = special?.close_time ?? weekly?.close_time ?? null;
 
+    // Checked BEFORE any open/close time math -- a closed-all-day record
+    // naturally carries null open_time/close_time (there's no window to
+    // speak of on a closed day), and calling toMinutes(null) crashed the
+    // whole login flow the one time this was ever exercised for real.
+    // No time-string parsing is needed here at all: closed is closed.
+    if (closedAllDay) {
+      return {
+        allowed: false,
+        blockedBy: "working_hours",
+        reason: "Login is restricted to business hours — this location is closed today.",
+      };
+    }
+
     // No hours configured for today at all -- fail OPEN (allow), since
     // this is a data gap, not a deliberate closure the tenant asked to
     // restrict against; only an explicit closed_all_day/is_closed (or a
     // real open/close window the current time falls outside) blocks.
-    if (!closedAllDay && (!openTime || !closeTime)) {
+    if (!openTime || !closeTime) {
       return { allowed: true };
     }
 
@@ -263,15 +276,13 @@ export class AuthService {
       return h * 60 + m;
     };
     const currentMinutes = toMinutes(currentTime);
-    const openMinutes = toMinutes(openTime!);
-    const closeMinutes = toMinutes(closeTime!);
+    const openMinutes = toMinutes(openTime);
+    const closeMinutes = toMinutes(closeTime);
     const isOvernight = closeMinutes <= openMinutes;
 
-    const withinHours =
-      !closedAllDay &&
-      (isOvernight
-        ? currentMinutes >= openMinutes || currentMinutes <= closeMinutes
-        : currentMinutes >= openMinutes && currentMinutes <= closeMinutes);
+    const withinHours = isOvernight
+      ? currentMinutes >= openMinutes || currentMinutes <= closeMinutes
+      : currentMinutes >= openMinutes && currentMinutes <= closeMinutes;
 
     if (withinHours) {
       return { allowed: true };
@@ -280,9 +291,7 @@ export class AuthService {
     return {
       allowed: false,
       blockedBy: "working_hours",
-      reason: closedAllDay
-        ? "Login is restricted to business hours — this location is closed today."
-        : `Login is restricted to business hours (${openTime!.slice(0, 5)}–${closeTime!.slice(0, 5)}).`,
+      reason: `Login is restricted to business hours (${openTime.slice(0, 5)}–${closeTime.slice(0, 5)}).`,
     };
   }
 
