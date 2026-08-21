@@ -43,3 +43,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# scripts/build-user-guide-pdf.mjs's intermediate HTML -- public/docs/User-Guide.pdf is the committed artifact
+/scripts/user-guide-preview.html

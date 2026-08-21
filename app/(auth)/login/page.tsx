@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { LoginForm } from "@/features/auth/components/login-form";
+import { UserGuideLink } from "@/components/shared/user-guide-link";
 
 export const metadata: Metadata = {
   title: "Log in | JMS Sales App",
@@ -14,6 +15,7 @@ export default function LoginPage() {
         Log in to record today&apos;s sales.
       </p>
       <LoginForm />
+      <UserGuideLink />
     </div>
   );
 }
