@@ -21,16 +21,16 @@ import { Logo } from "@/components/shared/logo";
  * wall stays confined to the app's own mobile-app-fit sizing on a wide
  * desktop viewport instead of spreading across the whole browser width.
  *
- * Page surface is bg-card (white -- already this app's "elevated
- * surface" token) while the card itself stays bg-background (warm
- * cream) -- a deliberate inversion of how those two tokens are used
- * everywhere else in the app (cream page + white card), per an explicit
- * request to keep the login CARD cream while whitening the page around
- * it.
+ * Page surface is a hand-picked very-light warm cream (#fdfbf6, lighter
+ * than the card's own #faf3e6 -- see globals.css's --background) while
+ * the card stays the app's normal --background cream -- not pure white
+ * (tried first, then explicitly asked to be warmed/lightened instead)
+ * and not the same shade as the card, so the card still reads as a
+ * distinct, slightly deeper surface floating above the page.
  */
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen w-full justify-center bg-card">
+    <div className="flex min-h-screen w-full justify-center bg-[#fdfbf6] dark:bg-[#2d271d]">
       <div className="relative flex w-full max-w-[430px] flex-col items-center justify-center overflow-hidden px-4 py-10">
         <AuthBackground />
         <div className="relative z-10 w-full rounded-3xl border border-border/60 bg-background p-6 shadow-xl shadow-black/10 sm:p-8">
