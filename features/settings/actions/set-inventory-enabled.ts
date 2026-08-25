@@ -6,6 +6,7 @@ import { AuditService } from "@/services/AuditService";
 import { BillingService } from "@/services/BillingService";
 import { TenantService } from "@/services/TenantService";
 import { AUDIT_ACTION } from "@/lib/audit/actions";
+import { formatTrialLength } from "@/lib/inventory/trial-copy";
 import { assertCan } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
@@ -13,6 +14,8 @@ import { createServiceRoleClient } from "@/lib/supabase/service-role";
 export interface SetInventoryEnabledState {
   error?: string;
   checkoutUrl?: string;
+  /** Set only on a real success (never on a checkoutUrl redirect) -- the exact copy for the success state, computed server-side so the client never has to re-derive trial-length phrasing. */
+  successMessage?: string;
 }
 
 // Deliberately narrower than lib/inventory/entitlement.ts's own
@@ -98,14 +101,14 @@ export async function setInventoryEnabledAction(
 
     if (existing && ENTITLED_WITHOUT_CHECKOUT.has(existing.status)) {
       await saveFlag(true);
-      return {};
+      return { successMessage: "Inventory Management is on." };
     }
 
     if (!existing) {
       try {
-        await billingService.bootstrapAddonTrial(tenantId, "inventory");
+        const trialDays = await billingService.bootstrapAddonTrial(tenantId, "inventory");
         await saveFlag(true);
-        return {};
+        return { successMessage: `You now have ${formatTrialLength(trialDays)} of free Inventory access.` };
       } catch {
         // No trial configured -- fall through to checkout.
       }
@@ -134,7 +137,7 @@ export async function setInventoryEnabledAction(
 
     if ("activatedDirectly" in result) {
       await saveFlag(true);
-      return {};
+      return { successMessage: "Inventory Management is on." };
     }
     return { checkoutUrl: result.authorizationUrl };
   } catch (err) {

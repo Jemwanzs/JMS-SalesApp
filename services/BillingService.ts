@@ -197,18 +197,52 @@ export class BillingService {
   }
 
   /**
+   * Same "does the tenant's billing owner have a real platform_admins
+   * row" check bootstrapTrialSubscription already makes for the base
+   * trial -- checks the actual table, never a hardcoded email, so any
+   * current or future platform admin gets the longer trial on their own
+   * tenant automatically. Shared by bootstrapAddonTrial (the write) and
+   * getAddonTrialDaysConfigured (the read, so a tenant-facing dialog
+   * shows the SAME day count the bootstrap will actually grant, not a
+   * generic default that undersells a platform admin's real trial).
+   */
+  private async resolveAddonTrialDays(tenantId: string, addonKey: AddonKey): Promise<number> {
+    const { data: tenant } = await this.supabase
+      .from("tenants")
+      .select("billing_owner_profile_id")
+      .eq("id", tenantId)
+      .maybeSingle();
+
+    let trialDays = await this.getGlobalSetting(`${addonKey}_addon_trial_days`, 0);
+
+    if (tenant?.billing_owner_profile_id) {
+      const { data: admin } = await this.supabase
+        .from("platform_admins")
+        .select("id")
+        .eq("profile_id", tenant.billing_owner_profile_id)
+        .maybeSingle();
+
+      if (admin) {
+        trialDays = await this.getGlobalSetting(`${addonKey}_addon_platform_admin_trial_days`, 180);
+      }
+    }
+
+    return trialDays;
+  }
+
+  /**
    * Add-on trial bootstrap (Product Enhancements #3/#7) -- unlike
    * bootstrapTrialSubscription above, this is NOT called automatically
    * at tenant creation; it's called once, on-demand, the first time a
    * tenant turns the add-on's module toggle on (features/settings/
-   * actions/enable-inventory-addon.ts). Throws if no trial is currently
-   * configured (inventory_addon_trial_days = 0, the migration default
-   * until a Super Admin sets a real value via setAddonTrialDays) --
-   * the caller falls back to a real checkout in that case, there being
-   * nothing to bootstrap.
+   * actions/set-inventory-enabled.ts). Throws if no trial is currently
+   * configured (inventory_addon_trial_days = 0) -- the caller falls back
+   * to a real checkout in that case, there being nothing to bootstrap.
+   * Returns the number of days actually granted so the caller can show
+   * an accurate success message.
    */
-  async bootstrapAddonTrial(tenantId: string, addonKey: AddonKey): Promise<void> {
-    const trialDays = await this.getGlobalSetting(`${addonKey}_addon_trial_days`, 0);
+  async bootstrapAddonTrial(tenantId: string, addonKey: AddonKey): Promise<number> {
+    const trialDays = await this.resolveAddonTrialDays(tenantId, addonKey);
     if (trialDays <= 0) {
       throw new Error(`BillingService.bootstrapAddonTrial: no trial configured for "${addonKey}"`);
     }
@@ -225,11 +259,13 @@ export class BillingService {
     if (error) {
       throw new Error(`BillingService.bootstrapAddonTrial: ${error.message}`);
     }
+
+    return trialDays;
   }
 
   /** Public read counterpart to the trial-days check bootstrapAddonTrial makes internally -- lets a tenant-facing page show accurate "N-day free trial" copy before the tenant actually commits to anything. */
-  async getAddonTrialDaysConfigured(addonKey: AddonKey): Promise<number> {
-    return this.getGlobalSetting(`${addonKey}_addon_trial_days`, 0);
+  async getAddonTrialDaysConfigured(tenantId: string, addonKey: AddonKey): Promise<number> {
+    return this.resolveAddonTrialDays(tenantId, addonKey);
   }
 
   async listAddonPlans(addonKey: AddonKey): Promise<AddonPlanView[]> {

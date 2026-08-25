@@ -75,7 +75,7 @@ export default async function SettingsPage({
     tenantService.getSetting<boolean>(tenantId, "inventory_enabled"),
     addonBillingService.getAddonSubscription(tenantId, "inventory"),
     addonBillingService.listAddonPlans("inventory"),
-    addonBillingService.getAddonTrialDaysConfigured("inventory"),
+    addonBillingService.getAddonTrialDaysConfigured(tenantId, "inventory"),
   ]);
 
   const inventoryPlan = inventoryPlans[0] ?? null;

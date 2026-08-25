@@ -1,9 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { setInventoryEnabledAction } from "@/features/settings/actions/set-inventory-enabled";
+import { formatTrialLength } from "@/lib/inventory/trial-copy";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -17,6 +20,8 @@ import {
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 
+const SUCCESS_REDIRECT_DELAY_MS = 1800;
+
 /**
  * Settings -> Modules toggle (Product Enhancements #3), same shape as
  * QuantityFieldCard (optimistic Switch, useTransition, toast) except
@@ -26,6 +31,13 @@ import { Switch } from "@/components/ui/switch";
  * checkout) all happens server-side in setInventoryEnabledAction; this
  * component only decides whether to redirect when the action hands back
  * a checkoutUrl.
+ *
+ * On a real success (trial started, re-enabled, or credit-activated --
+ * anything that doesn't redirect to Paystack), the same dialog swaps to
+ * a success state showing the server-computed message, then auto-
+ * navigates into the new Stock tab after a short pause -- one
+ * continuous flow instead of leaving the tenant on Settings to find the
+ * new tab themselves.
  */
 export function InventoryModuleCard({
   tenantId,
@@ -47,8 +59,10 @@ export function InventoryModuleCard({
   trialDaysAvailable: number;
   confirmMode: "reenable" | "trial" | "checkout";
 }) {
+  const router = useRouter();
   const [enabled, setEnabled] = useState(initialEnabled);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   function turnOff() {
@@ -77,9 +91,18 @@ export function InventoryModuleCard({
         return;
       }
       setEnabled(true);
-      setConfirmOpen(false);
-      toast.success("Inventory Management is on");
+      setSuccessMessage(result.successMessage ?? "Inventory Management is on.");
+      window.setTimeout(() => router.push(`/t/${tenantSlug}/stock`), SUCCESS_REDIRECT_DELAY_MS);
     });
+  }
+
+  function onDialogOpenChange(open: boolean) {
+    setConfirmOpen(open);
+    if (!open) {
+      // Closing after a success (or the user backing out of it) --
+      // clear so the NEXT open always starts from the confirm step.
+      setSuccessMessage(null);
+    }
   }
 
   return (
@@ -98,33 +121,47 @@ export function InventoryModuleCard({
             disabled={isPending}
             onCheckedChange={(next) => (next ? setConfirmOpen(true) : turnOff())}
           />
-          <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+          <Dialog open={confirmOpen} onOpenChange={onDialogOpenChange}>
             <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Enable Inventory Management?</DialogTitle>
-                <DialogDescription>
-                  {confirmMode === "reenable" &&
-                    `Turns the "Stock" tab back on. Your subscription is already active, so there's nothing to pay right now.`}
-                  {confirmMode === "trial" &&
-                    `Start a ${trialDaysAvailable}-day free trial. After that, ${planCurrency} ${planPrice.toFixed(2)} every ${planDurationDays} days.`}
-                  {confirmMode === "checkout" &&
-                    `${planCurrency} ${planPrice.toFixed(2)} every ${planDurationDays} days. This adds a "Stock" tab for tracking quantities alongside your existing product catalog.`}
-                </DialogDescription>
-              </DialogHeader>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setConfirmOpen(false)} disabled={isPending}>
-                  Cancel
-                </Button>
-                <Button onClick={confirmTurnOn} disabled={isPending}>
-                  {isPending
-                    ? "Please wait..."
-                    : confirmMode === "reenable"
-                      ? "Turn on"
-                      : confirmMode === "trial"
-                        ? "Start free trial"
-                        : `Subscribe — pay ${planCurrency} ${planPrice.toFixed(2)}`}
-                </Button>
-              </DialogFooter>
+              {successMessage ? (
+                <>
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                      <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                      You&apos;re all set
+                    </DialogTitle>
+                    <DialogDescription>{successMessage} Taking you to Stock…</DialogDescription>
+                  </DialogHeader>
+                </>
+              ) : (
+                <>
+                  <DialogHeader>
+                    <DialogTitle>Enable Inventory Management?</DialogTitle>
+                    <DialogDescription>
+                      {confirmMode === "reenable" &&
+                        `Turns the "Stock" tab back on. Your subscription is already active, so there's nothing to pay right now.`}
+                      {confirmMode === "trial" &&
+                        `Start a free ${formatTrialLength(trialDaysAvailable)} trial. After that, ${planCurrency} ${planPrice.toFixed(2)} every ${planDurationDays} days.`}
+                      {confirmMode === "checkout" &&
+                        `${planCurrency} ${planPrice.toFixed(2)} every ${planDurationDays} days. This adds a "Stock" tab for tracking quantities alongside your existing product catalog.`}
+                    </DialogDescription>
+                  </DialogHeader>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setConfirmOpen(false)} disabled={isPending}>
+                      Cancel
+                    </Button>
+                    <Button onClick={confirmTurnOn} disabled={isPending}>
+                      {isPending
+                        ? "Please wait..."
+                        : confirmMode === "reenable"
+                          ? "Turn on"
+                          : confirmMode === "trial"
+                            ? "Start free trial"
+                            : `Subscribe — pay ${planCurrency} ${planPrice.toFixed(2)}`}
+                    </Button>
+                  </DialogFooter>
+                </>
+              )}
             </DialogContent>
           </Dialog>
         </div>
