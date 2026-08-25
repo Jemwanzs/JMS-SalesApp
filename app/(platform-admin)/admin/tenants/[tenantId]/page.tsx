@@ -14,6 +14,19 @@ export const metadata: Metadata = {
   title: "Tenant Detail | Platform Admin",
 };
 
+// Same order/labels as onboarding's LocationHoursStep and the Workspace
+// edit page's BusinessHoursForm -- dayOfWeek 0 = Sunday throughout.
+const DAY_LABELS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+/** "08:00" (or Postgres's "08:00:00") -> "8:00 AM" -- read-only display counterpart to BusinessHoursForm's <input type="time">, which lets the browser localize it for free; a plain text value here has to do that formatting itself. */
+function formatTime(value: string): string {
+  const [hourStr, minuteStr] = value.split(":");
+  const hour = Number(hourStr);
+  const period = hour >= 12 ? "PM" : "AM";
+  const hour12 = hour % 12 === 0 ? 12 : hour % 12;
+  return `${hour12}:${minuteStr} ${period}`;
+}
+
 /**
  * Tenant 360 (docs/15-super-admin.md): Phase 7a's original suspend/
  * reactivate/extend-trial/adjust-grace actions plus Deactivate (a
@@ -77,8 +90,13 @@ export default async function PlatformAdminTenantDetailPage({
           { label: "Invited users", value: String(invitedUserCount) },
           { label: "Products sold", value: String(detail.productsSoldCount) },
           { label: "Owner", value: detail.ownerEmail ?? "—" },
+          { label: "Owner phone", value: detail.ownerPhone ?? "—" },
+          { label: "Business type", value: detail.businessType ?? "—" },
+          { label: "Website", value: detail.website ?? "—" },
           { label: "Country", value: detail.country ?? "—" },
+          { label: "Timezone", value: detail.timezone },
           { label: "Location", value: detail.locationName ?? "—" },
+          { label: "Address", value: detail.locationAddress ?? "—" },
           {
             label: "Anniversary",
             value: detail.anniversaryDate
@@ -98,6 +116,22 @@ export default async function PlatformAdminTenantDetailPage({
           </div>
         ))}
       </div>
+
+      {detail.businessHours && (
+        <div>
+          <h2 className="mb-2 text-sm font-semibold text-white/70">Business hours</h2>
+          <div className="divide-y divide-white/5 rounded-lg border border-white/10">
+            {detail.businessHours.map((day) => (
+              <div key={day.dayOfWeek} className="flex items-center justify-between p-3 text-sm">
+                <span className="text-white/70">{DAY_LABELS[day.dayOfWeek]}</span>
+                <span className={day.closedAllDay ? "text-white/40" : "font-medium"}>
+                  {day.closedAllDay ? "Closed" : `${formatTime(day.openTime)} – ${formatTime(day.closeTime)}`}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <TenantActionsPanel
         tenantId={tenantId}

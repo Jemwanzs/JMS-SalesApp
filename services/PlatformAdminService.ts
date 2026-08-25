@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { TenantService } from "@/services/TenantService";
 import type { AddonKey, Database, SubscriptionStatus, TenantCreditStatus, TenantStatus } from "@/types/database.types";
 
 /**
@@ -46,6 +47,7 @@ export interface TenantListItem {
   status: TenantStatus;
   ownerEmail: string | null;
   ownerName: string | null;
+  ownerPhone: string | null;
   userCount: number;
   planName: string | null;
   subscriptionStatus: SubscriptionStatus | null;
@@ -58,12 +60,17 @@ export interface TenantListItem {
 export interface TenantDetail extends TenantListItem {
   country: string | null;
   currency: string;
+  timezone: string;
+  businessType: string | null;
+  website: string | null;
   createdAt: string;
   gracePeriodEnd: string | null;
   anniversaryDate: string | null;
   productsSoldCount: number;
   locationName: string | null;
   locationAddress: string | null;
+  /** Null when the tenant has no location yet (onboarding Step 2 skipped) -- distinct from "location exists but every day is closedAllDay", which is a real, displayable answer. */
+  businessHours: { dayOfWeek: number; openTime: string; closeTime: string; closedAllDay: boolean }[] | null;
 }
 
 export interface TenantCreditView {
@@ -378,7 +385,7 @@ export class PlatformAdminService {
 
     const ownerIds = [...new Set((tenants ?? []).map((t) => t.billing_owner_profile_id).filter((id): id is string => !!id))];
     const { data: owners } =
-      ownerIds.length > 0 ? await this.supabase.from("profiles").select("id, full_name, email").in("id", ownerIds) : { data: [] };
+      ownerIds.length > 0 ? await this.supabase.from("profiles").select("id, full_name, email, phone").in("id", ownerIds) : { data: [] };
     const ownerById = new Map((owners ?? []).map((o) => [o.id, o]));
 
     const planById = new Map((plans ?? []).map((p) => [p.id, p.name]));
@@ -413,6 +420,7 @@ export class PlatformAdminService {
         status: t.status,
         ownerEmail: owner?.email ?? null,
         ownerName: owner?.full_name ?? null,
+        ownerPhone: owner?.phone ?? null,
         userCount: userCountByTenant.get(t.id) ?? 0,
         planName: sub?.plan_id ? (planById.get(sub.plan_id) ?? null) : null,
         subscriptionStatus: sub?.status ?? null,
@@ -427,7 +435,9 @@ export class PlatformAdminService {
   async getTenantDetail(tenantId: string): Promise<TenantDetail | null> {
     const { data: tenant } = await this.supabase
       .from("tenants")
-      .select("id, name, slug, status, country, currency, anniversary_date, created_at, billing_owner_profile_id")
+      .select(
+        "id, name, slug, status, country, currency, timezone, business_type, website, anniversary_date, created_at, billing_owner_profile_id"
+      )
       .eq("id", tenantId)
       .maybeSingle();
 
@@ -448,7 +458,7 @@ export class PlatformAdminService {
         .eq("tenant_id", tenantId)
         .maybeSingle(),
       tenant.billing_owner_profile_id
-        ? this.supabase.from("profiles").select("full_name, email").eq("id", tenant.billing_owner_profile_id).maybeSingle()
+        ? this.supabase.from("profiles").select("full_name, email, phone").eq("id", tenant.billing_owner_profile_id).maybeSingle()
         : Promise.resolve({ data: null }),
       this.supabase.from("tenant_memberships").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("status", "active"),
       this.supabase
@@ -468,7 +478,7 @@ export class PlatformAdminService {
         .maybeSingle(),
       this.supabase
         .from("locations")
-        .select("name, address")
+        .select("id, name, address")
         .eq("tenant_id", tenantId)
         .order("created_at", { ascending: true })
         .limit(1)
@@ -491,6 +501,15 @@ export class PlatformAdminService {
       ? await this.supabase.from("billing_plans").select("name").eq("id", sub.plan_id).maybeSingle()
       : { data: null };
 
+    // Depends on primaryLocation.id, so it can't join the Promise.all
+    // above -- same "sequential because it genuinely depends on an
+    // earlier result" shape as `plan` just above. Reuses TenantService's
+    // own read (added for the Workspace edit page) rather than
+    // re-deriving the same default-filling logic a second time here.
+    const businessHours = primaryLocation
+      ? await new TenantService(this.supabase).getLocationHours(tenantId, primaryLocation.id)
+      : null;
+
     return {
       id: tenant.id,
       name: tenant.name,
@@ -498,10 +517,14 @@ export class PlatformAdminService {
       status: tenant.status,
       country: tenant.country,
       currency: tenant.currency,
+      timezone: tenant.timezone,
+      businessType: tenant.business_type,
+      website: tenant.website,
       createdAt: tenant.created_at,
       anniversaryDate: tenant.anniversary_date,
       ownerEmail: owner?.email ?? null,
       ownerName: owner?.full_name ?? null,
+      ownerPhone: owner?.phone ?? null,
       userCount: userCount ?? 0,
       planName: plan.data?.name ?? null,
       subscriptionStatus: sub?.status ?? null,
@@ -512,6 +535,7 @@ export class PlatformAdminService {
       lastActivityAt: lastLogin?.created_at ?? null,
       locationName: primaryLocation?.name ?? null,
       locationAddress: primaryLocation?.address ?? null,
+      businessHours,
       productsSoldCount: new Set((soldSales ?? []).map((s) => s.product_id)).size,
     };
   }

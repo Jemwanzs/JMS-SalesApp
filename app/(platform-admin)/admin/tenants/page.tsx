@@ -46,7 +46,9 @@ export default async function PlatformAdminTenantsPage() {
               <span className={`shrink-0 rounded px-2 py-0.5 text-xs ${STATUS_COLOR[t.status] ?? "bg-white/10"}`}>{t.status}</span>
             </div>
             <p className="mt-1 truncate text-xs text-white/50">
-              {t.ownerEmail ?? "No owner"} · {t.userCount} user{t.userCount === 1 ? "" : "s"} · {t.planName ?? "No plan"}
+              {t.ownerEmail ?? "No owner"}
+              {t.ownerPhone ? ` · ${t.ownerPhone}` : ""} · {t.userCount} user{t.userCount === 1 ? "" : "s"} ·{" "}
+              {t.planName ?? "No plan"}
               {t.subscriptionStatus ? ` · ${t.subscriptionStatus}` : ""}
             </p>
             <p className="mt-1 text-xs text-white/40">
