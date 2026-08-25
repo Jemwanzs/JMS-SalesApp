@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { AccessWorkspaceDialog } from "@/features/platform-admin/components/access-workspace-dialog";
 import { SendWishForm } from "@/features/platform-admin/components/send-wish-form";
 import { TenantActionsPanel } from "@/features/platform-admin/components/tenant-actions-panel";
+import { TenantAddonPanel } from "@/features/platform-admin/components/tenant-addon-panel";
 import { BillingService } from "@/services/BillingService";
 import { PlatformAdminService } from "@/services/PlatformAdminService";
 import { UserService } from "@/services/UserService";
@@ -44,12 +45,13 @@ export default async function PlatformAdminTenantDetailPage({
   const svc = createServiceRoleClient();
   const platformAdminService = new PlatformAdminService(svc);
 
-  const [detail, payments, members, credits, auditLog] = await Promise.all([
+  const [detail, payments, members, credits, auditLog, inventoryAddon] = await Promise.all([
     platformAdminService.getTenantDetail(tenantId),
     new BillingService(svc).listPayments(tenantId),
     new UserService(svc).listUsers(tenantId, ""),
     platformAdminService.listTenantCredits(tenantId),
     platformAdminService.listTenantAuditLog(tenantId),
+    platformAdminService.getTenantAddon(tenantId, "inventory"),
   ]);
 
   if (!detail) {
@@ -103,6 +105,8 @@ export default async function PlatformAdminTenantDetailPage({
         subscriptionStatus={detail.subscriptionStatus}
         currency={detail.currency}
       />
+
+      <TenantAddonPanel tenantId={tenantId} addonKey="inventory" addon={inventoryAddon} currency={detail.currency} />
 
       <div>
         <h2 className="mb-2 text-sm font-semibold text-white/70">Send anniversary wish</h2>

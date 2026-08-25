@@ -25,6 +25,8 @@ export type ImportRowStatus = "valid" | "invalid" | "imported" | "skipped";
 export type SubscriptionStatus = "TRIAL" | "ACTIVE" | "PAYMENT_DUE" | "GRACE_PERIOD" | "SUSPENDED" | "CANCELLED";
 export type PaymentStatus = "success" | "failed" | "pending";
 export type TenantCreditStatus = "available" | "applied" | "expired";
+/** Every paid add-on module's identifier — currently only Inventory (Product Enhancements #3/#7). */
+export type AddonKey = "inventory";
 
 export interface VoidOrCorrectResult {
   status: "voided" | "corrected" | "reversed" | "pending_approval";
@@ -744,6 +746,7 @@ export interface Database {
           id: string;
           tenant_id: string | null;
           subscription_id: string | null;
+          addon_subscription_id: string | null;
           event_type: string;
           paystack_event_id: string;
           payload: Record<string, unknown>;
@@ -783,6 +786,9 @@ export interface Database {
           created_at: string;
           applied_at: string | null;
           applied_to_payment_id: string | null;
+          /** Null = applies to the base subscription (every pre-Phase-3 row). Set = scoped to that add-on's own checkout only. */
+          addon_key: AddonKey | null;
+          applied_to_addon_payment_id: string | null;
         };
         Insert: Partial<Database["public"]["Tables"]["tenant_credits"]["Row"]> & {
           tenant_id: string;
@@ -792,6 +798,78 @@ export interface Database {
           reason: string;
         };
         Update: Partial<Database["public"]["Tables"]["tenant_credits"]["Row"]>;
+        Relationships: [];
+      };
+      addon_plans: {
+        Row: {
+          id: string;
+          addon_key: AddonKey;
+          code: string;
+          name: string;
+          price: number;
+          currency: string;
+          duration_days: number;
+          discount_percent: number;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["addon_plans"]["Row"]> & {
+          addon_key: AddonKey;
+          code: string;
+          name: string;
+          price: number;
+          duration_days: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["addon_plans"]["Row"]>;
+        Relationships: [];
+      };
+      tenant_addon_subscriptions: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          addon_key: AddonKey;
+          plan_id: string | null;
+          status: SubscriptionStatus;
+          trial_end: string | null;
+          current_period_start: string | null;
+          current_period_end: string | null;
+          next_billing_date: string | null;
+          grace_period_end: string | null;
+          paystack_customer_code: string | null;
+          paystack_subscription_code: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["tenant_addon_subscriptions"]["Row"]> & {
+          tenant_id: string;
+          addon_key: AddonKey;
+        };
+        Update: Partial<Database["public"]["Tables"]["tenant_addon_subscriptions"]["Row"]>;
+        Relationships: [];
+      };
+      addon_payments: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          addon_subscription_id: string;
+          amount: number;
+          currency: string;
+          status: PaymentStatus;
+          paystack_reference: string;
+          paid_at: string | null;
+          raw_payload: Record<string, unknown> | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["addon_payments"]["Row"]> & {
+          tenant_id: string;
+          addon_subscription_id: string;
+          amount: number;
+          currency: string;
+          status: PaymentStatus;
+          paystack_reference: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["addon_payments"]["Row"]>;
         Relationships: [];
       };
       platform_audit_logs: {

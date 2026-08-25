@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { Database, SubscriptionStatus, TenantCreditStatus, TenantStatus } from "@/types/database.types";
+import type { AddonKey, Database, SubscriptionStatus, TenantCreditStatus, TenantStatus } from "@/types/database.types";
 
 /**
  * PlatformAdminService — tenant management, impersonation, platform
@@ -74,6 +74,28 @@ export interface TenantCreditView {
   status: TenantCreditStatus;
   createdAt: string;
   appliedAt: string | null;
+}
+
+export interface AddonPlanRow {
+  id: string;
+  addonKey: AddonKey;
+  code: string;
+  name: string;
+  price: number;
+  currency: string;
+  durationDays: number;
+  discountPercent: number;
+  isActive: boolean;
+}
+
+export interface TenantAddonView {
+  id: string;
+  addonKey: AddonKey;
+  status: SubscriptionStatus;
+  planName: string | null;
+  trialEnd: string | null;
+  currentPeriodEnd: string | null;
+  gracePeriodEnd: string | null;
 }
 
 export interface PlatformAuditLogEntry {
@@ -681,6 +703,184 @@ export class PlatformAdminService {
       createdAt: row.created_at,
       appliedAt: row.applied_at,
     }));
+  }
+
+  /** Admin catalog view -- unlike BillingService.listAddonPlans (public-facing, is_active only), this shows every plan so a Super Admin can also re-enable one. */
+  async listAddonPlans(addonKey: AddonKey): Promise<AddonPlanRow[]> {
+    const { data, error } = await this.supabase
+      .from("addon_plans")
+      .select("id, addon_key, code, name, price, currency, duration_days, discount_percent, is_active")
+      .eq("addon_key", addonKey)
+      .order("duration_days", { ascending: true });
+
+    if (error) {
+      throw new Error(`PlatformAdminService.listAddonPlans: ${error.message}`);
+    }
+
+    return (data ?? []).map((row) => ({
+      id: row.id,
+      addonKey: row.addon_key,
+      code: row.code,
+      name: row.name,
+      price: Number(row.price),
+      currency: row.currency,
+      durationDays: row.duration_days,
+      discountPercent: Number(row.discount_percent),
+      isActive: row.is_active,
+    }));
+  }
+
+  async updateAddonPlan(
+    platformAdminId: string,
+    planId: string,
+    changes: { price?: number; currency?: string; durationDays?: number; discountPercent?: number; isActive?: boolean },
+    reason: string
+  ): Promise<void> {
+    const { data: before } = await this.supabase
+      .from("addon_plans")
+      .select("price, currency, duration_days, discount_percent, is_active")
+      .eq("id", planId)
+      .maybeSingle();
+
+    const updates: Database["public"]["Tables"]["addon_plans"]["Update"] = {};
+    if (changes.price !== undefined) updates.price = changes.price;
+    if (changes.currency !== undefined) updates.currency = changes.currency;
+    if (changes.durationDays !== undefined) updates.duration_days = changes.durationDays;
+    if (changes.discountPercent !== undefined) updates.discount_percent = changes.discountPercent;
+    if (changes.isActive !== undefined) updates.is_active = changes.isActive;
+
+    const { error } = await this.supabase.from("addon_plans").update(updates).eq("id", planId);
+    if (error) {
+      throw new Error(`PlatformAdminService.updateAddonPlan: ${error.message}`);
+    }
+
+    await this.logAction(platformAdminId, "ADDON_PLAN_UPDATED", null, null, before, updates, reason);
+  }
+
+  /** Read counterpart to setAddonTrialDays, for the admin/addons page. */
+  async getAddonTrialDays(addonKey: AddonKey): Promise<number> {
+    const { data } = await this.supabase
+      .from("platform_settings")
+      .select("value")
+      .eq("key", `${addonKey}_addon_trial_days`)
+      .maybeSingle();
+    return typeof data?.value === "number" ? data.value : 0;
+  }
+
+  /**
+   * The first setter for any `platform_settings` key -- until now only
+   * BillingService.getGlobalSetting (private, read-only) touched that
+   * table; trial_days/grace_period_days are still hand-edited via
+   * migration. This is where the "Super Admin can configure Inventory
+   * trial availability" spec line actually lands.
+   */
+  async setAddonTrialDays(platformAdminId: string, addonKey: AddonKey, days: number, reason: string): Promise<void> {
+    const key = `${addonKey}_addon_trial_days`;
+    const { data: before } = await this.supabase.from("platform_settings").select("value").eq("key", key).maybeSingle();
+
+    const { error } = await this.supabase
+      .from("platform_settings")
+      .update({ value: days, updated_by: null, updated_at: new Date().toISOString() })
+      .eq("key", key);
+
+    if (error) {
+      throw new Error(`PlatformAdminService.setAddonTrialDays: ${error.message}`);
+    }
+
+    await this.logAction(platformAdminId, "ADDON_TRIAL_DAYS_SET", null, null, before, { [key]: days }, reason);
+  }
+
+  /** Support override -- force-activates a tenant's add-on regardless of billing state (e.g. comping a customer). */
+  async activateAddonForTenant(platformAdminId: string, tenantId: string, addonKey: AddonKey, reason: string): Promise<void> {
+    const { data: before } = await this.supabase
+      .from("tenant_addon_subscriptions")
+      .select("status")
+      .eq("tenant_id", tenantId)
+      .eq("addon_key", addonKey)
+      .maybeSingle();
+
+    const { error } = await this.supabase
+      .from("tenant_addon_subscriptions")
+      .upsert({ tenant_id: tenantId, addon_key: addonKey, status: "ACTIVE" }, { onConflict: "tenant_id,addon_key" });
+
+    if (error) {
+      throw new Error(`PlatformAdminService.activateAddonForTenant: ${error.message}`);
+    }
+
+    await this.logAction(platformAdminId, "TENANT_ADDON_ACTIVATED", tenantId, null, before, { status: "ACTIVE" }, reason);
+  }
+
+  async deactivateAddonForTenant(platformAdminId: string, tenantId: string, addonKey: AddonKey, reason: string): Promise<void> {
+    const { data: before } = await this.supabase
+      .from("tenant_addon_subscriptions")
+      .select("status")
+      .eq("tenant_id", tenantId)
+      .eq("addon_key", addonKey)
+      .maybeSingle();
+
+    const { error } = await this.supabase
+      .from("tenant_addon_subscriptions")
+      .update({ status: "SUSPENDED" })
+      .eq("tenant_id", tenantId)
+      .eq("addon_key", addonKey);
+
+    if (error) {
+      throw new Error(`PlatformAdminService.deactivateAddonForTenant: ${error.message}`);
+    }
+
+    await this.logAction(platformAdminId, "TENANT_ADDON_DEACTIVATED", tenantId, null, before, { status: "SUSPENDED" }, reason);
+  }
+
+  /** Thin wrapper mirroring grantSubscriptionCredit's exact body, scoped to one add-on via the addon_key column (0034). */
+  async grantAddonCredit(
+    platformAdminId: string,
+    tenantId: string,
+    addonKey: AddonKey,
+    amount: number,
+    currency: string,
+    reason: string
+  ): Promise<void> {
+    const { error } = await this.supabase.from("tenant_credits").insert({
+      tenant_id: tenantId,
+      granted_by: platformAdminId,
+      amount,
+      currency,
+      reason,
+      status: "available",
+      addon_key: addonKey,
+    });
+
+    if (error) {
+      throw new Error(`PlatformAdminService.grantAddonCredit: ${error.message}`);
+    }
+
+    await this.logAction(platformAdminId, "TENANT_ADDON_CREDIT_GRANTED", tenantId, null, null, { amount, currency, addonKey }, reason);
+  }
+
+  /** Tenant 360's add-on panel -- read helper mirroring BillingService.getAddonSubscription, kept separate since this service always uses the service-role client, unlike the tenant-facing settings page. */
+  async getTenantAddon(tenantId: string, addonKey: AddonKey): Promise<TenantAddonView | null> {
+    const { data: sub } = await this.supabase
+      .from("tenant_addon_subscriptions")
+      .select("id, addon_key, plan_id, status, trial_end, current_period_end, grace_period_end")
+      .eq("tenant_id", tenantId)
+      .eq("addon_key", addonKey)
+      .maybeSingle();
+
+    if (!sub) return null;
+
+    const plan = sub.plan_id
+      ? await this.supabase.from("addon_plans").select("name").eq("id", sub.plan_id).maybeSingle()
+      : { data: null };
+
+    return {
+      id: sub.id,
+      addonKey: sub.addon_key,
+      status: sub.status,
+      planName: plan.data?.name ?? null,
+      trialEnd: sub.trial_end,
+      currentPeriodEnd: sub.current_period_end,
+      gracePeriodEnd: sub.grace_period_end,
+    };
   }
 
   /**

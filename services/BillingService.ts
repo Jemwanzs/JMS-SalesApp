@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { AuditService } from "@/services/AuditService";
 import { AUDIT_ACTION } from "@/lib/audit/actions";
 import { initializeTransaction, verifyPaystackSignature } from "@/lib/paystack/client";
-import type { Database, PaymentStatus, SubscriptionStatus } from "@/types/database.types";
+import type { AddonKey, Database, PaymentStatus, SubscriptionStatus } from "@/types/database.types";
 
 /**
  * BillingService — subscription state transitions, Paystack webhook
@@ -75,6 +75,32 @@ export interface PlanView {
   interval: string;
   durationDays: number;
   features: string[];
+}
+
+export interface AddonPlanView {
+  id: string;
+  addonKey: AddonKey;
+  code: string;
+  name: string;
+  price: number;
+  currency: string;
+  durationDays: number;
+  discountPercent: number;
+  isActive: boolean;
+}
+
+export interface AddonSubscriptionView {
+  id: string;
+  addonKey: AddonKey;
+  status: SubscriptionStatus;
+  planId: string | null;
+  planName: string | null;
+  planPrice: number | null;
+  planCurrency: string | null;
+  trialEnd: string | null;
+  currentPeriodEnd: string | null;
+  nextBillingDate: string | null;
+  gracePeriodEnd: string | null;
 }
 
 export class BillingService {
@@ -170,6 +196,91 @@ export class BillingService {
     };
   }
 
+  /**
+   * Add-on trial bootstrap (Product Enhancements #3/#7) -- unlike
+   * bootstrapTrialSubscription above, this is NOT called automatically
+   * at tenant creation; it's called once, on-demand, the first time a
+   * tenant turns the add-on's module toggle on (features/settings/
+   * actions/enable-inventory-addon.ts). Throws if no trial is currently
+   * configured (inventory_addon_trial_days = 0, the migration default
+   * until a Super Admin sets a real value via setAddonTrialDays) --
+   * the caller falls back to a real checkout in that case, there being
+   * nothing to bootstrap.
+   */
+  async bootstrapAddonTrial(tenantId: string, addonKey: AddonKey): Promise<void> {
+    const trialDays = await this.getGlobalSetting(`${addonKey}_addon_trial_days`, 0);
+    if (trialDays <= 0) {
+      throw new Error(`BillingService.bootstrapAddonTrial: no trial configured for "${addonKey}"`);
+    }
+
+    const trialEnd = new Date(Date.now() + trialDays * 86_400_000).toISOString();
+
+    const { error } = await this.supabase.from("tenant_addon_subscriptions").insert({
+      tenant_id: tenantId,
+      addon_key: addonKey,
+      status: "TRIAL",
+      trial_end: trialEnd,
+    });
+
+    if (error) {
+      throw new Error(`BillingService.bootstrapAddonTrial: ${error.message}`);
+    }
+  }
+
+  async listAddonPlans(addonKey: AddonKey): Promise<AddonPlanView[]> {
+    const { data, error } = await this.supabase
+      .from("addon_plans")
+      .select("id, addon_key, code, name, price, currency, duration_days, discount_percent, is_active")
+      .eq("addon_key", addonKey)
+      .eq("is_active", true)
+      .order("duration_days", { ascending: true });
+
+    if (error) {
+      throw new Error(`BillingService.listAddonPlans: ${error.message}`);
+    }
+
+    return (data ?? []).map((row) => ({
+      id: row.id,
+      addonKey: row.addon_key,
+      code: row.code,
+      name: row.name,
+      price: Number(row.price),
+      currency: row.currency,
+      durationDays: row.duration_days,
+      discountPercent: Number(row.discount_percent),
+      isActive: row.is_active,
+    }));
+  }
+
+  async getAddonSubscription(tenantId: string, addonKey: AddonKey): Promise<AddonSubscriptionView | null> {
+    const { data: sub } = await this.supabase
+      .from("tenant_addon_subscriptions")
+      .select("id, addon_key, plan_id, status, trial_end, current_period_end, next_billing_date, grace_period_end")
+      .eq("tenant_id", tenantId)
+      .eq("addon_key", addonKey)
+      .maybeSingle();
+
+    if (!sub) return null;
+
+    const plan = sub.plan_id
+      ? await this.supabase.from("addon_plans").select("name, price, currency").eq("id", sub.plan_id).maybeSingle()
+      : { data: null };
+
+    return {
+      id: sub.id,
+      addonKey: sub.addon_key,
+      status: sub.status,
+      planId: sub.plan_id,
+      planName: plan.data?.name ?? null,
+      planPrice: plan.data ? Number(plan.data.price) : null,
+      planCurrency: plan.data?.currency ?? null,
+      trialEnd: sub.trial_end,
+      currentPeriodEnd: sub.current_period_end,
+      nextBillingDate: sub.next_billing_date,
+      gracePeriodEnd: sub.grace_period_end,
+    };
+  }
+
   async listPayments(tenantId: string): Promise<PaymentView[]> {
     const { data, error } = await this.supabase
       .from("payments")
@@ -197,16 +308,26 @@ export class BillingService {
    * owner or settings.manage, same as subscriptions/payments), used by
    * initializeCheckout below and to show the "you have a credit" banner
    * on the tenant's own billing page.
+   *
+   * `addonKey: null` (the default) matches only base-subscription credits
+   * (addon_key IS NULL, what every credit granted before Phase 3 already
+   * is) -- passing a real addon key scopes the lookup to that add-on's
+   * own credits instead, so a base credit never accidentally covers an
+   * add-on checkout or vice versa.
    */
-  async getAvailableCredit(tenantId: string): Promise<{ id: string; amount: number; currency: string } | null> {
-    const { data } = await this.supabase
+  async getAvailableCredit(
+    tenantId: string,
+    addonKey: AddonKey | null = null
+  ): Promise<{ id: string; amount: number; currency: string } | null> {
+    let query = this.supabase
       .from("tenant_credits")
       .select("id, amount, currency")
       .eq("tenant_id", tenantId)
-      .eq("status", "available")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .eq("status", "available");
+
+    query = addonKey === null ? query.is("addon_key", null) : query.eq("addon_key", addonKey);
+
+    const { data } = await query.order("created_at", { ascending: false }).limit(1).maybeSingle();
 
     if (!data) return null;
     return { id: data.id, amount: Number(data.amount), currency: data.currency };
@@ -292,6 +413,94 @@ export class BillingService {
   }
 
   /**
+   * Add-on checkout -- structural mirror of initializeCheckout above,
+   * against tenant_addon_subscriptions/addon_plans/tenant_credits
+   * (addon_key-scoped) instead of the base tables. Unlike the base flow,
+   * there's no guaranteed pre-existing subscription row to look up (the
+   * base one is created for every tenant at signup; an add-on's only
+   * gets created on-demand, via bootstrapAddonTrial when a trial is
+   * available) -- so this upserts one first if the tenant is going
+   * straight to a paid checkout with no trial ever bootstrapped.
+   */
+  async initializeAddonCheckout(input: {
+    tenantId: string;
+    addonKey: AddonKey;
+    planId: string;
+    email: string;
+    callbackUrl: string;
+  }): Promise<{ authorizationUrl: string } | { activatedDirectly: true }> {
+    const { data: existingSub } = await this.supabase
+      .from("tenant_addon_subscriptions")
+      .select("id")
+      .eq("tenant_id", input.tenantId)
+      .eq("addon_key", input.addonKey)
+      .maybeSingle();
+
+    let subId = existingSub?.id;
+    if (!subId) {
+      const { data: newSub, error: insertError } = await this.supabase
+        .from("tenant_addon_subscriptions")
+        .insert({ tenant_id: input.tenantId, addon_key: input.addonKey, status: "PAYMENT_DUE" })
+        .select("id")
+        .single();
+
+      if (insertError || !newSub) {
+        throw new Error(`BillingService.initializeAddonCheckout: ${insertError?.message}`);
+      }
+      subId = newSub.id;
+    }
+
+    const { data: plan, error: planError } = await this.supabase
+      .from("addon_plans")
+      .select("price, currency")
+      .eq("id", input.planId)
+      .eq("is_active", true)
+      .single();
+
+    if (planError || !plan) {
+      throw new Error(`BillingService.initializeAddonCheckout: plan not found`);
+    }
+
+    const planPrice = Number(plan.price);
+    const credit = await this.getAvailableCredit(input.tenantId, input.addonKey);
+    const applicableCredit = credit && credit.currency === plan.currency ? credit : null;
+
+    if (applicableCredit && applicableCredit.amount >= planPrice) {
+      const now = new Date().toISOString();
+      const paymentId = await this.activateAddonSubscription(input.tenantId, subId, input.addonKey, input.planId, {
+        amount: 0,
+        currency: plan.currency,
+        paystackReference: `addoncredit_${applicableCredit.id}_${Date.now()}`,
+        paidAt: now,
+        customerCode: null,
+        rawPayload: { creditApplied: applicableCredit.id, creditAmount: applicableCredit.amount },
+      });
+      await this.markAddonCreditApplied(applicableCredit.id, paymentId);
+      return { activatedDirectly: true };
+    }
+
+    const chargeAmount = applicableCredit ? planPrice - applicableCredit.amount : planPrice;
+    const reference = `addonsub_${subId}_${Date.now()}`;
+
+    const result = await initializeTransaction({
+      email: input.email,
+      amount: chargeAmount,
+      currency: plan.currency,
+      reference,
+      callbackUrl: input.callbackUrl,
+      metadata: {
+        tenant_id: input.tenantId,
+        addon_subscription_id: subId,
+        addon_key: input.addonKey,
+        plan_id: input.planId,
+        ...(applicableCredit ? { credit_id: applicableCredit.id } : {}),
+      },
+    });
+
+    return { authorizationUrl: result.authorizationUrl };
+  }
+
+  /**
    * Signature-verified, idempotency-ledgered (billing_events.
    * paystack_event_id, unique) webhook processing -- a redelivered
    * event is a no-op, not a double-processed payment. Every event type
@@ -322,6 +531,8 @@ export class BillingService {
     const metadata = (data.metadata ?? {}) as {
       tenant_id?: string;
       subscription_id?: string;
+      addon_subscription_id?: string;
+      addon_key?: AddonKey;
       plan_id?: string;
       credit_id?: string;
     };
@@ -335,13 +546,30 @@ export class BillingService {
     // is a much smaller, much rarer failure mode than that, and
     // handleChargeSuccess's own payments.paystack_reference unique
     // constraint still catches a concurrent double-processing attempt.
-    if (eventType === "charge.success" && metadata.tenant_id && metadata.subscription_id && metadata.plan_id) {
-      await this.handleChargeSuccess(metadata.tenant_id, metadata.subscription_id, metadata.plan_id, data, metadata.credit_id);
+    //
+    // Dispatches by metadata shape -- initializeCheckout's metadata
+    // carries subscription_id, initializeAddonCheckout's carries
+    // addon_subscription_id/addon_key instead -- one webhook route, one
+    // signature check, two disjoint state machines underneath.
+    if (eventType === "charge.success" && metadata.tenant_id && metadata.plan_id) {
+      if (metadata.subscription_id) {
+        await this.handleChargeSuccess(metadata.tenant_id, metadata.subscription_id, metadata.plan_id, data, metadata.credit_id);
+      } else if (metadata.addon_subscription_id && metadata.addon_key) {
+        await this.handleAddonChargeSuccess(
+          metadata.tenant_id,
+          metadata.addon_subscription_id,
+          metadata.addon_key,
+          metadata.plan_id,
+          data,
+          metadata.credit_id
+        );
+      }
     }
 
     const { error: ledgerError } = await this.supabase.from("billing_events").insert({
       tenant_id: metadata.tenant_id ?? null,
       subscription_id: metadata.subscription_id ?? null,
+      addon_subscription_id: metadata.addon_subscription_id ?? null,
       event_type: eventType,
       paystack_event_id: paystackEventId,
       payload: payload as unknown as Record<string, unknown>,
@@ -462,6 +690,118 @@ export class BillingService {
 
     if (error) {
       throw new Error(`BillingService.markCreditApplied: ${error.message}`);
+    }
+  }
+
+  private async handleAddonChargeSuccess(
+    tenantId: string,
+    addonSubscriptionId: string,
+    addonKey: AddonKey,
+    planId: string,
+    data: Record<string, unknown>,
+    creditId?: string
+  ): Promise<void> {
+    const amountMinorUnits = typeof data.amount === "number" ? data.amount : 0;
+    const customer = (data.customer ?? {}) as { customer_code?: string };
+
+    const paymentId = await this.activateAddonSubscription(tenantId, addonSubscriptionId, addonKey, planId, {
+      amount: amountMinorUnits / 100,
+      currency: typeof data.currency === "string" ? data.currency : "KES",
+      paystackReference: String(data.reference),
+      paidAt: typeof data.paid_at === "string" ? data.paid_at : new Date().toISOString(),
+      customerCode: customer.customer_code ?? null,
+      rawPayload: data,
+    });
+
+    if (creditId) {
+      await this.markAddonCreditApplied(creditId, paymentId);
+    }
+  }
+
+  /**
+   * Add-on mirror of activateSubscription -- shared by the webhook-
+   * confirmed path and initializeAddonCheckout's credit-covers-it-all
+   * path. Deliberately does NOT touch `tenants.status` (unlike the base
+   * version) -- an add-on activating/lapsing must only affect that
+   * add-on's own entitlement (lib/inventory/entitlement.ts, Phase 4),
+   * never the tenant's overall access.
+   */
+  private async activateAddonSubscription(
+    tenantId: string,
+    addonSubscriptionId: string,
+    addonKey: AddonKey,
+    planId: string,
+    params: {
+      amount: number;
+      currency: string;
+      paystackReference: string;
+      paidAt: string;
+      customerCode: string | null;
+      rawPayload: Record<string, unknown>;
+    }
+  ): Promise<string> {
+    const { data: plan } = await this.supabase.from("addon_plans").select("duration_days").eq("id", planId).maybeSingle();
+
+    const periodDays = plan?.duration_days ?? 30;
+    const now = new Date();
+    const periodEnd = new Date(now.getTime() + periodDays * 86_400_000);
+
+    const { data: payment, error: paymentError } = await this.supabase
+      .from("addon_payments")
+      .insert({
+        tenant_id: tenantId,
+        addon_subscription_id: addonSubscriptionId,
+        amount: params.amount,
+        currency: params.currency,
+        status: "success",
+        paystack_reference: params.paystackReference,
+        paid_at: params.paidAt,
+        raw_payload: params.rawPayload,
+      })
+      .select("id")
+      .single();
+
+    if (paymentError || !payment) {
+      throw new Error(`BillingService.activateAddonSubscription: failed to record payment: ${paymentError?.message}`);
+    }
+
+    await this.supabase
+      .from("tenant_addon_subscriptions")
+      .update({
+        status: "ACTIVE",
+        plan_id: planId,
+        current_period_start: now.toISOString(),
+        current_period_end: periodEnd.toISOString(),
+        next_billing_date: periodEnd.toISOString(),
+        grace_period_end: null,
+        paystack_customer_code: params.customerCode,
+      })
+      .eq("id", addonSubscriptionId);
+
+    await new AuditService(this.supabase)
+      .log({
+        tenantId,
+        actorProfileId: null,
+        action: AUDIT_ACTION.ADDON_SUBSCRIPTION_CHANGED,
+        entityType: "tenant_addon_subscription",
+        entityId: addonSubscriptionId,
+        newValues: { status: "ACTIVE", plan_id: planId, addon_key: addonKey },
+        metadata: { paystackReference: params.paystackReference },
+      })
+      .catch(() => {});
+
+    return payment.id;
+  }
+
+  private async markAddonCreditApplied(creditId: string, addonPaymentId: string): Promise<void> {
+    const { error } = await this.supabase
+      .from("tenant_credits")
+      .update({ status: "applied", applied_at: new Date().toISOString(), applied_to_addon_payment_id: addonPaymentId })
+      .eq("id", creditId)
+      .eq("status", "available");
+
+    if (error) {
+      throw new Error(`BillingService.markAddonCreditApplied: ${error.message}`);
     }
   }
 
