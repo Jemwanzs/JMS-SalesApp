@@ -109,6 +109,24 @@ Writable only via the Paystack webhook route running under the service-role clie
 
 Platform-admin tables are **not reachable through the normal authenticated RLS surface at all** — access only via the service-role client after an app-layer `is_platform_admin()` check. A compromised tenant session can never enumerate them. See `15-super-admin.md`.
 
+## 3.10 Inventory (optional add-on)
+
+| Table | Key columns | Scope |
+|---|---|---|
+| `addon_plans` | `id`, `addon_key` (currently only `'inventory'`), `code`, `name`, `price`, `currency`, `duration_days`, `discount_percent`, `is_active` | Global catalog, parallel to `billing_plans` |
+| `tenant_addon_subscriptions` | `id`, `tenant_id`, `addon_key`, `plan_id` (nullable), `status` (same TRIAL/ACTIVE/PAYMENT_DUE/GRACE_PERIOD/SUSPENDED/CANCELLED vocabulary as `subscriptions`), `trial_end`, `current_period_start/end`, `next_billing_date`, `grace_period_end`, `paystack_customer_code`, `paystack_subscription_code` — unique(`tenant_id`,`addon_key`) | Tenant, parallel to `subscriptions` |
+| `addon_payments` | `id`, `tenant_id`, `addon_subscription_id`, `amount`, `currency`, `status`, `paystack_reference` (unique), `paid_at`, `raw_payload jsonb` | Tenant, parallel to `payments` — a separate table, not a nullable column on `payments`, since `payments.subscription_id` is `not null` |
+| `products` (additive columns) | `tracks_inventory` (boolean, default false), `unit_of_measure` (nullable text), `unit_of_measure_is_custom` (boolean), `low_stock_threshold` (nullable numeric) | Tenant |
+| `stock_movements` | `id`, `tenant_id`, `location_id` (nullable), `product_id`, `product_name_snapshot`, `unit_of_measure_snapshot`, `movement_type` (opening_stock/stock_in/stock_out/adjustment_increase/adjustment_decrease/damaged/expired/lost/reconciliation_variance), `quantity` (signed — positive increases the balance, negative decreases it), `reason` (nullable, required by a check constraint for every type except opening_stock/stock_in/stock_out), `reference_type` (manual/reconciliation), `reference_id`, `recorded_by`, `occurred_on` | Tenant — immutable append-only ledger, no UPDATE/DELETE policy, same pattern as `sales` |
+| `stock_balances` | `tenant_id`, `product_id`, `location_id`, `balance`, `last_movement_date` | Plain (non-materialized) **view** over `stock_movements`, `security_invoker` — governed transparently by that table's own RLS |
+| `stock_reconciliations` | `id`, `tenant_id`, `location_id` (nullable), `product_id`, `reconciliation_date`, `opening_quantity`, `stock_in_quantity`, `stock_out_quantity`, `expected_closing_quantity` (generated), `actual_quantity`, `variance` (generated), `variance_reason` (nullable, required by a check constraint whenever `variance <> 0`), `recorded_by` — one per product per day (coalesce-normalized unique index, location-independent since there's no per-location stock UI yet) | Tenant — no INSERT/UPDATE/DELETE policy for `authenticated`; writable only via `record_stock_reconciliation()` |
+
+`tenant_credits` gained a nullable `addon_key` column (null = base subscription, every pre-existing row) and `applied_to_addon_payment_id` (parallel to `applied_to_payment_id`). `billing_events` gained a nullable `addon_subscription_id`.
+
+`record_stock_reconciliation(p_tenant_id, p_product_id, p_location_id, p_reconciliation_date, p_actual_quantity, p_variance_reason)` is a `SECURITY DEFINER` function, following the same established pattern as `sales.void_sale()`/`correct_sale()` (§3.3's `sale_corrections`, `19-security-checklist.md`) rather than a new one: `stock_movements`/`stock_reconciliations` have no RLS write policy a client could use directly, so the function does its own `has_permission(tenant_id, 'stock.reconcile')` check in code, then atomically writes the reconciliation row and (only if there's a real variance) an offsetting `stock_movements` row with the function-owner's privileges — `auth.uid()` still resolves to the real calling user regardless of security mode. This keeps the ledger and the reconciliation log impossible to get out of sync with each other.
+
+Real entitlement to any of this — beyond `inventory.view`/`inventory.manage`/`stock.movement.record`/`stock.reconcile` (`06-roles-permissions.md`) — is `tenant_settings.inventory_enabled = true` **AND** `tenant_addon_subscriptions.status` being in an still-granted state, resolved once per request by `lib/inventory/entitlement.ts` and never folded into `has_permission()` itself (kept out of the highest-blast-radius function in the whole security model, deliberately). See `21-inventory-management.md`.
+
 ## Row Level Security pattern
 
 Every tenant-scoped table's policy resolves to one shape:

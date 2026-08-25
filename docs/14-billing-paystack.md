@@ -46,3 +46,18 @@ Business data is never deleted for a billing lapse.
 ## Multi-currency — explicitly out of scope for now
 
 `tenants.currency` is singular (tenant-level, not per-location), even though multi-location support exists in the schema from day one. Flagged as a scaling question to resolve explicitly before multi-location rollout expands beyond the current single-currency assumption — not silently baked in as permanent.
+
+## Add-on billing (Inventory and any future paid module)
+
+A paid add-on module (currently only Inventory — see `21-inventory-management.md`) is billed through a **parallel, independent state machine**, not folded into the base subscription above:
+
+```
+TRIAL -> ACTIVE -> PAYMENT_DUE -> GRACE_PERIOD -> SUSPENDED
+                 \-> CANCELLED
+```
+
+`tenant_addon_subscriptions` (`tenant_id, addon_key`, unique together): same six-value `status` vocabulary as `subscriptions`, its own `plan_id` (→ `addon_plans`, a separate catalog from `billing_plans`), its own `trial_end`/`current_period_end`/`grace_period_end`. `addon_payments` mirrors `payments` but is a genuinely separate table — `payments.subscription_id` is `not null references subscriptions`, so an add-on payment (no real `subscriptions.id`, only a `tenant_addon_subscriptions.id`) cannot live there. `run_addon_billing_sweep()` mirrors `run_billing_sweep()`'s automatic TRIAL→PAYMENT_DUE→GRACE_PERIOD→SUSPENDED transitions, riding the same daily `billing-sweep` cron job — but it **never** flips `tenants.status`: an add-on lapsing must only affect that add-on's own entitlement (`lib/inventory/entitlement.ts`), never the tenant's overall access, which stays governed solely by the base subscription above.
+
+Checkout reuses the exact same credit-or-Paystack pattern as `initializeCheckout` (`BillingService.initializeAddonCheckout`) and the same webhook route (`app/api/webhooks/paystack`) — one signature check, dispatching to the base or add-on activation path by which metadata shape the Paystack event carries (`subscription_id` vs `addon_subscription_id`+`addon_key`). `tenant_credits` gained a nullable `addon_key` column for the same reason — `null` still means "applies to the base subscription" (every pre-existing credit), a real value scopes a credit to one add-on's own checkout.
+
+Pricing/discount/duration per add-on plan, and the add-on's own trial-days default (`platform_settings` key `{addon_key}_addon_trial_days`), are Super-Admin-configurable at `/admin/addons` — the first real admin UI for editing a billing catalog table or a `platform_settings` key at all; both `billing_plans` and the base `trial_days`/`grace_period_days` settings above are still hand-edited via migration only.

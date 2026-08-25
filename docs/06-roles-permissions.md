@@ -25,7 +25,12 @@ roles.manage
 security.manage
 settings.manage
 billing.view  billing.manage
+
+inventory.view  inventory.manage
+stock.movement.record  stock.reconcile
 ```
+
+The `inventory.*`/`stock.*` group (migration `0035`) only means anything for a tenant with the Inventory add-on enabled (`21-inventory-management.md`) — holding the permission with the module off just means nothing to gate yet, the same as any permission for a feature the tenant hasn't turned on.
 
 Permission actions in general: `VIEW, CREATE, EDIT, VOID, APPROVE, EXPORT, MANAGE, REOPEN`. Deletion of critical financial records is not a permission that exists — see `08-sales-engine.md` for VOID/CORRECT/REVERSE instead.
 
@@ -33,11 +38,15 @@ Permission actions in general: `VIEW, CREATE, EDIT, VOID, APPROVE, EXPORT, MANAG
 
 `roles` has `tenant_id`. At tenant creation, three system-default roles are **seeded as that tenant's own rows** (not references to a global template):
 
-- **Sales User** — `sales.create`, `sales.view_own`, `analytics.view_own`. No products/users/settings/billing/security/business-wide analytics/exports.
-- **Supervisor** — Sales User's grants + `sales.view_all` (team scope via location), `analytics.products`, `reports.view`, limited correction rights.
-- **Tenant Administrator** — full grant set: settings, users, roles, products, analytics, reports, security, business-day management, billing.
+- **Sales User** — `sales.create`, `sales.view_own`, `analytics.view_own`. No products/users/settings/billing/security/business-wide analytics/exports/inventory — keeping Sales simple is a repeated explicit principle (`00-project-overview.md`), so a Sales User gets nothing from the `inventory.*`/`stock.*` group either, even after the add-on is enabled.
+- **Supervisor** — Sales User's grants + `sales.view_all` (team scope via location), `analytics.products`, `reports.view`, limited correction rights, `inventory.view` (read-only stock visibility).
+- **Tenant Administrator** — full grant set: settings, users, roles, products, analytics, reports, security, business-day management, billing, and the full `inventory.*`/`stock.*` group.
 
 Because each tenant owns its own role rows, a tenant can freely edit "Supervisor"'s grants without affecting any other tenant, and can create fully custom roles (Cashier, Sales Agent, Auditor, Finance Manager, Operations Manager, Owner, etc. — spec §59) with individually chosen permissions.
+
+### Adding a permission key after tenants already exist
+
+`RoleService.seedDefaultRoles()` only runs once, at tenant creation — it computes "Tenant Administrator = every permission in the catalog" from whatever's in `permissions` **at that moment**. A migration that adds a new key (as `inventory.*`/`stock.*` did) reaches every *future* tenant automatically for free, but reaches **zero** pre-existing tenants unless the same migration explicitly backfills `role_permissions` for the relevant system-default roles. No migration before `0035` had ever needed to do this; it's now the established pattern for any future permission addition that existing tenants should get immediately rather than only on next role edit.
 
 ## Location-scoped assignments
 

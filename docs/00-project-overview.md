@@ -16,7 +16,6 @@ Login → Select Product → Enter Sale → Submit → Return to Sales Screen
 
 This is a deliberate boundary, not an oversight. The product must **not** silently grow into:
 
-- Inventory / stock management
 - Purchasing / suppliers
 - Full accounting or bookkeeping
 - Payroll / HR
@@ -24,6 +23,8 @@ This is a deliberate boundary, not an oversight. The product must **not** silent
 - POS hardware integration
 
 Architecture decisions should avoid *needlessly* blocking these as future directions, but none of them ship without an explicit product decision to add them.
+
+Inventory / stock management was on this list until the Product Enhancements batch — that explicit product decision has now been made, and it ships as an **optional, separately-billed add-on module** (never bundled into the base Sales product, never required to use it). See `21-inventory-management.md`. The rest of this list stays exactly as it was.
 
 ## Who uses it
 
@@ -73,3 +74,4 @@ Next.js (App Router) + React + TypeScript, Tailwind CSS + shadcn/ui, React Hook 
 | `18-testing-qa.md` | Test strategy incl. tenant-isolation tests |
 | `19-security-checklist.md` | Security baseline + open-decision log |
 | `20-development-progress.md` | Living progress tracker |
+| `21-inventory-management.md` | Optional Inventory add-on: schema, entitlement, reconciliation, permissions |
