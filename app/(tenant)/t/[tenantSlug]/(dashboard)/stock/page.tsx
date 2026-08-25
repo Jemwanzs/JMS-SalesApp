@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { ClipboardCheck } from "lucide-react";
+import { BarChart3, ClipboardCheck } from "lucide-react";
 
 import { StockDashboardList } from "@/features/stock/components/stock-dashboard-list";
 import { StockService } from "@/services/StockService";
@@ -49,15 +49,24 @@ export default async function StockPage({ params }: { params: Promise<{ tenantSl
     <div className="flex flex-1 flex-col p-6">
       <div className="mb-4 flex items-center justify-between gap-2">
         <h1 className="text-xl font-semibold">Stock</h1>
-        {canReconcile && (
+        <div className="flex gap-2">
           <Link
-            href={`/t/${tenantSlug}/stock/reconcile`}
+            href={`/t/${tenantSlug}/stock/reports`}
             className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium hover:bg-muted"
           >
-            <ClipboardCheck className="h-4 w-4" />
-            Reconcile
+            <BarChart3 className="h-4 w-4" />
+            Reports
           </Link>
-        )}
+          {canReconcile && (
+            <Link
+              href={`/t/${tenantSlug}/stock/reconcile`}
+              className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium hover:bg-muted"
+            >
+              <ClipboardCheck className="h-4 w-4" />
+              Reconcile
+            </Link>
+          )}
+        </div>
       </div>
       <StockDashboardList tenantSlug={tenantSlug} balances={balances} />
     </div>

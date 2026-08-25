@@ -81,6 +81,29 @@ export interface StockReconciliationRow {
   createdAt: string;
 }
 
+export interface DateRangeInput {
+  from: string;
+  to: string;
+}
+
+export interface DailyMovementPoint {
+  date: string;
+  stockIn: number;
+  stockOut: number;
+}
+
+export interface VarianceReportRow {
+  reconciliationId: string;
+  productId: string;
+  productName: string;
+  unitOfMeasure: string | null;
+  reconciliationDate: string;
+  expectedClosingQuantity: number;
+  actualQuantity: number;
+  variance: number;
+  varianceReason: string | null;
+}
+
 export class StockService {
   constructor(private readonly supabase: SupabaseClient<Database>) {}
 
@@ -290,5 +313,83 @@ export class StockService {
 
     const doneProductIds = new Set((doneRows ?? []).map((r) => r.product_id));
     return balances.filter((b) => !doneProductIds.has(b.productId));
+  }
+
+  /**
+   * Day-bucketed stock-in vs stock-out (Product Enhancements #8) -- same
+   * bucketing approach as AnalyticsService.getDailyTrend, tenant-wide and
+   * not permission-gated internally (the caller/page gates on
+   * inventory.view), same reasoning AnalyticsService.getProductRevenueTotals
+   * already uses for a tenant-wide read.
+   */
+  async getMovementTrend(tenantId: string, range: DateRangeInput): Promise<DailyMovementPoint[]> {
+    const { data, error } = await this.supabase
+      .from("stock_movements")
+      .select("quantity, occurred_on")
+      .eq("tenant_id", tenantId)
+      .gte("occurred_on", range.from)
+      .lte("occurred_on", range.to);
+
+    if (error) {
+      throw new Error(`StockService.getMovementTrend: ${error.message}`);
+    }
+
+    const byDate = new Map<string, { stockIn: number; stockOut: number }>();
+    for (const row of data ?? []) {
+      const qty = Number(row.quantity);
+      const entry = byDate.get(row.occurred_on) ?? { stockIn: 0, stockOut: 0 };
+      if (qty > 0) entry.stockIn += qty;
+      else entry.stockOut += -qty;
+      byDate.set(row.occurred_on, entry);
+    }
+
+    return [...byDate.entries()]
+      .map(([date, agg]) => ({ date, ...agg }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  /** Reconciliations with a real variance in range, biggest discrepancy first -- the actionable list. */
+  async getVarianceReport(tenantId: string, range: DateRangeInput): Promise<VarianceReportRow[]> {
+    const { data, error } = await this.supabase
+      .from("stock_reconciliations")
+      .select("id, product_id, reconciliation_date, expected_closing_quantity, actual_quantity, variance, variance_reason")
+      .eq("tenant_id", tenantId)
+      .gte("reconciliation_date", range.from)
+      .lte("reconciliation_date", range.to)
+      .neq("variance", 0);
+
+    if (error) {
+      throw new Error(`StockService.getVarianceReport: ${error.message}`);
+    }
+    if (!data || data.length === 0) return [];
+
+    const productIds = [...new Set(data.map((r) => r.product_id))];
+    const { data: products, error: productsError } = await this.supabase
+      .from("products")
+      .select("id, name, unit_of_measure")
+      .in("id", productIds);
+
+    if (productsError) {
+      throw new Error(`StockService.getVarianceReport: ${productsError.message}`);
+    }
+
+    const productById = new Map((products ?? []).map((p) => [p.id, p]));
+
+    return data
+      .map((row) => {
+        const product = productById.get(row.product_id);
+        return {
+          reconciliationId: row.id,
+          productId: row.product_id,
+          productName: product?.name ?? "(deleted product)",
+          unitOfMeasure: product?.unit_of_measure ?? null,
+          reconciliationDate: row.reconciliation_date,
+          expectedClosingQuantity: Number(row.expected_closing_quantity),
+          actualQuantity: Number(row.actual_quantity),
+          variance: Number(row.variance),
+          varianceReason: row.variance_reason,
+        };
+      })
+      .sort((a, b) => Math.abs(b.variance) - Math.abs(a.variance));
   }
 }
