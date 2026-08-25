@@ -78,7 +78,19 @@ export interface BusinessDaySweepResult {
 
 export interface Database {
   public: {
-    Views: Record<string, never>;
+    Views: {
+      /** Plain (non-materialized) view over stock_movements (migration 0035) -- read-only, no Insert/Update. */
+      stock_balances: {
+        Row: {
+          tenant_id: string;
+          product_id: string;
+          location_id: string | null;
+          balance: number;
+          last_movement_date: string | null;
+        };
+        Relationships: [];
+      };
+    };
     Tables: {
       profiles: {
         Row: {
@@ -307,6 +319,11 @@ export interface Database {
           created_by: string | null;
           created_at: string;
           updated_at: string;
+          /** Product Enhancements #3/#5 (migration 0035). */
+          tracks_inventory: boolean;
+          unit_of_measure: string | null;
+          unit_of_measure_is_custom: boolean;
+          low_stock_threshold: number | null;
         };
         Insert: Partial<Database["public"]["Tables"]["products"]["Row"]> & {
           tenant_id: string;
@@ -330,6 +347,44 @@ export interface Database {
           Database["public"]["Tables"]["product_images"]["Row"]
         > & { tenant_id: string; product_id: string; storage_path: string };
         Update: Partial<Database["public"]["Tables"]["product_images"]["Row"]>;
+        Relationships: [];
+      };
+      stock_movements: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          location_id: string | null;
+          product_id: string;
+          product_name_snapshot: string;
+          unit_of_measure_snapshot: string;
+          movement_type:
+            | "opening_stock"
+            | "stock_in"
+            | "stock_out"
+            | "adjustment_increase"
+            | "adjustment_decrease"
+            | "damaged"
+            | "expired"
+            | "lost"
+            | "reconciliation_variance";
+          quantity: number;
+          reason: string | null;
+          reference_type: "manual" | "reconciliation" | null;
+          reference_id: string | null;
+          recorded_by: string;
+          occurred_on: string;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["stock_movements"]["Row"]> & {
+          tenant_id: string;
+          product_id: string;
+          product_name_snapshot: string;
+          unit_of_measure_snapshot: string;
+          movement_type: Database["public"]["Tables"]["stock_movements"]["Row"]["movement_type"];
+          quantity: number;
+          recorded_by: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["stock_movements"]["Row"]>;
         Relationships: [];
       };
       business_days: {

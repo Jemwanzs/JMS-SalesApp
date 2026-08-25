@@ -31,6 +31,9 @@ export const DEFAULT_ROLE_GRANTS: Record<string, string[]> = {
     "sales.view_all",
     "analytics.products",
     "reports.view",
+    // Product Enhancements #3: read-only visibility into stock levels --
+    // Sales User gets nothing new, deliberately (keeps Sales simple).
+    "inventory.view",
   ],
   // Tenant Administrator gets every permission in the catalog — computed
   // from the live permission list at seed time (see seedDefaultRoles)
