@@ -13,6 +13,7 @@ import { SecurityService } from "@/services/SecurityService";
 import { TenantService } from "@/services/TenantService";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/current-user";
 
 export const metadata: Metadata = {
   title: "Security | JMS Sales App",
@@ -44,15 +45,10 @@ export default async function SecurityPage({
   const { tenantSlug } = await params;
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const { data: tenant } = await supabase
-    .from("tenants")
-    .select("id")
-    .eq("slug", tenantSlug)
-    .single();
+  const [user, { data: tenant }] = await Promise.all([
+    getCurrentUser(),
+    supabase.from("tenants").select("id").eq("slug", tenantSlug).single(),
+  ]);
 
   const tenantId = tenant!.id;
   const [canManageSecurity, canManageSettings] = await Promise.all([

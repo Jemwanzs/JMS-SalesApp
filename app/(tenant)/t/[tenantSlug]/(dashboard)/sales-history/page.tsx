@@ -7,6 +7,7 @@ import { TenantService } from "@/services/TenantService";
 import { can } from "@/lib/permissions/can";
 import { todayString } from "@/lib/utils/date-ranges";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/current-user";
 
 export const metadata: Metadata = {
   title: "Sales History | JMS Sales App",
@@ -45,15 +46,10 @@ export default async function SalesHistoryPage({
   const { from, to, q } = await searchParams;
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const { data: tenant } = await supabase
-    .from("tenants")
-    .select("id, timezone")
-    .eq("slug", tenantSlug)
-    .single();
+  const [user, { data: tenant }] = await Promise.all([
+    getCurrentUser(),
+    supabase.from("tenants").select("id, timezone").eq("slug", tenantSlug).single(),
+  ]);
 
   const tenantId = tenant!.id;
   const today = todayString(tenant!.timezone);

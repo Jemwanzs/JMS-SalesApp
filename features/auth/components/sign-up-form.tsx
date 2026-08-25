@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 
 import { signUpAction } from "@/features/auth/actions/sign-up";
+import { AUTH_INPUT_CLASS } from "@/features/auth/components/auth-input-class";
 import { Button } from "@/components/ui/button";
 import {
   Form,
@@ -72,7 +73,7 @@ export function SignUpForm() {
               <FormItem>
                 <FormLabel>First name</FormLabel>
                 <FormControl>
-                  <Input autoComplete="given-name" {...field} />
+                  <Input autoComplete="given-name" className={AUTH_INPUT_CLASS} {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -85,7 +86,7 @@ export function SignUpForm() {
               <FormItem>
                 <FormLabel>Last name</FormLabel>
                 <FormControl>
-                  <Input autoComplete="family-name" {...field} />
+                  <Input autoComplete="family-name" className={AUTH_INPUT_CLASS} {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -100,7 +101,7 @@ export function SignUpForm() {
             <FormItem>
               <FormLabel>Business name</FormLabel>
               <FormControl>
-                <Input autoComplete="organization" {...field} />
+                <Input autoComplete="organization" className={AUTH_INPUT_CLASS} {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -114,7 +115,7 @@ export function SignUpForm() {
             <FormItem>
               <FormLabel>Email</FormLabel>
               <FormControl>
-                <Input type="email" autoComplete="email" {...field} />
+                <Input type="email" autoComplete="email" className={AUTH_INPUT_CLASS} {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -129,7 +130,7 @@ export function SignUpForm() {
               <FormItem>
                 <FormLabel>Phone</FormLabel>
                 <FormControl>
-                  <Input type="tel" autoComplete="tel" {...field} />
+                  <Input type="tel" autoComplete="tel" className={AUTH_INPUT_CLASS} {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -142,7 +143,7 @@ export function SignUpForm() {
               <FormItem>
                 <FormLabel>Country</FormLabel>
                 <FormControl>
-                  <Input autoComplete="country-name" {...field} />
+                  <Input autoComplete="country-name" className={AUTH_INPUT_CLASS} {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -160,6 +161,7 @@ export function SignUpForm() {
                 <Input
                   type="password"
                   autoComplete="new-password"
+                  className={AUTH_INPUT_CLASS}
                   {...field}
                 />
               </FormControl>
@@ -178,6 +180,7 @@ export function SignUpForm() {
                 <Input
                   type="password"
                   autoComplete="new-password"
+                  className={AUTH_INPUT_CLASS}
                   {...field}
                 />
               </FormControl>

@@ -78,7 +78,6 @@ export default async function SettingsPage({
     addonBillingService.getAddonTrialDaysConfigured(tenantId, "inventory"),
   ]);
 
-  const inventoryPlan = inventoryPlans[0] ?? null;
   // Matches features/settings/actions/set-inventory-enabled.ts's own
   // ENTITLED_WITHOUT_CHECKOUT exactly (deliberately narrower than
   // lib/inventory/entitlement.ts's nav-display tolerance) -- this
@@ -86,9 +85,16 @@ export default async function SettingsPage({
   // that the action itself would actually route to checkout.
   const ENTITLED_WITHOUT_CHECKOUT = new Set(["TRIAL", "ACTIVE"]);
   const entitledWithoutCheckout = inventoryAddon != null && ENTITLED_WITHOUT_CHECKOUT.has(inventoryAddon.status);
+  // Mirrors BillingService.bootstrapAddonTrial's own eligibility check:
+  // no row yet, or an abandoned checkout placeholder that never actually
+  // started a trial or reached a real paid period, is still trial-
+  // eligible regardless of its current status -- otherwise a tenant who
+  // backed out of an unpaid checkout would be shown "Subscribe" forever
+  // instead of the trial they never actually used.
+  const trialEligible = !inventoryAddon || (inventoryAddon.trialEnd === null && inventoryAddon.currentPeriodEnd === null);
   const inventoryConfirmMode: "reenable" | "trial" | "checkout" = entitledWithoutCheckout
     ? "reenable"
-    : !inventoryAddon && inventoryTrialDays > 0
+    : trialEligible && inventoryTrialDays > 0
       ? "trial"
       : "checkout";
 
@@ -111,14 +117,12 @@ export default async function SettingsPage({
         initialShowProductPrice={showProductPrice ?? true}
       />
       <QuantityFieldCard tenantId={tenantId} tenantSlug={tenantSlug} initialEnabled={quantityEnabled ?? true} />
-      {inventoryPlan && (
+      {inventoryPlans.length > 0 && (
         <InventoryModuleCard
           tenantId={tenantId}
           tenantSlug={tenantSlug}
           initialEnabled={Boolean(inventoryEnabledSetting)}
-          planPrice={inventoryPlan.price}
-          planCurrency={inventoryPlan.currency}
-          planDurationDays={inventoryPlan.durationDays}
+          plans={inventoryPlans}
           trialDaysAvailable={inventoryTrialDays}
           confirmMode={inventoryConfirmMode}
         />

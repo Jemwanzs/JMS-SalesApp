@@ -2,6 +2,7 @@
 
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 
 import { AuditService } from "@/services/AuditService";
 import { AuthService } from "@/services/AuthService";
@@ -162,29 +163,40 @@ export async function signInAction(
   }
 
   try {
-    const [, session] = await Promise.all([
-      securityService.logLoginEvent({
-        tenantId: tenant?.tenantId ?? null,
-        profileId: userId,
-        ip,
-        userAgent,
-        success: true,
-      }),
-      securityService.createSession({
-        profileId: userId,
-        tenantId: tenant?.tenantId ?? null,
-        ip,
-        userAgent,
-      }),
-      auditService.log({
-        tenantId: tenant?.tenantId ?? null,
-        actorProfileId: userId,
-        action: AUDIT_ACTION.LOGIN,
-        entityType: "session",
-        ipAddress: ip,
-        device: userAgent,
-      }),
-    ]);
+    // Only createSession's result is needed before the redirect (its id
+    // becomes the "sid" cookie) -- logLoginEvent and the audit log are
+    // pure tracking that nothing downstream reads, so they're deferred
+    // via after() instead of sharing this Promise.all: the redirect no
+    // longer waits on two writes it never needed the result of, while
+    // after() (unlike a bare un-awaited promise) keeps the platform
+    // function alive until they actually finish, so neither log is ever
+    // silently dropped.
+    const session = await securityService.createSession({
+      profileId: userId,
+      tenantId: tenant?.tenantId ?? null,
+      ip,
+      userAgent,
+    });
+
+    after(async () => {
+      await Promise.all([
+        securityService.logLoginEvent({
+          tenantId: tenant?.tenantId ?? null,
+          profileId: userId,
+          ip,
+          userAgent,
+          success: true,
+        }),
+        auditService.log({
+          tenantId: tenant?.tenantId ?? null,
+          actorProfileId: userId,
+          action: AUDIT_ACTION.LOGIN,
+          entityType: "session",
+          ipAddress: ip,
+          device: userAgent,
+        }),
+      ]).catch(() => {});
+    });
 
     // Correlates "which sessions row is THIS browser" for the security
     // page's "sign out of other devices" action -- carries no auth

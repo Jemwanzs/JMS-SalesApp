@@ -14,6 +14,7 @@ import { can } from "@/lib/permissions/can";
 import { todayString, trailingDaysRange } from "@/lib/utils/date-ranges";
 import { rankProducts } from "@/lib/utils/product-ranking";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/current-user";
 
 export const metadata: Metadata = {
   title: "Sales | JMS Sales App",
@@ -41,32 +42,33 @@ export default async function SalesPage({
 
   // getUser() and the tenant lookup are independent (the latter only
   // needs tenantSlug from the URL) -- run them together rather than
-  // waiting on getUser() first for no reason.
-  const [
-    {
-      data: { user },
-    },
-    { data: tenant },
-  ] = await Promise.all([
-    supabase.auth.getUser(),
+  // waiting on getUser() first for no reason. getCurrentUser() also
+  // reuses the layout's own already-resolved call instead of hitting
+  // Supabase Auth's network endpoint a second time for this, the first
+  // page rendered after every login.
+  const [user, { data: tenant }] = await Promise.all([
+    getCurrentUser(),
     supabase.from("tenants").select("id, timezone").eq("slug", tenantSlug).single(),
   ]);
 
-  const { data: profile } = user
-    ? await supabase.from("profiles").select("full_name").eq("id", user.id).maybeSingle()
-    : { data: null };
-
-  const { data: locationRow } = await supabase
-    .from("locations")
-    .select("id")
-    .eq("tenant_id", tenant!.id)
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .single();
+  // profile and locationRow are likewise independent of each other --
+  // one needs user.id, the other tenant.id, neither needs the other's
+  // result.
+  const [{ data: profile }, { data: locationRow }] = await Promise.all([
+    user
+      ? supabase.from("profiles").select("full_name").eq("id", user.id).maybeSingle()
+      : Promise.resolve({ data: null }),
+    supabase
+      .from("locations")
+      .select("id")
+      .eq("tenant_id", tenant!.id)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .single(),
+  ]);
   const location = locationRow!;
 
   const businessDayService = new BusinessDayService(supabase);
-  const businessDay = await businessDayService.getTodayBusinessDay(tenant!.id, location.id);
 
   const firstName = profile?.full_name?.split(" ")[0] ?? "there";
   const today = new Date().toLocaleDateString("en-US", {
@@ -75,12 +77,17 @@ export default async function SalesPage({
     day: "numeric",
   });
 
-  const canCapture = businessDay?.status === "open" || businessDay?.status === "reopened";
-  const [canOpenDay, canReopenDay, activeWish] = await Promise.all([
+  // None of these four depend on each other -- businessDay only needs
+  // location.id, the rest only need tenant.id -- so they can all run in
+  // one round trip instead of businessDay blocking the other three.
+  const [businessDay, canOpenDay, canReopenDay, activeWish] = await Promise.all([
+    businessDayService.getTodayBusinessDay(tenant!.id, location.id),
     can("business_day.open", { tenantId: tenant!.id }),
     can("business_day.reopen", { tenantId: tenant!.id }),
     new AnniversaryService(supabase).getActiveWish(tenant!.id).catch(() => null),
   ]);
+
+  const canCapture = businessDay?.status === "open" || businessDay?.status === "reopened";
 
   // The tenant layout shell already shows a small, low-key banner for any
   // wish sent in the last 7 days -- this is the louder, one-day-only

@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 
 import { signInAction, type LoginActionState } from "@/features/auth/actions/sign-in";
+import { AUTH_INPUT_CLASS } from "@/features/auth/components/auth-input-class";
 import { RequestTemporaryAccessForm } from "@/features/auth/components/request-temporary-access-form";
 import { Button } from "@/components/ui/button";
 import {
@@ -99,7 +100,7 @@ export function LoginForm() {
             <FormItem>
               <FormLabel>Email</FormLabel>
               <FormControl>
-                <Input type="email" autoComplete="email" {...field} />
+                <Input type="email" autoComplete="email" className={AUTH_INPUT_CLASS} {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -124,6 +125,7 @@ export function LoginForm() {
                 <Input
                   type="password"
                   autoComplete="current-password"
+                  className={AUTH_INPUT_CLASS}
                   {...field}
                 />
               </FormControl>

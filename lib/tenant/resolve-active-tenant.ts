@@ -42,20 +42,17 @@ export async function resolveActiveTenant(
     return null;
   }
 
-  const { data: tenant } = await supabase
-    .from("tenants")
-    .select("slug")
-    .eq("id", membership.tenant_id)
-    .maybeSingle();
+  // Both only need membership.tenant_id, not each other's result -- run
+  // together instead of paying two sequential round trips on every
+  // login/logout this helper runs during.
+  const [{ data: tenant }, { count }] = await Promise.all([
+    supabase.from("tenants").select("slug").eq("id", membership.tenant_id).maybeSingle(),
+    supabase.from("locations").select("id", { count: "exact", head: true }).eq("tenant_id", membership.tenant_id),
+  ]);
 
   if (!tenant) {
     return null;
   }
-
-  const { count } = await supabase
-    .from("locations")
-    .select("id", { count: "exact", head: true })
-    .eq("tenant_id", membership.tenant_id);
 
   return { tenantId: membership.tenant_id, slug: tenant.slug, needsOnboarding: !count };
 }

@@ -55,7 +55,9 @@ const ENTITLED_WITHOUT_CHECKOUT = new Set(["TRIAL", "ACTIVE"]);
 export async function setInventoryEnabledAction(
   tenantId: string,
   tenantSlug: string,
-  enabled: boolean
+  enabled: boolean,
+  /** The tenant's chosen duration tier, from InventoryModuleCard's plan picker (checkout mode only -- ignored otherwise). Falls back to the shortest/first active plan if omitted or no longer valid. */
+  planId?: string
 ): Promise<SetInventoryEnabledState> {
   await assertCan("settings.manage", { tenantId });
 
@@ -104,14 +106,17 @@ export async function setInventoryEnabledAction(
       return { successMessage: "Inventory Management is on." };
     }
 
-    if (!existing) {
-      try {
-        const trialDays = await billingService.bootstrapAddonTrial(tenantId, "inventory");
-        await saveFlag(true);
-        return { successMessage: `You now have ${formatTrialLength(trialDays)} of free Inventory access.` };
-      } catch {
-        // No trial configured -- fall through to checkout.
-      }
+    // bootstrapAddonTrial itself decides eligibility (no row yet, OR an
+    // abandoned checkout placeholder that never actually started a trial
+    // or reached a real paid period) -- it throws for anything already
+    // used, so attempting it unconditionally here and falling through on
+    // failure is simpler and safer than duplicating that check.
+    try {
+      const trialDays = await billingService.bootstrapAddonTrial(tenantId, "inventory");
+      await saveFlag(true);
+      return { successMessage: `You now have ${formatTrialLength(trialDays)} of free Inventory access.` };
+    } catch {
+      // No trial configured, or already used -- fall through to checkout.
     }
 
     // Real money from here on -- billing owner only, mirroring
@@ -122,7 +127,7 @@ export async function setInventoryEnabledAction(
     }
 
     const plans = await billingService.listAddonPlans("inventory");
-    const plan = plans[0];
+    const plan = (planId && plans.find((p) => p.id === planId)) || plans[0];
     if (!plan) {
       return { error: "Inventory Management is not available for subscription right now" };
     }

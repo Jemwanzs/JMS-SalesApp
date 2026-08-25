@@ -12,6 +12,7 @@ import { InsightsService } from "@/services/InsightsService";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/current-user";
 import { resolvePreset, todayString, type DatePreset } from "@/lib/utils/date-ranges";
 
 export const metadata: Metadata = {
@@ -52,13 +53,8 @@ export default async function AnalyticsPage({
   const { preset, from, to } = await searchParams;
   const supabase = await createClient();
 
-  const [
-    {
-      data: { user },
-    },
-    { data: tenant },
-  ] = await Promise.all([
-    supabase.auth.getUser(),
+  const [user, { data: tenant }] = await Promise.all([
+    getCurrentUser(),
     supabase.from("tenants").select("id, timezone").eq("slug", tenantSlug).single(),
   ]);
 

@@ -249,6 +249,42 @@ export class BillingService {
 
     const trialEnd = new Date(Date.now() + trialDays * 86_400_000).toISOString();
 
+    // unique(tenant_id, addon_key) means a row can already exist here even
+    // though the tenant never got any real value from it -- e.g. they
+    // started a checkout (initializeAddonCheckout creates a PAYMENT_DUE
+    // placeholder immediately) and backed out without paying. trial_end/
+    // current_period_end are only ever set once a trial or a real paid
+    // period actually starts, so their absence is the reliable signal
+    // that this row is just an abandoned placeholder, not a used-up
+    // entitlement -- safe to recycle into a real trial rather than
+    // permanently locking the tenant out of one. Any row that DID reach
+    // a real trial or paid period, whatever its current status, falls
+    // through to the error below and the caller routes to checkout
+    // instead -- this is the actual trial-abuse guard.
+    const { data: existing } = await this.supabase
+      .from("tenant_addon_subscriptions")
+      .select("id, trial_end, current_period_end")
+      .eq("tenant_id", tenantId)
+      .eq("addon_key", addonKey)
+      .maybeSingle();
+
+    if (existing) {
+      if (existing.trial_end !== null || existing.current_period_end !== null) {
+        throw new Error(`BillingService.bootstrapAddonTrial: tenant already used its trial for "${addonKey}"`);
+      }
+
+      const { error } = await this.supabase
+        .from("tenant_addon_subscriptions")
+        .update({ status: "TRIAL", trial_end: trialEnd, plan_id: null })
+        .eq("id", existing.id);
+
+      if (error) {
+        throw new Error(`BillingService.bootstrapAddonTrial: ${error.message}`);
+      }
+
+      return trialDays;
+    }
+
     const { error } = await this.supabase.from("tenant_addon_subscriptions").insert({
       tenant_id: tenantId,
       addon_key: addonKey,

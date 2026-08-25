@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { setInventoryEnabledAction } from "@/features/settings/actions/set-inventory-enabled";
 import { formatTrialLength } from "@/lib/inventory/trial-copy";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -19,6 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import type { AddonPlanView } from "@/services/BillingService";
 
 const SUCCESS_REDIRECT_DELAY_MS = 1800;
 
@@ -30,7 +32,8 @@ const SUCCESS_REDIRECT_DELAY_MS = 1800;
  * consequence. The actual branching (trial vs already-entitled vs real
  * checkout) all happens server-side in setInventoryEnabledAction; this
  * component only decides whether to redirect when the action hands back
- * a checkoutUrl.
+ * a checkoutUrl, and (checkout mode only) which of the active duration
+ * tiers the tenant wants to pay for.
  *
  * On a real success (trial started, re-enabled, or credit-activated --
  * anything that doesn't redirect to Paystack), the same dialog swaps to
@@ -43,9 +46,7 @@ export function InventoryModuleCard({
   tenantId,
   tenantSlug,
   initialEnabled,
-  planPrice,
-  planCurrency,
-  planDurationDays,
+  plans,
   trialDaysAvailable,
   /** Precomputed server-side (same branch order as setInventoryEnabledAction) so the confirmation copy never promises a free trial that the server action won't actually grant -- e.g. a tenant re-enabling after a lapsed/cancelled subscription always sees checkout copy, not trial copy, even though a trial IS configured globally. */
   confirmMode,
@@ -53,9 +54,8 @@ export function InventoryModuleCard({
   tenantId: string;
   tenantSlug: string;
   initialEnabled: boolean;
-  planPrice: number;
-  planCurrency: string;
-  planDurationDays: number;
+  /** Active plans only, ordered by duration_days ascending (BillingService.listAddonPlans) -- one tile per duration tier in checkout mode. */
+  plans: AddonPlanView[];
   trialDaysAvailable: number;
   confirmMode: "reenable" | "trial" | "checkout";
 }) {
@@ -63,7 +63,14 @@ export function InventoryModuleCard({
   const [enabled, setEnabled] = useState(initialEnabled);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(plans[0]?.id ?? null);
   const [isPending, startTransition] = useTransition();
+
+  const cheapestPlan = useMemo(
+    () => plans.reduce((min, p) => (p.price < min.price ? p : min), plans[0]),
+    [plans]
+  );
+  const selectedPlan = plans.find((p) => p.id === selectedPlanId) ?? plans[0];
 
   function turnOff() {
     setEnabled(false);
@@ -80,7 +87,7 @@ export function InventoryModuleCard({
 
   function confirmTurnOn() {
     startTransition(async () => {
-      const result = await setInventoryEnabledAction(tenantId, tenantSlug, true);
+      const result = await setInventoryEnabledAction(tenantId, tenantSlug, true, selectedPlan?.id);
       if (result.error) {
         toast.error(result.error);
         setConfirmOpen(false);
@@ -141,23 +148,47 @@ export function InventoryModuleCard({
                       {confirmMode === "reenable" &&
                         `Turns the "Stock" tab back on. Your subscription is already active, so there's nothing to pay right now.`}
                       {confirmMode === "trial" &&
-                        `Start a free ${formatTrialLength(trialDaysAvailable)} trial. After that, ${planCurrency} ${planPrice.toFixed(2)} every ${planDurationDays} days.`}
-                      {confirmMode === "checkout" &&
-                        `${planCurrency} ${planPrice.toFixed(2)} every ${planDurationDays} days. This adds a "Stock" tab for tracking quantities alongside your existing product catalog.`}
+                        `Start a free ${formatTrialLength(trialDaysAvailable)} trial. Afterwards, plans start from ${cheapestPlan.currency} ${cheapestPlan.price.toFixed(0)} — pick one anytime.`}
+                      {confirmMode === "checkout" && "Choose a plan to add a \"Stock\" tab for tracking quantities alongside your existing product catalog."}
                     </DialogDescription>
                   </DialogHeader>
+
+                  {confirmMode === "checkout" && (
+                    <div className="space-y-2">
+                      {plans.map((plan) => (
+                        <button
+                          key={plan.id}
+                          type="button"
+                          onClick={() => setSelectedPlanId(plan.id)}
+                          disabled={isPending}
+                          className={cn(
+                            "flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition-colors",
+                            plan.id === selectedPlan?.id
+                              ? "border-primary bg-primary/5"
+                              : "border-input hover:bg-muted/50"
+                          )}
+                        >
+                          <span className="font-medium">{plan.name}</span>
+                          <span className="text-muted-foreground">
+                            {plan.currency} {plan.price.toFixed(0)}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
                   <DialogFooter>
                     <Button variant="outline" onClick={() => setConfirmOpen(false)} disabled={isPending}>
                       Cancel
                     </Button>
-                    <Button onClick={confirmTurnOn} disabled={isPending}>
+                    <Button onClick={confirmTurnOn} disabled={isPending || (confirmMode === "checkout" && !selectedPlan)}>
                       {isPending
                         ? "Please wait..."
                         : confirmMode === "reenable"
                           ? "Turn on"
                           : confirmMode === "trial"
                             ? "Start free trial"
-                            : `Subscribe — pay ${planCurrency} ${planPrice.toFixed(2)}`}
+                            : `Subscribe — pay ${selectedPlan?.currency ?? ""} ${selectedPlan?.price.toFixed(0) ?? ""}`}
                     </Button>
                   </DialogFooter>
                 </>

@@ -7,6 +7,7 @@ import { PaymentHistoryList } from "@/features/billing/components/payment-histor
 import { BillingService } from "@/services/BillingService";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/current-user";
 
 export const metadata: Metadata = {
   title: "Billing | JMS Sales App",
@@ -30,15 +31,10 @@ export default async function BillingPage({
   const { tenantSlug } = await params;
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const { data: tenant } = await supabase
-    .from("tenants")
-    .select("id, billing_owner_profile_id")
-    .eq("slug", tenantSlug)
-    .single();
+  const [user, { data: tenant }] = await Promise.all([
+    getCurrentUser(),
+    supabase.from("tenants").select("id, billing_owner_profile_id").eq("slug", tenantSlug).single(),
+  ]);
 
   const tenantId = tenant!.id;
   const isBillingOwner = tenant!.billing_owner_profile_id === user?.id;

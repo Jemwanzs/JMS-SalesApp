@@ -20,6 +20,7 @@ import { PlatformAdminService } from "@/services/PlatformAdminService";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
+import { getCurrentUser } from "@/lib/supabase/current-user";
 
 /**
  * The "More" menu (spec S12), regrouped in the UX-efficiency pass:
@@ -57,15 +58,10 @@ export default async function MorePage({
   const { tenantSlug } = await params;
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const { data: tenant } = await supabase
-    .from("tenants")
-    .select("id, billing_owner_profile_id")
-    .eq("slug", tenantSlug)
-    .single();
+  const [user, { data: tenant }] = await Promise.all([
+    getCurrentUser(),
+    supabase.from("tenants").select("id, billing_owner_profile_id").eq("slug", tenantSlug).single(),
+  ]);
 
   const [canManageApprovals, canManageRoles, canCreateUsers, canEditUsers, canManageImports, canManageSettings, isPlatformAdmin] =
     tenant && user
