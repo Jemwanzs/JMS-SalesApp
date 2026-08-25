@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, ProductStatus } from "@/types/database.types";
 
 const PRODUCT_SELECT =
-  "id, name, description, expected_price, show_expected_price, show_name_in_photo_view, image_url, display_order, status, is_system, tracks_inventory, unit_of_measure, unit_of_measure_is_custom, low_stock_threshold";
+  "id, name, description, expected_price, show_expected_price, show_name_in_photo_view, image_url, display_order, status, is_system, tracks_inventory, unit_of_measure, unit_of_measure_is_custom, low_stock_threshold, sku";
 const IMAGE_BUCKET = "product-images";
 export const OTHERS_PRODUCT_NAME = "Others";
 
@@ -51,6 +51,8 @@ export interface UpdateProductInput {
   unitOfMeasure?: string | null;
   unitOfMeasureIsCustom?: boolean;
   lowStockThreshold?: number | null;
+  /** Barcode/QR readiness (Product Enhancements #8) -- no scanner integration yet, just somewhere for a value to live. */
+  sku?: string | null;
 }
 
 export interface Product {
@@ -68,6 +70,7 @@ export interface Product {
   unitOfMeasure: string | null;
   unitOfMeasureIsCustom: boolean;
   lowStockThreshold: number | null;
+  sku: string | null;
 }
 
 export class ProductService {
@@ -193,6 +196,7 @@ export class ProductService {
     if (input.unitOfMeasure !== undefined) inventoryFields.unit_of_measure = input.unitOfMeasure;
     if (input.unitOfMeasureIsCustom !== undefined) inventoryFields.unit_of_measure_is_custom = input.unitOfMeasureIsCustom;
     if (input.lowStockThreshold !== undefined) inventoryFields.low_stock_threshold = input.lowStockThreshold;
+    if (input.sku !== undefined) inventoryFields.sku = input.sku;
 
     const { data, error } = await this.supabase
       .from("products")
@@ -214,6 +218,21 @@ export class ProductService {
     }
 
     return toProduct(data);
+  }
+
+  async getById(tenantId: string, productId: string): Promise<Product | null> {
+    const { data, error } = await this.supabase
+      .from("products")
+      .select(PRODUCT_SELECT)
+      .eq("tenant_id", tenantId)
+      .eq("id", productId)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`ProductService.getById: ${error.message}`);
+    }
+
+    return data ? toProduct(data) : null;
   }
 
   /** Ordered `is_system` last (spec: "Others" always appears after every
@@ -445,6 +464,7 @@ function toProduct(row: {
   unit_of_measure: string | null;
   unit_of_measure_is_custom: boolean;
   low_stock_threshold: number | null;
+  sku: string | null;
 }): Product {
   return {
     id: row.id,
@@ -456,6 +476,7 @@ function toProduct(row: {
     imageUrl: row.image_url,
     displayOrder: row.display_order,
     status: row.status,
+    sku: row.sku,
     isSystem: row.is_system,
     tracksInventory: row.tracks_inventory,
     unitOfMeasure: row.unit_of_measure,

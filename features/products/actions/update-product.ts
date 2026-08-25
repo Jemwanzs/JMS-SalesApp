@@ -44,6 +44,20 @@ export async function updateProductAction(
   const showExpectedPrice = formData.get("showExpectedPrice") === "true";
   const showNameInPhotoView = formData.get("showNameInPhotoView") === "true";
 
+  // Inventory fields (Product Enhancements #3/#5) -- present only when
+  // the edit dialog actually rendered the Inventory section (tenant has
+  // the module enabled); omitted entirely otherwise, which
+  // ProductService.update() treats as "leave unchanged", not "clear".
+  const hasInventoryFields = formData.has("tracksInventory");
+  const tracksInventory = hasInventoryFields ? formData.get("tracksInventory") === "true" : undefined;
+  const unitOfMeasureIsCustom = hasInventoryFields ? formData.get("unitOfMeasureIsCustom") === "true" : undefined;
+  const rawUnitOfMeasure = hasInventoryFields ? String(formData.get("unitOfMeasure") ?? "").trim() : undefined;
+  const unitOfMeasure = hasInventoryFields ? rawUnitOfMeasure || null : undefined;
+  const rawLowStockThreshold = hasInventoryFields ? String(formData.get("lowStockThreshold") ?? "").trim() : undefined;
+  const lowStockThreshold = hasInventoryFields ? (rawLowStockThreshold ? Number(rawLowStockThreshold) : null) : undefined;
+  const rawSku = hasInventoryFields ? String(formData.get("sku") ?? "").trim() : undefined;
+  const sku = hasInventoryFields ? rawSku || null : undefined;
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -59,6 +73,11 @@ export async function updateProductAction(
       expectedPrice: Number(parsed.data.expectedPrice),
       showExpectedPrice,
       showNameInPhotoView,
+      tracksInventory,
+      unitOfMeasure,
+      unitOfMeasureIsCustom,
+      lowStockThreshold,
+      sku,
     });
 
     await new AuditService(createServiceRoleClient())

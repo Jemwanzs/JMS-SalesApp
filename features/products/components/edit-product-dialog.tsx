@@ -11,6 +11,7 @@ import {
   ProductImageUpload,
   type ProductImageValue,
 } from "@/features/products/components/product-image-upload";
+import { UnitOfMeasureSelect } from "@/features/products/components/unit-of-measure-select";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -30,6 +31,7 @@ export function EditProductDialog({
   tenantId,
   tenantSlug,
   canDelete,
+  inventoryEnabled,
   onUpdated,
   onDeleted,
 }: {
@@ -37,6 +39,8 @@ export function EditProductDialog({
   tenantId: string;
   tenantSlug: string;
   canDelete: boolean;
+  /** Product Enhancements #3: hides the Inventory section entirely for a Sales-only tenant -- nothing to configure when the module isn't on. */
+  inventoryEnabled: boolean;
   onUpdated: (product: Product) => void;
   onDeleted: (productId: string) => void;
 }) {
@@ -50,6 +54,13 @@ export function EditProductDialog({
     product.imageUrl ? { url: product.imageUrl, storagePath: "" } : null
   );
   const [showNameInPhotoView, setShowNameInPhotoView] = useState(product.showNameInPhotoView);
+  const [tracksInventory, setTracksInventory] = useState(product.tracksInventory);
+  const [unitOfMeasure, setUnitOfMeasure] = useState(product.unitOfMeasure);
+  const [unitOfMeasureIsCustom, setUnitOfMeasureIsCustom] = useState(product.unitOfMeasureIsCustom);
+  const [lowStockThreshold, setLowStockThreshold] = useState(
+    product.lowStockThreshold !== null ? String(product.lowStockThreshold) : ""
+  );
+  const [sku, setSku] = useState(product.sku ?? "");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -57,7 +68,12 @@ export function EditProductDialog({
     name !== product.name ||
     description !== (product.description ?? "") ||
     expectedPrice !== (product.expectedPrice !== null ? String(product.expectedPrice) : "0") ||
-    showNameInPhotoView !== product.showNameInPhotoView;
+    showNameInPhotoView !== product.showNameInPhotoView ||
+    tracksInventory !== product.tracksInventory ||
+    unitOfMeasure !== product.unitOfMeasure ||
+    unitOfMeasureIsCustom !== product.unitOfMeasureIsCustom ||
+    sku !== (product.sku ?? "") ||
+    lowStockThreshold !== (product.lowStockThreshold !== null ? String(product.lowStockThreshold) : "");
 
   function onDelete() {
     if (
@@ -103,6 +119,13 @@ export function EditProductDialog({
     formData.set("expectedPrice", expectedPrice);
     formData.set("showExpectedPrice", String(product.showExpectedPrice));
     formData.set("showNameInPhotoView", String(showNameInPhotoView));
+    if (inventoryEnabled) {
+      formData.set("tracksInventory", String(tracksInventory));
+      formData.set("unitOfMeasure", unitOfMeasure ?? "");
+      formData.set("unitOfMeasureIsCustom", String(unitOfMeasureIsCustom));
+      formData.set("lowStockThreshold", lowStockThreshold);
+      formData.set("sku", sku);
+    }
 
     startTransition(async () => {
       const result = await updateProductAction(tenantId, tenantSlug, {}, formData);
@@ -172,6 +195,45 @@ export function EditProductDialog({
               onCheckedChange={setShowNameInPhotoView}
             />
           </div>
+
+          {inventoryEnabled && (
+            <div className="space-y-3 rounded-lg border p-3">
+              <div className="flex items-center justify-between gap-3">
+                <Label htmlFor="edit-track-inventory" className="font-normal">
+                  Track inventory for this product
+                </Label>
+                <Switch id="edit-track-inventory" checked={tracksInventory} onCheckedChange={setTracksInventory} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-sku">SKU / barcode (optional)</Label>
+                <Input id="edit-sku" value={sku} onChange={(e) => setSku(e.target.value)} placeholder="For future barcode scanning" />
+              </div>
+              {tracksInventory && (
+                <>
+                  <UnitOfMeasureSelect
+                    value={unitOfMeasure}
+                    isCustom={unitOfMeasureIsCustom}
+                    onChange={(value, isCustom) => {
+                      setUnitOfMeasure(value);
+                      setUnitOfMeasureIsCustom(isCustom);
+                    }}
+                  />
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-low-stock">Low stock alert threshold (optional)</Label>
+                    <Input
+                      id="edit-low-stock"
+                      type="number"
+                      min="0"
+                      step="0.001"
+                      value={lowStockThreshold}
+                      onChange={(e) => setLowStockThreshold(e.target.value)}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
           {error && <p className="text-sm text-destructive">{error}</p>}
           <DialogFooter>
             {canDelete && (

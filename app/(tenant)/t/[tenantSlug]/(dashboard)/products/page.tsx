@@ -3,6 +3,7 @@ import { BackLink } from "@/components/shared/back-link";
 
 import { ProductManagementList } from "@/features/products/components/product-management-list";
 import { ProductService } from "@/services/ProductService";
+import { getInventoryEntitlement } from "@/lib/inventory/entitlement";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 
@@ -36,10 +37,11 @@ export default async function ProductsPage({
 
   const tenantId = tenant!.id;
 
-  const [products, canEdit, canArchive] = await Promise.all([
+  const [products, canEdit, canArchive, inventoryEntitlement] = await Promise.all([
     new ProductService(supabase).listAll(tenantId),
     can("products.edit", { tenantId }),
     can("products.archive", { tenantId }),
+    getInventoryEntitlement(tenantId),
   ]);
 
   return (
@@ -53,6 +55,7 @@ export default async function ProductsPage({
         tenantSlug={tenantSlug}
         canEdit={canEdit}
         canArchive={canArchive}
+        inventoryEnabled={inventoryEntitlement.enabled}
       />
     </div>
   );

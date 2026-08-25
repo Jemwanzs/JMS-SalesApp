@@ -33,12 +33,14 @@ export function ProductManagementList({
   tenantSlug,
   canEdit,
   canArchive,
+  inventoryEnabled,
 }: {
   products: Product[];
   tenantId: string;
   tenantSlug: string;
   canEdit: boolean;
   canArchive: boolean;
+  inventoryEnabled: boolean;
 }) {
   const [items, setItems] = useState(products);
   const [isPending, startTransition] = useTransition();
@@ -203,6 +205,7 @@ export function ProductManagementList({
                     tenantId={tenantId}
                     tenantSlug={tenantSlug}
                     canDelete={canArchive}
+                    inventoryEnabled={inventoryEnabled}
                     onUpdated={onUpdated}
                     onDeleted={onDeleted}
                   />
