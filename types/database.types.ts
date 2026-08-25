@@ -387,6 +387,34 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["stock_movements"]["Row"]>;
         Relationships: [];
       };
+      stock_reconciliations: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          location_id: string | null;
+          product_id: string;
+          reconciliation_date: string;
+          opening_quantity: number;
+          stock_in_quantity: number;
+          stock_out_quantity: number;
+          expected_closing_quantity: number;
+          actual_quantity: number;
+          variance: number;
+          variance_reason: string | null;
+          recorded_by: string;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["stock_reconciliations"]["Row"]> & {
+          tenant_id: string;
+          product_id: string;
+          reconciliation_date: string;
+          opening_quantity: number;
+          actual_quantity: number;
+          recorded_by: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["stock_reconciliations"]["Row"]>;
+        Relationships: [];
+      };
       business_days: {
         Row: {
           id: string;
@@ -1033,6 +1061,17 @@ export interface Database {
       run_billing_sweep: {
         Args: Record<string, never>;
         Returns: BillingSweepResult;
+      };
+      record_stock_reconciliation: {
+        Args: {
+          p_tenant_id: string;
+          p_product_id: string;
+          p_location_id: string | null;
+          p_reconciliation_date: string;
+          p_actual_quantity: number;
+          p_variance_reason: string | null;
+        };
+        Returns: Database["public"]["Tables"]["stock_reconciliations"]["Row"];
       };
       queue_daily_report_job: {
         Args: { p_business_day_id: string };

@@ -1,5 +1,7 @@
+import Link from "next/link";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { ClipboardCheck } from "lucide-react";
 
 import { StockDashboardList } from "@/features/stock/components/stock-dashboard-list";
 import { StockService } from "@/services/StockService";
@@ -38,11 +40,25 @@ export default async function StockPage({ params }: { params: Promise<{ tenantSl
     redirect(`/t/${tenantSlug}/more`);
   }
 
-  const balances = await new StockService(supabase).listBalances(tenantId);
+  const [balances, canReconcile] = await Promise.all([
+    new StockService(supabase).listBalances(tenantId),
+    can("stock.reconcile", { tenantId }),
+  ]);
 
   return (
     <div className="flex flex-1 flex-col p-6">
-      <h1 className="mb-4 text-xl font-semibold">Stock</h1>
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <h1 className="text-xl font-semibold">Stock</h1>
+        {canReconcile && (
+          <Link
+            href={`/t/${tenantSlug}/stock/reconcile`}
+            className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium hover:bg-muted"
+          >
+            <ClipboardCheck className="h-4 w-4" />
+            Reconcile
+          </Link>
+        )}
+      </div>
       <StockDashboardList tenantSlug={tenantSlug} balances={balances} />
     </div>
   );

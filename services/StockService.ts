@@ -59,6 +59,28 @@ export interface StockBalanceRow {
   lowStockThreshold: number | null;
 }
 
+export interface ReconciliationPreview {
+  opening: number;
+  stockIn: number;
+  stockOut: number;
+  expectedClosing: number;
+}
+
+export interface StockReconciliationRow {
+  id: string;
+  productId: string;
+  reconciliationDate: string;
+  openingQuantity: number;
+  stockInQuantity: number;
+  stockOutQuantity: number;
+  expectedClosingQuantity: number;
+  actualQuantity: number;
+  variance: number;
+  varianceReason: string | null;
+  recordedBy: string;
+  createdAt: string;
+}
+
 export class StockService {
   constructor(private readonly supabase: SupabaseClient<Database>) {}
 
@@ -182,5 +204,91 @@ export class StockService {
   async listLowStock(tenantId: string): Promise<StockBalanceRow[]> {
     const balances = await this.listBalances(tenantId);
     return balances.filter((b) => b.lowStockThreshold !== null && b.balance <= b.lowStockThreshold);
+  }
+
+  /**
+   * Read-only preview of what record_stock_reconciliation() will compute
+   * server-side -- lets the reconciliation form show opening/in/out/
+   * expected live, before the tenant commits to an actual count.
+   * Deliberately duplicates that SQL function's own opening/in/out
+   * arithmetic in TypeScript rather than sharing code across languages;
+   * the RPC stays the sole source of truth for the WRITE, this is only
+   * ever used for display.
+   */
+  async getReconciliationPreview(tenantId: string, productId: string, date: string): Promise<ReconciliationPreview> {
+    const { data, error } = await this.supabase
+      .from("stock_movements")
+      .select("quantity, occurred_on")
+      .eq("tenant_id", tenantId)
+      .eq("product_id", productId)
+      .lte("occurred_on", date);
+
+    if (error) {
+      throw new Error(`StockService.getReconciliationPreview: ${error.message}`);
+    }
+
+    let opening = 0;
+    let stockIn = 0;
+    let stockOut = 0;
+    for (const row of data ?? []) {
+      const qty = Number(row.quantity);
+      if (row.occurred_on < date) {
+        opening += qty;
+      } else if (qty > 0) {
+        stockIn += qty;
+      } else {
+        stockOut += -qty;
+      }
+    }
+
+    return { opening, stockIn, stockOut, expectedClosing: opening + stockIn - stockOut };
+  }
+
+  async submitReconciliation(
+    tenantId: string,
+    input: { productId: string; locationId?: string | null; date: string; actualQuantity: number; varianceReason?: string | null }
+  ): Promise<StockReconciliationRow> {
+    const { data, error } = await this.supabase.rpc("record_stock_reconciliation", {
+      p_tenant_id: tenantId,
+      p_product_id: input.productId,
+      p_location_id: input.locationId ?? null,
+      p_reconciliation_date: input.date,
+      p_actual_quantity: input.actualQuantity,
+      p_variance_reason: input.varianceReason ?? null,
+    });
+
+    if (error || !data) {
+      throw new Error(`StockService.submitReconciliation: ${error?.message ?? "no row returned"}`);
+    }
+
+    return {
+      id: data.id,
+      productId: data.product_id,
+      reconciliationDate: data.reconciliation_date,
+      openingQuantity: Number(data.opening_quantity),
+      stockInQuantity: Number(data.stock_in_quantity),
+      stockOutQuantity: Number(data.stock_out_quantity),
+      expectedClosingQuantity: Number(data.expected_closing_quantity),
+      actualQuantity: Number(data.actual_quantity),
+      variance: Number(data.variance),
+      varianceReason: data.variance_reason,
+      recordedBy: data.recorded_by,
+      createdAt: data.created_at,
+    };
+  }
+
+  /** Every tracked product with no stock_reconciliations row yet for `date` -- the reconcile page's "needs today's count" list. */
+  async listPendingReconciliation(tenantId: string, date: string): Promise<StockBalanceRow[]> {
+    const [balances, { data: doneRows, error }] = await Promise.all([
+      this.listBalances(tenantId),
+      this.supabase.from("stock_reconciliations").select("product_id").eq("tenant_id", tenantId).eq("reconciliation_date", date),
+    ]);
+
+    if (error) {
+      throw new Error(`StockService.listPendingReconciliation: ${error.message}`);
+    }
+
+    const doneProductIds = new Set((doneRows ?? []).map((r) => r.product_id));
+    return balances.filter((b) => !doneProductIds.has(b.productId));
   }
 }
