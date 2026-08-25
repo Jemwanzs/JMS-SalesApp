@@ -3,7 +3,9 @@ import type { Metadata } from "next";
 import { AnalyticsFilters } from "@/features/analytics/components/analytics-filters";
 import { InsightsList } from "@/features/analytics/components/insights-list";
 import { KpiCards } from "@/features/analytics/components/kpi-cards";
+import { ProductPerformanceChart } from "@/features/analytics/components/product-performance-chart";
 import { ProductPerformanceList } from "@/features/analytics/components/product-performance-list";
+import { SalesTrendChart } from "@/features/analytics/components/sales-trend-chart";
 import { UserPerformanceList } from "@/features/analytics/components/user-performance-list";
 import { AnalyticsService, type AnalyticsPermissions } from "@/services/AnalyticsService";
 import { InsightsService } from "@/services/InsightsService";
@@ -82,17 +84,19 @@ export default async function AnalyticsPage({
 
   let errorMessage: string | null = null;
   let kpis = null;
+  let dailyTrend: Awaited<ReturnType<AnalyticsService["getDailyTrend"]>> = [];
   let productPerformance: Awaited<ReturnType<AnalyticsService["getProductPerformance"]>> = [];
   let userPerformance: Awaited<ReturnType<AnalyticsService["getUserPerformance"]>> = [];
   let insights: Awaited<ReturnType<InsightsService["listRecent"]>> = [];
   const canRankUsers = viewAll && allUsers;
 
-  // None of these four depend on each other's result -- fetch them
+  // None of these five depend on each other's result -- fetch them
   // together instead of one-at-a-time (same "independent, so parallel"
   // reasoning as the permission checks above).
   try {
-    [kpis, productPerformance, userPerformance, insights] = await Promise.all([
+    [kpis, dailyTrend, productPerformance, userPerformance, insights] = await Promise.all([
       analyticsService.getKpis(tenantId, range, today, perms, user!.id),
+      analyticsService.getDailyTrend(tenantId, range, today, perms, user!.id),
       perms.products
         ? analyticsService.getProductPerformance(tenantId, range, today, perms, user!.id)
         : Promise.resolve([]),
@@ -114,6 +118,8 @@ export default async function AnalyticsPage({
         <p className="text-sm text-destructive">{errorMessage}</p>
       ) : (
         <div className="space-y-4">
+          <SalesTrendChart data={dailyTrend} />
+          {perms.products && <ProductPerformanceChart items={productPerformance} />}
           <InsightsList insights={insights} />
           {kpis && <KpiCards kpis={kpis} />}
           {canRankUsers ? (

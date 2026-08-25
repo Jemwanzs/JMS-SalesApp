@@ -81,6 +81,12 @@ export interface UserPerformanceItem {
   tier: PerformanceTier | null;
 }
 
+export interface DailyTrendPoint {
+  date: string;
+  totalSales: number;
+  transactionCount: number;
+}
+
 export class AnalyticsService {
   constructor(private readonly supabase: SupabaseClient<Database>) {}
 
@@ -121,7 +127,7 @@ export class AnalyticsService {
     // the pair to correctly net to zero.
     let query = this.supabase
       .from("sales")
-      .select("product_id, actual_amount, recorded_by, product_name_snapshot")
+      .select("product_id, actual_amount, recorded_by, product_name_snapshot, sale_date")
       .eq("tenant_id", tenantId)
       .gte("sale_date", range.from)
       .lte("sale_date", range.to)
@@ -197,6 +203,34 @@ export class AnalyticsService {
         ? new Set(sales.map((s) => s.recorded_by)).size
         : null,
     };
+  }
+
+  /**
+   * Day-by-day bucketing of the same range getKpis aggregates as one
+   * total -- the data source for the Analytics page's sales-trend chart
+   * (Product Enhancements #1). Sorted ascending by date so a trend chart
+   * can plot it directly with no client-side re-sort.
+   */
+  async getDailyTrend(
+    tenantId: string,
+    range: DateRangeInput,
+    timezoneToday: string,
+    perms: AnalyticsPermissions,
+    currentUserId: string
+  ): Promise<DailyTrendPoint[]> {
+    const sales = await this.fetchSales(tenantId, range, timezoneToday, perms, currentUserId);
+
+    const byDate = new Map<string, { totalSales: number; transactionCount: number }>();
+    for (const sale of sales) {
+      const entry = byDate.get(sale.sale_date) ?? { totalSales: 0, transactionCount: 0 };
+      entry.totalSales += Number(sale.actual_amount);
+      entry.transactionCount += 1;
+      byDate.set(sale.sale_date, entry);
+    }
+
+    return [...byDate.entries()]
+      .map(([date, agg]) => ({ date, ...agg }))
+      .sort((a, b) => a.date.localeCompare(b.date));
   }
 
   async getProductPerformance(
