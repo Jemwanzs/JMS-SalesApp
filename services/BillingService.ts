@@ -227,6 +227,11 @@ export class BillingService {
     }
   }
 
+  /** Public read counterpart to the trial-days check bootstrapAddonTrial makes internally -- lets a tenant-facing page show accurate "N-day free trial" copy before the tenant actually commits to anything. */
+  async getAddonTrialDaysConfigured(addonKey: AddonKey): Promise<number> {
+    return this.getGlobalSetting(`${addonKey}_addon_trial_days`, 0);
+  }
+
   async listAddonPlans(addonKey: AddonKey): Promise<AddonPlanView[]> {
     const { data, error } = await this.supabase
       .from("addon_plans")

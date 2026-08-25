@@ -3,13 +3,16 @@ import { BackLink } from "@/components/shared/back-link";
 import { redirect } from "next/navigation";
 
 import { AnniversaryWishCard } from "@/features/settings/components/anniversary-wish-card";
+import { InventoryModuleCard } from "@/features/settings/components/inventory-module-card";
 import { ProductRankingCard } from "@/features/settings/components/product-ranking-card";
 import { QuantityFieldCard } from "@/features/settings/components/quantity-field-card";
 import { SaleNumberTemplateCard } from "@/features/settings/components/sale-number-template-card";
 import { AnniversaryService } from "@/services/AnniversaryService";
+import { BillingService } from "@/services/BillingService";
 import { TenantService } from "@/services/TenantService";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
 const DEFAULT_SALE_NUMBER_TEMPLATE = "SALE-{YYYY}-{000001}";
 
@@ -43,6 +46,12 @@ export default async function SettingsPage({
   }
 
   const tenantService = new TenantService(supabase);
+  // Service-role, not the RLS-respecting client -- platform_settings has
+  // zero RLS policies for anyone (same posture as platform_admins), so
+  // getAddonTrialDaysConfigured needs it regardless of the viewer's own
+  // permissions; reused for the other two addon reads here too rather
+  // than mixing clients.
+  const addonBillingService = new BillingService(createServiceRoleClient());
   const [
     currentMode,
     saleNumberTemplate,
@@ -51,6 +60,10 @@ export default async function SettingsPage({
     showDailySalesVolume,
     showProductPrice,
     quantityEnabled,
+    inventoryEnabledSetting,
+    inventoryAddon,
+    inventoryPlans,
+    inventoryTrialDays,
   ] = await Promise.all([
     new AnniversaryService(supabase).getWishMode(tenantId),
     tenantService.getSetting<string>(tenantId, "sale_number_template"),
@@ -59,7 +72,25 @@ export default async function SettingsPage({
     tenantService.getSetting<boolean>(tenantId, "show_daily_sales_volume"),
     tenantService.getSetting<boolean>(tenantId, "show_product_price_on_landing"),
     tenantService.getSetting<boolean>(tenantId, "quantity_enabled"),
+    tenantService.getSetting<boolean>(tenantId, "inventory_enabled"),
+    addonBillingService.getAddonSubscription(tenantId, "inventory"),
+    addonBillingService.listAddonPlans("inventory"),
+    addonBillingService.getAddonTrialDaysConfigured("inventory"),
   ]);
+
+  const inventoryPlan = inventoryPlans[0] ?? null;
+  // Matches features/settings/actions/set-inventory-enabled.ts's own
+  // ENTITLED_WITHOUT_CHECKOUT exactly (deliberately narrower than
+  // lib/inventory/entitlement.ts's nav-display tolerance) -- this
+  // confirmation copy must never promise "nothing to pay" for a status
+  // that the action itself would actually route to checkout.
+  const ENTITLED_WITHOUT_CHECKOUT = new Set(["TRIAL", "ACTIVE"]);
+  const entitledWithoutCheckout = inventoryAddon != null && ENTITLED_WITHOUT_CHECKOUT.has(inventoryAddon.status);
+  const inventoryConfirmMode: "reenable" | "trial" | "checkout" = entitledWithoutCheckout
+    ? "reenable"
+    : !inventoryAddon && inventoryTrialDays > 0
+      ? "trial"
+      : "checkout";
 
   return (
     <div className="flex flex-1 flex-col gap-4 p-6">
@@ -80,6 +111,18 @@ export default async function SettingsPage({
         initialShowProductPrice={showProductPrice ?? true}
       />
       <QuantityFieldCard tenantId={tenantId} tenantSlug={tenantSlug} initialEnabled={quantityEnabled ?? true} />
+      {inventoryPlan && (
+        <InventoryModuleCard
+          tenantId={tenantId}
+          tenantSlug={tenantSlug}
+          initialEnabled={Boolean(inventoryEnabledSetting)}
+          planPrice={inventoryPlan.price}
+          planCurrency={inventoryPlan.currency}
+          planDurationDays={inventoryPlan.durationDays}
+          trialDaysAvailable={inventoryTrialDays}
+          confirmMode={inventoryConfirmMode}
+        />
+      )}
     </div>
   );
 }

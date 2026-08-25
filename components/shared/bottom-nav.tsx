@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, FileText, History, Menu, ShoppingCart } from "lucide-react";
+import { BarChart3, Boxes, FileText, History, Menu, ShoppingCart } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -14,6 +14,13 @@ interface NavItem {
   icon: LucideIcon;
   /** null = always visible (e.g. More/settings/logout). */
   permission: string | null;
+  /**
+   * Product Enhancements #3: gates a nav item on TenantContext's
+   * `inventoryEnabled` too, in addition to `permission` -- both must be
+   * true. `undefined`/absent = no setting gate, same as every existing
+   * item today.
+   */
+  requiresSetting?: "inventoryEnabled";
 }
 
 /**
@@ -37,6 +44,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "sales-history", label: "History", icon: History, permission: null },
   { href: "analytics", label: "Analytics", icon: BarChart3, permission: "analytics.view_own" },
   { href: "reports", label: "Reports", icon: FileText, permission: "reports.view" },
+  { href: "stock", label: "Stock", icon: Boxes, permission: "inventory.view", requiresSetting: "inventoryEnabled" },
   { href: "more", label: "More", icon: Menu, permission: null },
 ];
 
@@ -72,7 +80,10 @@ function NavLink({
   // permission key, so hasPermission is simply unused when permission
   // is null.
   const hasPermission = usePermission(item.permission ?? "__always__");
-  const visible = item.permission === null || hasPermission;
+  const { inventoryEnabled } = useTenant();
+  const permitted = item.permission === null || hasPermission;
+  const settingSatisfied = item.requiresSetting == null || (item.requiresSetting === "inventoryEnabled" && inventoryEnabled);
+  const visible = permitted && settingSatisfied;
 
   if (!visible) {
     return null;

@@ -30,6 +30,14 @@ export interface TenantContextValue {
    * ordinary tenant member, always.
    */
   impersonation: ImpersonationBanner | null;
+  /**
+   * Product Enhancements #3: true only when BOTH the tenant_settings
+   * "inventory_enabled" display flag is on AND the add-on subscription
+   * is in an entitled state (lib/inventory/entitlement.ts) — a
+   * display/nav-gating convenience, never a security boundary on its
+   * own (every stock action/page re-asserts entitlement server-side).
+   */
+  inventoryEnabled: boolean;
 }
 
 const TenantContext = createContext<TenantContextValue | null>(null);

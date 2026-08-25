@@ -6,6 +6,7 @@ import { ImpersonationBanner } from "@/components/shared/impersonation-banner";
 import { Logo } from "@/components/shared/logo";
 import { SubscriptionBanner } from "@/components/shared/subscription-banner";
 import { TenantProvider } from "@/hooks/tenant-context";
+import { getInventoryEntitlement } from "@/lib/inventory/entitlement";
 import { getMyPermissions } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
@@ -54,6 +55,12 @@ import { PlatformAdminService } from "@/services/PlatformAdminService";
  * subscriptions_select RLS only grants the billing owner or a
  * settings.manage holder read access, but this banner is meant for
  * every member.
+ *
+ * Product Enhancements #3/#4: `inventoryEnabled` (lib/inventory/
+ * entitlement.ts) is resolved once here too and hydrated into
+ * TenantContext, the same "compute once, reuse everywhere" pattern as
+ * `permissions` — components/shared/bottom-nav.tsx reads it to decide
+ * whether the Stock tab renders.
  */
 export default async function TenantLayout({
   children,
@@ -129,10 +136,11 @@ export default async function TenantLayout({
   // lapsed subscription restricts everyone, not just the owner), same
   // "cross-cutting, needed-for-everyone" reasoning as the impersonation
   // check above.
-  const [permissions, activeWish, subscription] = await Promise.all([
+  const [permissions, activeWish, subscription, inventoryEntitlement] = await Promise.all([
     getMyPermissions(tenant.id),
     new AnniversaryService(supabase).getActiveWish(tenant.id).catch(() => null),
     new BillingService(createServiceRoleClient()).getSubscription(tenant.id).catch(() => null),
+    getInventoryEntitlement(tenant.id).catch(() => ({ enabled: false, status: null })),
   ]);
 
   return (
@@ -143,6 +151,7 @@ export default async function TenantLayout({
         tenantName: tenant.name,
         permissions,
         impersonation,
+        inventoryEnabled: inventoryEntitlement.enabled,
       }}
     >
       <div className="flex min-h-screen w-full justify-center bg-muted/30">
