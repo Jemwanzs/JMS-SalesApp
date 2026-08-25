@@ -173,6 +173,8 @@ export class TenantService {
   async updateBusinessDetails(
     tenantId: string,
     input: {
+      /** Optional: onboarding's own Step 1 caller never passes this (the name is already known from sign-up) -- only the post-onboarding Workspace edit does, where it's a real editable field alongside the rest. */
+      name?: string;
       businessType: string;
       website: string | null;
       anniversaryDate: string | null;
@@ -183,6 +185,7 @@ export class TenantService {
     const { error } = await this.supabase
       .from("tenants")
       .update({
+        ...(input.name !== undefined ? { name: input.name } : {}),
         business_type: input.businessType,
         website: input.website,
         anniversary_date: input.anniversaryDate,
@@ -196,6 +199,57 @@ export class TenantService {
         `TenantService.updateBusinessDetails: ${error.message}`
       );
     }
+  }
+
+  /**
+   * The primary location's own identifying fields -- separate from
+   * getPrimaryLocationGeofence (different concern, Security page vs
+   * Workspace page) even though both re-resolve "the tenant's first
+   * location" the same way upsertPrimaryLocation does.
+   */
+  async getPrimaryLocation(tenantId: string): Promise<{ id: string; name: string; address: string | null } | null> {
+    const { data } = await this.supabase
+      .from("locations")
+      .select("id, name, address")
+      .eq("tenant_id", tenantId)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    return data ?? null;
+  }
+
+  /**
+   * Read counterpart to setLocationHours -- the onboarding wizard only
+   * ever wrote this grid, nothing read it back until the post-
+   * onboarding Workspace edit page needed to pre-fill the form with
+   * what's actually saved. Days with no row yet (a tenant who finished
+   * onboarding before this table existed, or skipped Step 2 via
+   * ComingLaterStep) fall back to the same defaults LocationHoursStep
+   * itself starts a brand-new tenant with, so the edit form is never
+   * blank/inconsistent.
+   */
+  async getLocationHours(
+    tenantId: string,
+    locationId: string
+  ): Promise<{ dayOfWeek: number; openTime: string; closeTime: string; closedAllDay: boolean }[]> {
+    const { data } = await this.supabase
+      .from("location_hours")
+      .select("day_of_week, open_time, close_time, closed_all_day")
+      .eq("tenant_id", tenantId)
+      .eq("location_id", locationId);
+
+    const byDay = new Map((data ?? []).map((row) => [row.day_of_week, row]));
+
+    return Array.from({ length: 7 }, (_, dayOfWeek) => {
+      const row = byDay.get(dayOfWeek);
+      return {
+        dayOfWeek,
+        openTime: row?.open_time ?? "08:00",
+        closeTime: row?.close_time ?? "17:00",
+        closedAllDay: row?.closed_all_day ?? dayOfWeek === 0,
+      };
+    });
   }
 
   /**

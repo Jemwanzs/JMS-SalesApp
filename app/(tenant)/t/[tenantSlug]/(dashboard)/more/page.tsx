@@ -8,6 +8,7 @@ import {
   Package,
   Settings,
   ShieldCheck,
+  Store,
   Upload,
   UserCog,
   Users,
@@ -79,6 +80,11 @@ export default async function MorePage({
   const isBillingOwner = tenant?.billing_owner_profile_id === user?.id;
 
   const adminItems: { label: string; icon: LucideIcon; href?: string; absoluteHref?: string }[] = [
+    // First in the section (the user's explicit "surface it at the
+    // top" ask) -- business name/type/website/anniversary/currency/
+    // timezone/working hours set once at sign-up/onboarding, with no
+    // edit surface anywhere until now.
+    ...(canManageSettings ? [{ label: "Workspace", icon: Store, href: "workspace" }] : []),
     ...(canManageApprovals ? [{ label: "Approvals", icon: ShieldCheck, href: "approvals" }] : []),
     ...(canManageRoles ? [{ label: "Roles", icon: UserCog, href: "roles" }] : []),
     ...(canCreateUsers || canEditUsers ? [{ label: "Users", icon: Users, href: "users" }] : []),
