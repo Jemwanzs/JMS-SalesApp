@@ -4,11 +4,13 @@ import { notFound, redirect } from "next/navigation";
 import { AdminBypassToast } from "@/components/shared/admin-bypass-toast";
 import { ImpersonationBanner } from "@/components/shared/impersonation-banner";
 import { Logo } from "@/components/shared/logo";
+import { SubscriptionBanner } from "@/components/shared/subscription-banner";
 import { TenantProvider } from "@/hooks/tenant-context";
 import { getMyPermissions } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { AnniversaryService } from "@/services/AnniversaryService";
+import { BillingService } from "@/services/BillingService";
 import { PlatformAdminService } from "@/services/PlatformAdminService";
 
 /**
@@ -44,6 +46,14 @@ import { PlatformAdminService } from "@/services/PlatformAdminService";
  * "one shared spot, every dashboard page" reason the impersonation
  * banner does — best-effort (`.catch(() => null)`), since a wish
  * message failing to load must never block the tenant shell itself.
+ *
+ * Product Enhancements #2: SubscriptionBanner surfaces trial-days-left/
+ * renewal-approaching/overdue/expired using the same subscription row
+ * BillingStatusCard reads on the dedicated /billing page — fetched here
+ * via the service-role client (not the RLS-respecting one) since
+ * subscriptions_select RLS only grants the billing owner or a
+ * settings.manage holder read access, but this banner is meant for
+ * every member.
  */
 export default async function TenantLayout({
   children,
@@ -113,9 +123,16 @@ export default async function TenantLayout({
     redirect("/tenant-deactivated");
   }
 
-  const [permissions, activeWish] = await Promise.all([
+  // Service-role, not the RLS-respecting client -- subscriptions_select
+  // RLS only grants the billing owner or a settings.manage holder read
+  // access, but the trial/renewal banner is meant for every member (a
+  // lapsed subscription restricts everyone, not just the owner), same
+  // "cross-cutting, needed-for-everyone" reasoning as the impersonation
+  // check above.
+  const [permissions, activeWish, subscription] = await Promise.all([
     getMyPermissions(tenant.id),
     new AnniversaryService(supabase).getActiveWish(tenant.id).catch(() => null),
+    new BillingService(createServiceRoleClient()).getSubscription(tenant.id).catch(() => null),
   ]);
 
   return (
@@ -144,6 +161,7 @@ export default async function TenantLayout({
             <AdminBypassToast />
           </Suspense>
           {impersonation && <ImpersonationBanner tenantId={tenant.id} impersonation={impersonation} />}
+          <SubscriptionBanner tenantId={tenant.id} tenantSlug={tenant.slug} subscription={subscription} />
           <div className="border-b px-6 py-4">
             <Logo />
           </div>

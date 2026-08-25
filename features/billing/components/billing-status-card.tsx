@@ -1,30 +1,8 @@
 import { PlanPickerDialog } from "@/features/billing/components/plan-picker-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { daysUntil, STATUS_LABEL, STATUS_VARIANT } from "@/lib/billing/status";
 import type { PlanView, SubscriptionView } from "@/services/BillingService";
-
-const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive"> = {
-  TRIAL: "secondary",
-  ACTIVE: "default",
-  PAYMENT_DUE: "destructive",
-  GRACE_PERIOD: "destructive",
-  SUSPENDED: "destructive",
-  CANCELLED: "secondary",
-};
-
-const STATUS_LABEL: Record<string, string> = {
-  TRIAL: "Free trial",
-  ACTIVE: "Active",
-  PAYMENT_DUE: "Payment due",
-  GRACE_PERIOD: "Grace period",
-  SUSPENDED: "Suspended",
-  CANCELLED: "Cancelled",
-};
-
-function daysUntil(iso: string | null): number | null {
-  if (!iso) return null;
-  return Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000);
-}
 
 export function BillingStatusCard({
   tenantId,
