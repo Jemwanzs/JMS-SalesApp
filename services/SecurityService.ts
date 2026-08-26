@@ -90,6 +90,49 @@ export class SecurityService {
     }
   }
 
+  /**
+   * Hardening roadmap Phase 2.1 (docs/22-hardening-roadmap.md): every
+   * failed sign-in has always been written here, but nothing ever read
+   * it back to actually throttle anything -- login was protected only by
+   * whatever Supabase Auth's own project-wide default happens to be, not
+   * anything tuned to this app or aware of which account is being
+   * targeted. Two independent counts, not one: profileId catches
+   * repeated guesses against ONE known account; ip catches a sweep
+   * across many unknown/enumerated emails from one source, which a
+   * profile-only check would never see (an unrecognized email never
+   * resolves to a profileId at all -- see sign-in.ts's own
+   * maybeProfile lookup). A sliding time window, not a permanent lock:
+   * a permanent lockout keyed on failed attempts is itself an easy way
+   * for an attacker to lock a real user out on purpose.
+   */
+  async countRecentFailedLogins(input: { profileId: string | null; ip: string | null; windowMinutes: number }): Promise<{
+    byProfile: number;
+    byIp: number;
+  }> {
+    const since = new Date(Date.now() - input.windowMinutes * 60 * 1000).toISOString();
+
+    const [byProfile, byIp] = await Promise.all([
+      input.profileId
+        ? this.supabase
+            .from("login_events")
+            .select("id", { count: "exact", head: true })
+            .eq("profile_id", input.profileId)
+            .eq("success", false)
+            .gte("created_at", since)
+        : Promise.resolve({ count: 0 }),
+      input.ip
+        ? this.supabase
+            .from("login_events")
+            .select("id", { count: "exact", head: true })
+            .eq("ip", input.ip)
+            .eq("success", false)
+            .gte("created_at", since)
+        : Promise.resolve({ count: 0 }),
+    ]);
+
+    return { byProfile: byProfile.count ?? 0, byIp: byIp.count ?? 0 };
+  }
+
   async createSession(input: {
     profileId: string;
     tenantId: string | null;

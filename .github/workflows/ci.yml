@@ -1,0 +1,48 @@
+name: CI
+
+# Hardening roadmap Phase 2.7 (docs/22-hardening-roadmap.md): lint,
+# typecheck, and build previously only ever ran manually/locally, never
+# gated on push or PR. Uses GitHub, which this repo already has -- no
+# new external account. Deliberately doesn't run tests: there aren't any
+# to run yet (Phase 5 of the same roadmap). Vercel's own git integration
+# already handles preview/production deploys independently of this
+# workflow; this exists purely as a fast, always-on correctness gate.
+
+on:
+  push:
+    branches: [main, development]
+  pull_request:
+    branches: [main, development]
+
+jobs:
+  lint-typecheck-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+        env:
+          # Non-secret placeholders: NEXT_PUBLIC_* values are safe to
+          # expose by design (see lib/supabase/service-role.ts's own
+          # allow-list comment), and CI only needs `next build` to
+          # complete -- it never actually calls Supabase. Real values
+          # live in Vercel's own environment config for the real
+          # deployments this workflow doesn't replace.
+          NEXT_PUBLIC_SUPABASE_URL: "https://placeholder.supabase.co"
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: "placeholder-anon-key"
+          NEXT_PUBLIC_APP_URL: "https://placeholder.example.com"

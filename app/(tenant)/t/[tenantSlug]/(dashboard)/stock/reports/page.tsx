@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 
 import { BackLink } from "@/components/shared/back-link";
 import { LowStockList } from "@/features/stock/components/low-stock-list";
-import { StockMovementChart } from "@/features/stock/components/stock-movement-chart";
+import { StockMovementChartLazy } from "@/features/stock/components/stock-movement-chart-lazy";
 import { VarianceReportList } from "@/features/stock/components/variance-report-list";
 import { StockService } from "@/services/StockService";
 import { assertInventoryEnabled } from "@/lib/inventory/entitlement";
@@ -63,7 +63,7 @@ export default async function StockReportsPage({ params }: { params: Promise<{ t
       <BackLink href={`/t/${tenantSlug}/stock`} label="Stock" />
       <h1 className="text-xl font-semibold">Stock reports</h1>
 
-      <StockMovementChart data={movementTrend} />
+      <StockMovementChartLazy data={movementTrend} />
       <VarianceReportList rows={varianceReport} />
       <LowStockList tenantSlug={tenantSlug} rows={lowStock} />
 

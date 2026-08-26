@@ -22,6 +22,16 @@ async function requestMeta() {
   };
 }
 
+// Hardening roadmap Phase 2.1 (docs/22-hardening-roadmap.md). A sliding
+// window, not a permanent lock -- see SecurityService.countRecentFailedLogins's
+// own header comment for why. byIp's threshold is deliberately much
+// higher than byProfile's: many real users can share one IP (office
+// wifi, mobile carrier NAT), so it exists to catch a broad sweep across
+// many unknown emails, not to gate ordinary shared-network logins.
+const LOCKOUT_WINDOW_MINUTES = 15;
+const MAX_FAILURES_PER_PROFILE = 5;
+const MAX_FAILURES_PER_IP = 20;
+
 export interface LoginActionState {
   error?: string;
   fieldErrors?: Partial<Record<keyof LoginInput, string>>;
@@ -50,22 +60,26 @@ export async function signInAction(
   const securityService = new SecurityService(serviceRole);
   const auditService = new AuditService(serviceRole);
 
+  // Resolved once, up front -- reused both for the lockout pre-check
+  // below and the failure-logging path, instead of a second lookup only
+  // in the catch block. Never surfaced to the client either way,
+  // signInWithPassword's own error message already avoids confirming
+  // account existence.
+  const { data: maybeProfile } = await serviceRole.from("profiles").select("id").eq("email", parsed.data.email).maybeSingle();
+
+  const recentFailures = await securityService
+    .countRecentFailedLogins({ profileId: maybeProfile?.id ?? null, ip, windowMinutes: LOCKOUT_WINDOW_MINUTES })
+    .catch(() => ({ byProfile: 0, byIp: 0 }));
+
+  if (recentFailures.byProfile >= MAX_FAILURES_PER_PROFILE || recentFailures.byIp >= MAX_FAILURES_PER_IP) {
+    return { error: "Too many failed sign-in attempts. Please wait a few minutes and try again." };
+  }
+
   let userId: string;
   try {
     const result = await authService.signIn(parsed.data);
     userId = result.userId;
   } catch (err) {
-    // Best-effort: attach a profile_id to the failure log if this email
-    // matches a real account, so repeated failures against one account
-    // are visible together -- never surfaced to the client either way,
-    // signInWithPassword's own error message already avoids confirming
-    // account existence.
-    const { data: maybeProfile } = await createServiceRoleClient()
-      .from("profiles")
-      .select("id")
-      .eq("email", parsed.data.email)
-      .maybeSingle();
-
     const failureReason = err instanceof Error ? err.message : "Sign in failed";
 
     await securityService

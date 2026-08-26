@@ -41,16 +41,18 @@ export function AuthBackgroundVariant({
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
         {/* scale-110 pushes the blur's softened edge outside the visible
             frame -- without it, a hard-blurred image edge reads as a
-            faint ring right at the container boundary. */}
+            faint ring right at the container boundary. blur-sm (not
+            blur-md) per explicit feedback -- the photo should still read
+            as recognizable, not dissolve into an abstract wash. */}
         <Image
           src={`/login-bg/${singlePhotoFile}`}
           alt=""
           fill
           sizes="430px"
-          className="scale-110 object-cover blur-md saturate-90"
+          className="scale-110 object-cover blur-sm saturate-90"
           priority
         />
-        <div className="absolute inset-0 bg-[#fdfbf6]/30 dark:bg-[#2d271d]/40" />
+        <div className="absolute inset-0 bg-[#fdfbf6]/20 dark:bg-[#2d271d]/30" />
       </div>
     );
   }

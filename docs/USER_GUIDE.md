@@ -193,6 +193,17 @@ Go to **More → Billing**.
 - **Payment/billing history** — every past payment is listed with its date, amount, and status.
 - **What happens when a subscription expires** — the business enters a short grace period, after which access is restricted until a plan is renewed. A Tenant Administrator can always see the current status and renew from this same page.
 
+### Inventory & Stock Management (optional add-on)
+
+Every business starts on plain sales tracking — nothing about Inventory is required to use the app. If your business also wants to track how much stock you have on hand, you can turn it on whenever you're ready:
+
+- **Go to More → Settings → Modules** and switch Inventory on. You'll get a short free trial automatically; no payment is needed to try it out.
+- **Its own subscription, separate from your base plan** — turning Inventory on (or off) never changes your regular sales subscription, and turning your base plan off never removes Inventory data. Pricing is affordable and offered in a few duration tiers (monthly through annual, with better value the longer you commit) — shown clearly before you subscribe, same as base billing.
+- **What it adds**, once on: a **Stock** tab next to Sales/Analytics/Reports — opening stock counts, recording stock received or sold out, daily reconciliation (comparing what you counted against what the numbers say you should have), low-stock alerts, and simple stock reports.
+- **Turning it off** just hides the Stock tab again — it doesn't cancel your subscription or delete anything, so switching back on later picks up right where you left off.
+
+If you only ever sell without tracking stock levels, you can safely ignore this section entirely — the rest of the app works exactly the same either way.
+
 ---
 
 ## J. Other Features
@@ -202,6 +213,7 @@ Go to **More → Billing**.
 | **More → Security** | Manage login restrictions (business hours, location/geofencing) and see recent login activity/active sessions. | Turn restrictions on if you want staff signing in only from work; force sign-out a session if a device is lost. |
 | **More → Approvals** | Review requests that need sign-off — e.g. a sale correction or a temporary access request outside normal restrictions. | Approve or reject pending requests. |
 | **More → Imports** | Bring in historical sales or a product catalog in bulk from a spreadsheet. | Download the template, fill it in, upload, review any flagged rows, then confirm the import. |
+| **More → Settings → Modules** | Turn the optional Inventory/Stock module on or off (see above). | Switch it on when you're ready to start tracking stock levels; nothing else in the app changes if you leave it off. |
 | **Sales History → row actions** | Void, correct, or reverse an individual sale (permission-dependent), with a required reason for the audit trail. | Use this instead of trying to "undo" a sale — every change stays visible in history. |
 | **Notifications banner** | A short banner (e.g. a business anniversary wish) appears at the top of the app when relevant. | No action needed — it clears itself automatically after a few days. |
 

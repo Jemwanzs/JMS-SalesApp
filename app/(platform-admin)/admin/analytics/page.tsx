@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { unstable_cache } from "next/cache";
 
 import { PlatformAdminService } from "@/services/PlatformAdminService";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
@@ -6,6 +7,22 @@ import { createServiceRoleClient } from "@/lib/supabase/service-role";
 export const metadata: Metadata = {
   title: "Platform Analytics | Platform Admin",
 };
+
+// Hardening roadmap Phase 2.5 (docs/22-hardening-roadmap.md, performance
+// finding #7): recomputed from scratch on every single page view before
+// this. Safe to cache -- unlike the tenant-scoped Analytics page (whose
+// results vary per caller's own sales.view_all/view_own grant, so a
+// shared cache entry there risks serving one user's data to another;
+// deliberately NOT cached here, see this doc's Phase 2.5 note), every
+// platform admin sees the exact same numbers regardless of who's asking,
+// so a plain time-based cache with no per-caller key needed is safe. 60s
+// TTL: fresh enough for an admin dashboard, cheap enough to actually
+// matter.
+const getCachedUsageAnalytics = unstable_cache(
+  async () => new PlatformAdminService(createServiceRoleClient()).getUsageAnalytics(),
+  ["platform-admin-usage-analytics"],
+  { revalidate: 60 }
+);
 
 function formatPercent(fraction: number): string {
   return `${(fraction * 100).toFixed(0)}%`;
@@ -26,7 +43,7 @@ function formatBytes(bytes: number): string {
  * across tenants (different tenants carry different currencies).
  */
 export default async function PlatformAnalyticsPage() {
-  const { summary, tenantRows } = await new PlatformAdminService(createServiceRoleClient()).getUsageAnalytics();
+  const { summary, tenantRows } = await getCachedUsageAnalytics();
 
   const summaryCards = [
     { label: "Daily Active Users", value: summary.dau },

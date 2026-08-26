@@ -338,20 +338,37 @@ export class PlatformAdminService {
    * "sum bytes under this prefix" API) rather than a SQL aggregate --
    * storage.objects isn't exposed over PostgREST the way public-schema
    * tables are, so supabase.storage.*.list() is the only reliable path
-   * regardless of project-level API config. Sequential, not parallelized
-   * across tenants -- this runs on an admin-only, infrequently-visited
-   * page, and staying gentle on Storage's API is worth more here than
-   * shaving a few seconds off a dashboard load.
+   * regardless of project-level API config.
+   *
+   * Hardening roadmap Phase 2.3 (docs/22-hardening-roadmap.md): was
+   * fully sequential (one tenant at a time), a deliberate original
+   * choice to stay gentle on Storage's API -- worth keeping the spirit
+   * of, not just parallelizing outright, so this processes a bounded
+   * number of tenants concurrently (CONCURRENCY) rather than either
+   * extreme: still real backpressure on Storage, but no longer O(tenant
+   * count) sequential round trips on an admin page that only gets
+   * slower as the platform grows.
    */
   private async computeStorageBytesByTenant(tenantIds: string[]): Promise<Map<string, number>> {
+    const CONCURRENCY = 5;
     const result = new Map<string, number>();
-    for (const tenantId of tenantIds) {
-      let total = 0;
-      for (const bucket of ["product-images", "imports"] as const) {
-        total += await this.sumBucketFolderBytes(bucket, tenantId, 0);
+
+    for (let i = 0; i < tenantIds.length; i += CONCURRENCY) {
+      const chunk = tenantIds.slice(i, i + CONCURRENCY);
+      const totals = await Promise.all(
+        chunk.map(async (tenantId) => {
+          let total = 0;
+          for (const bucket of ["product-images", "imports"] as const) {
+            total += await this.sumBucketFolderBytes(bucket, tenantId, 0);
+          }
+          return [tenantId, total] as const;
+        })
+      );
+      for (const [tenantId, total] of totals) {
+        result.set(tenantId, total);
       }
-      result.set(tenantId, total);
     }
+
     return result;
   }
 
@@ -373,14 +390,31 @@ export class PlatformAdminService {
   }
 
   async listTenants(): Promise<TenantListItem[]> {
+    // Hardening roadmap Phase 2.3 (docs/22-hardening-roadmap.md,
+    // performance finding #3): both queries below fetch platform-wide,
+    // ordered-desc, then take the FIRST match per tenant_id in the JS
+    // loops that follow -- unbounded before this, so they grew with
+    // total platform history forever, not per tenant. RECENT_ROWS_LIMIT
+    // is a safety cap, not a perfect fix: a proper fix is a SQL-level
+    // "last row per tenant_id" aggregate (a view or RPC), which this
+    // isn't yet -- until then, this bounds the worst case (unbounded
+    // growth) rather than pretending a row cap can't ever miss a
+    // genuinely stale tenant's last payment/login. 10k is deliberately
+    // generous for this project's actual current scale.
+    const RECENT_ROWS_LIMIT = 10000;
     const [{ data: tenants }, { data: subscriptions }, { data: plans }, { data: memberships }, { data: payments }, { data: loginEvents }] =
       await Promise.all([
         this.supabase.from("tenants").select("id, name, slug, status, billing_owner_profile_id").order("created_at", { ascending: false }),
         this.supabase.from("subscriptions").select("tenant_id, plan_id, status, trial_end, next_billing_date"),
         this.supabase.from("billing_plans").select("id, name"),
         this.supabase.from("tenant_memberships").select("tenant_id").eq("status", "active"),
-        this.supabase.from("payments").select("tenant_id, paid_at, status").eq("status", "success").order("paid_at", { ascending: false }),
-        this.supabase.from("login_events").select("tenant_id, created_at").order("created_at", { ascending: false }),
+        this.supabase
+          .from("payments")
+          .select("tenant_id, paid_at, status")
+          .eq("status", "success")
+          .order("paid_at", { ascending: false })
+          .limit(RECENT_ROWS_LIMIT),
+        this.supabase.from("login_events").select("tenant_id, created_at").order("created_at", { ascending: false }).limit(RECENT_ROWS_LIMIT),
       ]);
 
     const ownerIds = [...new Set((tenants ?? []).map((t) => t.billing_owner_profile_id).filter((id): id is string => !!id))];

@@ -3,9 +3,9 @@ import type { Metadata } from "next";
 import { AnalyticsFilters } from "@/features/analytics/components/analytics-filters";
 import { InsightsList } from "@/features/analytics/components/insights-list";
 import { KpiCards } from "@/features/analytics/components/kpi-cards";
-import { ProductPerformanceChart } from "@/features/analytics/components/product-performance-chart";
+import { ProductPerformanceChartLazy } from "@/features/analytics/components/product-performance-chart-lazy";
 import { ProductPerformanceList } from "@/features/analytics/components/product-performance-list";
-import { SalesTrendChart } from "@/features/analytics/components/sales-trend-chart";
+import { SalesTrendChartLazy } from "@/features/analytics/components/sales-trend-chart-lazy";
 import { UserPerformanceList } from "@/features/analytics/components/user-performance-list";
 import { AnalyticsService, type AnalyticsPermissions } from "@/services/AnalyticsService";
 import { InsightsService } from "@/services/InsightsService";
@@ -112,8 +112,8 @@ export default async function AnalyticsPage({
         <p className="text-sm text-destructive">{errorMessage}</p>
       ) : (
         <div className="space-y-4">
-          <SalesTrendChart data={dailyTrend} />
-          {perms.products && <ProductPerformanceChart items={productPerformance} />}
+          <SalesTrendChartLazy data={dailyTrend} />
+          {perms.products && <ProductPerformanceChartLazy items={productPerformance} />}
           <InsightsList insights={insights} />
           {kpis && <KpiCards kpis={kpis} />}
           {canRankUsers ? (
