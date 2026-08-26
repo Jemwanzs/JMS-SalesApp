@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
 
 import { AnniversaryService } from "@/services/AnniversaryService";
@@ -7,6 +8,26 @@ import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
 const MAX_ATTEMPTS = 5;
 const BATCH_SIZE = 20;
+
+/**
+ * Hardening roadmap Phase 1 (docs/22-hardening-roadmap.md): the previous
+ * plain `!==` compared against `Bearer ${process.env.CRON_SECRET}` --
+ * if CRON_SECRET were ever unset in a misconfigured environment, that
+ * becomes a literal string comparison against "Bearer undefined", which
+ * a request sending that exact header would pass. Fails closed (rejects
+ * outright) when the secret isn't configured, and uses a length-checked
+ * timingSafeEqual instead of `!==` for the real comparison.
+ */
+function isAuthorizedCronRequest(authHeader: string | null): boolean {
+  const secret = process.env.CRON_SECRET;
+  if (!secret || !authHeader) return false;
+
+  const expected = Buffer.from(`Bearer ${secret}`);
+  const actual = Buffer.from(authHeader);
+  if (expected.length !== actual.length) return false;
+
+  return timingSafeEqual(expected, actual);
+}
 
 /**
  * Drains the report_jobs outbox (docs/09-business-day-engine.md's
@@ -44,8 +65,7 @@ const BATCH_SIZE = 20;
  * failure is caught independently and never affects report processing.
  */
 export async function GET(request: Request) {
-  const authHeader = request.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!isAuthorizedCronRequest(request.headers.get("authorization"))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

@@ -5,9 +5,10 @@ import { BarChart3, ClipboardCheck } from "lucide-react";
 
 import { StockDashboardList } from "@/features/stock/components/stock-dashboard-list";
 import { StockService } from "@/services/StockService";
-import { assertInventoryEnabled } from "@/lib/inventory/entitlement";
+import { getInventoryEntitlement } from "@/lib/inventory/entitlement";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
+import { getTenantBySlug } from "@/lib/tenant/resolve-tenant-by-slug";
 
 export const metadata: Metadata = {
   title: "Stock | JMS Sales App",
@@ -26,17 +27,16 @@ export default async function StockPage({ params }: { params: Promise<{ tenantSl
   const { tenantSlug } = await params;
   const supabase = await createClient();
 
-  const { data: tenant } = await supabase.from("tenants").select("id").eq("slug", tenantSlug).single();
+  const tenant = await getTenantBySlug(supabase, tenantSlug);
   const tenantId = tenant!.id;
 
-  const canView = await can("inventory.view", { tenantId });
-  if (!canView) {
-    redirect(`/t/${tenantSlug}/more`);
-  }
-
-  try {
-    await assertInventoryEnabled(tenantId);
-  } catch {
+  // Hardening roadmap Phase 1 (docs/22-hardening-roadmap.md, perf finding
+  // #8): both checks are independent of each other, and both failure
+  // modes redirect to the exact same place -- run them together with the
+  // non-throwing entitlement read instead of a sequential await + a
+  // second try/catch around the throwing variant.
+  const [canView, entitlement] = await Promise.all([can("inventory.view", { tenantId }), getInventoryEntitlement(tenantId)]);
+  if (!canView || !entitlement.enabled) {
     redirect(`/t/${tenantSlug}/more`);
   }
 

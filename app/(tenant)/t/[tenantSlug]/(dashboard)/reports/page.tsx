@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { ReportList } from "@/features/reports/components/report-list";
 import { ReportService } from "@/services/ReportService";
 import { createClient } from "@/lib/supabase/server";
+import { getTenantBySlug } from "@/lib/tenant/resolve-tenant-by-slug";
 
 export const metadata: Metadata = {
   title: "Reports | JMS Sales App",
@@ -23,11 +24,7 @@ export default async function ReportsPage({
   const { tenantSlug } = await params;
   const supabase = await createClient();
 
-  const { data: tenant } = await supabase
-    .from("tenants")
-    .select("id")
-    .eq("slug", tenantSlug)
-    .single();
+  const tenant = await getTenantBySlug(supabase, tenantSlug);
 
   const reports = await new ReportService(supabase).listReports(tenant!.id);
 

@@ -7,6 +7,7 @@ import { PermissionService } from "@/services/PermissionService";
 import { RoleService } from "@/services/RoleService";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
+import { getTenantBySlug } from "@/lib/tenant/resolve-tenant-by-slug";
 
 export const metadata: Metadata = {
   title: "Roles | JMS Sales App",
@@ -29,12 +30,7 @@ export default async function RolesPage({
   const { tenantSlug } = await params;
   const supabase = await createClient();
 
-  const { data: tenant } = await supabase
-    .from("tenants")
-    .select("id")
-    .eq("slug", tenantSlug)
-    .single();
-
+  const tenant = await getTenantBySlug(supabase, tenantSlug);
   const tenantId = tenant!.id;
 
   if (!(await can("roles.manage", { tenantId }))) {

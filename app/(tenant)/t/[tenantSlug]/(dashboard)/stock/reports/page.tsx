@@ -9,6 +9,7 @@ import { StockService } from "@/services/StockService";
 import { assertInventoryEnabled } from "@/lib/inventory/entitlement";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
+import { getTenantBySlug } from "@/lib/tenant/resolve-tenant-by-slug";
 import { trailingDaysRange } from "@/lib/utils/date-ranges";
 
 export const metadata: Metadata = {
@@ -34,7 +35,7 @@ export default async function StockReportsPage({ params }: { params: Promise<{ t
   const { tenantSlug } = await params;
   const supabase = await createClient();
 
-  const { data: tenant } = await supabase.from("tenants").select("id, timezone").eq("slug", tenantSlug).single();
+  const tenant = await getTenantBySlug(supabase, tenantSlug);
   const tenantId = tenant!.id;
 
   const canView = await can("inventory.view", { tenantId });

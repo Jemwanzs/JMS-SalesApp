@@ -7,6 +7,7 @@ import { BusinessProfileForm } from "@/features/workspace/components/business-pr
 import { TenantService } from "@/services/TenantService";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
+import { getTenantBySlug } from "@/lib/tenant/resolve-tenant-by-slug";
 import { CURRENCIES, TIMEZONES } from "@/validations/onboarding";
 
 export const metadata: Metadata = {
@@ -39,12 +40,7 @@ export default async function WorkspacePage({
   const { tenantSlug } = await params;
   const supabase = await createClient();
 
-  const { data: tenant } = await supabase
-    .from("tenants")
-    .select("id, name, business_type, website, anniversary_date, currency, timezone")
-    .eq("slug", tenantSlug)
-    .single();
-
+  const tenant = await getTenantBySlug(supabase, tenantSlug);
   const tenantId = tenant!.id;
 
   if (!(await can("settings.manage", { tenantId }))) {

@@ -103,7 +103,6 @@ export function ProductImageUpload({
               width={56}
               height={56}
               className="h-full w-full object-cover"
-              unoptimized
             />
           ) : (
             <span className="text-lg">🛒</span>

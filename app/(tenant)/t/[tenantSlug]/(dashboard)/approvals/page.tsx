@@ -6,6 +6,7 @@ import { ApprovalsInboxList } from "@/features/sales/components/approvals-inbox-
 import { ApprovalService } from "@/services/ApprovalService";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
+import { getTenantBySlug } from "@/lib/tenant/resolve-tenant-by-slug";
 
 export const metadata: Metadata = {
   title: "Approvals | JMS Sales App",
@@ -25,11 +26,7 @@ export default async function ApprovalsPage({
   const { tenantSlug } = await params;
   const supabase = await createClient();
 
-  const { data: tenant } = await supabase
-    .from("tenants")
-    .select("id")
-    .eq("slug", tenantSlug)
-    .single();
+  const tenant = await getTenantBySlug(supabase, tenantSlug);
 
   const tenantId = tenant!.id;
 

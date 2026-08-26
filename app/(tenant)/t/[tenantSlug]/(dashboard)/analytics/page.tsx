@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
+import { getTenantBySlug } from "@/lib/tenant/resolve-tenant-by-slug";
 import { resolvePreset, todayString, type DatePreset } from "@/lib/utils/date-ranges";
 
 export const metadata: Metadata = {
@@ -53,10 +54,7 @@ export default async function AnalyticsPage({
   const { preset, from, to } = await searchParams;
   const supabase = await createClient();
 
-  const [user, { data: tenant }] = await Promise.all([
-    getCurrentUser(),
-    supabase.from("tenants").select("id, timezone").eq("slug", tenantSlug).single(),
-  ]);
+  const [user, tenant] = await Promise.all([getCurrentUser(), getTenantBySlug(supabase, tenantSlug)]);
 
   const tenantId = tenant!.id;
   const timezone = tenant!.timezone;

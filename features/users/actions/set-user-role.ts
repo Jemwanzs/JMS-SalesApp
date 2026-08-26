@@ -26,7 +26,14 @@ export async function setUserRoleAction(
 
   const userService = new UserService(supabase);
 
-  await assertCan("users.edit", { tenantId });
+  // roles.manage, not users.edit -- user_role_assignments_write's own RLS
+  // policy (0001_core_tenancy_and_rbac.sql:520-523) has always required
+  // roles.manage; asserting users.edit here just gave a misleading
+  // permission-denied message instead of the DB's own raw RLS error for
+  // the (already-nonfunctional) case of a caller holding one but not the
+  // other. No change in who can actually reassign a role -- Tenant
+  // Administrator holds both.
+  await assertCan("roles.manage", { tenantId });
   await userService.setUserRole(tenantId, membershipId, roleId, user.id);
 
   await new AuditService(createServiceRoleClient())

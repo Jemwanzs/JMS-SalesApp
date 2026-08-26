@@ -4,6 +4,7 @@ import { ImportService } from "@/services/ImportService";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
+import { getTenantBySlug } from "@/lib/tenant/resolve-tenant-by-slug";
 
 /**
  * docs/12's "Import template generation" step -- a real, permission-
@@ -20,7 +21,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ tena
   const { tenantSlug } = await params;
   const supabase = await createClient();
 
-  const { data: tenant } = await supabase.from("tenants").select("id").eq("slug", tenantSlug).single();
+  const tenant = await getTenantBySlug(supabase, tenantSlug);
   if (!tenant) {
     return NextResponse.json({ error: "Tenant not found" }, { status: 404 });
   }

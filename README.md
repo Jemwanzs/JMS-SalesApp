@@ -1,36 +1,42 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# JMS Sales App
 
-## Getting Started
+Mobile-first, multi-tenant sales records & analytics platform. Next.js 15 (App Router, TypeScript) + Supabase (Postgres, Auth, Storage, RLS) + Paystack billing, deployed on Vercel.
 
-First, run the development server:
+Start with `docs/00-project-overview.md` — every other numbered doc under `docs/` covers one subsystem in depth (multi-tenancy, RBAC, sales engine, billing, security, deployment, and so on). `docs/20-development-progress.md` is the living build tracker; `docs/22-hardening-roadmap.md` tracks the current security/performance/completeness hardening pass.
+
+## Getting started
 
 ```bash
+npm install
+cp .env.example .env.local   # fill in real values -- see the comments in that file
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000). The app needs a real Supabase project to do anything useful (sign-up, sales capture, etc.) — there's no offline/mock mode.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Database migrations
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Schema lives in `supabase/migrations/*.sql`, applied in order. This project does not run migrations automatically — apply each new one manually via the Supabase Studio SQL Editor against the target project, then confirm it before continuing any dependent work. Never destructive by default (see each migration's own header comment); review before applying to a shared project.
 
-## Learn More
+## Scripts
 
-To learn more about Next.js, take a look at the following resources:
+| Command | What it does |
+|---|---|
+| `npm run dev` | Start the dev server |
+| `npm run build` | Production build |
+| `npm run start` | Run a production build locally |
+| `npm run lint` | ESLint (flat config) |
+| `npx tsc --noEmit` | Type-check without emitting |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Project structure
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `app/` — Next.js App Router routes, grouped by `(auth)`, `(tenant)`, `(platform-admin)`.
+- `features/` — feature-scoped actions/components (server actions live in `features/*/actions/`).
+- `services/` — the data-access layer; every Supabase query goes through a service class here, never directly in a component.
+- `lib/` — cross-cutting helpers (permissions, Supabase client factories, date/timezone utilities).
+- `supabase/migrations/` — the schema, in numbered order.
+- `docs/` — the real documentation; read it before making architectural changes.
 
-## Deploy on Vercel
+## Deployment
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Vercel, auto-deployed from `main` (production) and `development` (preview). See `docs/17-devops-deployment.md` for environment variables, cron configuration, and the branch strategy.

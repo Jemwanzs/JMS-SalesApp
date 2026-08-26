@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { OnboardingWizard } from "@/features/onboarding/components/onboarding-wizard";
 import { createClient } from "@/lib/supabase/server";
+import { getTenantBySlug } from "@/lib/tenant/resolve-tenant-by-slug";
 
 export const metadata: Metadata = {
   title: "Set up your business | JMS Sales App",
@@ -23,11 +24,7 @@ export default async function OnboardingPage({
   const { tenantSlug } = await params;
   const supabase = await createClient();
 
-  const { data: tenant } = await supabase
-    .from("tenants")
-    .select("id, slug, name")
-    .eq("slug", tenantSlug)
-    .maybeSingle();
+  const tenant = await getTenantBySlug(supabase, tenantSlug);
 
   if (!tenant) {
     notFound();

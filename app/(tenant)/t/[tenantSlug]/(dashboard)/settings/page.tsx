@@ -13,6 +13,7 @@ import { TenantService } from "@/services/TenantService";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
+import { getTenantBySlug } from "@/lib/tenant/resolve-tenant-by-slug";
 
 const DEFAULT_SALE_NUMBER_TEMPLATE = "SALE-{YYYY}-{000001}";
 
@@ -38,7 +39,7 @@ export default async function SettingsPage({
   const { tenantSlug } = await params;
   const supabase = await createClient();
 
-  const { data: tenant } = await supabase.from("tenants").select("id, anniversary_date").eq("slug", tenantSlug).single();
+  const tenant = await getTenantBySlug(supabase, tenantSlug);
   const tenantId = tenant!.id;
 
   if (!(await can("settings.manage", { tenantId }))) {

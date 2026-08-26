@@ -11,6 +11,7 @@ import { getMyPermissions } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { getCurrentUser } from "@/lib/supabase/current-user";
+import { getTenantBySlug } from "@/lib/tenant/resolve-tenant-by-slug";
 import { AnniversaryService } from "@/services/AnniversaryService";
 import { BillingService } from "@/services/BillingService";
 import { PlatformAdminService } from "@/services/PlatformAdminService";
@@ -79,11 +80,7 @@ export default async function TenantLayout({
     redirect("/login");
   }
 
-  const { data: tenant } = await supabase
-    .from("tenants")
-    .select("id, name, slug, status")
-    .eq("slug", tenantSlug)
-    .maybeSingle();
+  const tenant = await getTenantBySlug(supabase, tenantSlug);
 
   if (!tenant) {
     notFound();

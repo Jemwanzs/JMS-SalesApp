@@ -8,6 +8,15 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    // Hardening roadmap Phase 1 (docs/22-hardening-roadmap.md): webhooks
+    // and cron routes authenticate themselves (Paystack's HMAC signature,
+    // CRON_SECRET's bearer token) and never read the Supabase session --
+    // paying for a session-refresh round trip before those handlers even
+    // run adds real latency right where Paystack's retry window is least
+    // forgiving. Every other route (including the other two under
+    // app/api/) still needs it -- api/auth/callback IS the session flow,
+    // and api/t/[tenantSlug]/imports/template relies on the RLS-respecting
+    // cookie session to check tenant membership.
+    "/((?!_next/static|_next/image|favicon.ico|api/webhooks|api/cron|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

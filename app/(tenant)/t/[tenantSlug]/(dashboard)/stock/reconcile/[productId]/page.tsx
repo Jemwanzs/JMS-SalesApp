@@ -8,6 +8,7 @@ import { StockService } from "@/services/StockService";
 import { assertInventoryEnabled } from "@/lib/inventory/entitlement";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
+import { getTenantBySlug } from "@/lib/tenant/resolve-tenant-by-slug";
 import { todayString } from "@/lib/utils/date-ranges";
 
 export const metadata: Metadata = {
@@ -22,7 +23,7 @@ export default async function ReconcileProductPage({
   const { tenantSlug, productId } = await params;
   const supabase = await createClient();
 
-  const { data: tenant } = await supabase.from("tenants").select("id, timezone").eq("slug", tenantSlug).single();
+  const tenant = await getTenantBySlug(supabase, tenantSlug);
   const tenantId = tenant!.id;
 
   const canReconcile = await can("stock.reconcile", { tenantId });
