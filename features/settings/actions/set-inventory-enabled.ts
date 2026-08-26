@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { AuditService } from "@/services/AuditService";
 import { BillingService } from "@/services/BillingService";
+import { ProductService } from "@/services/ProductService";
 import { TenantService } from "@/services/TenantService";
 import { AUDIT_ACTION } from "@/lib/audit/actions";
 import { formatTrialLength } from "@/lib/inventory/trial-copy";
@@ -84,7 +85,23 @@ export async function setInventoryEnabledAction(
         newValues: { inventory_enabled: value },
       })
       .catch(() => {});
+    if (value) {
+      // Every product the tenant created BEFORE this moment would
+      // otherwise stay permanently invisible on the Stock page -- new
+      // products default to tracks_inventory=false (a deliberate
+      // per-product opt-in), and nothing else ever goes back and flips
+      // it for a tenant's existing catalog. Service-role, not the
+      // caller's own client: this is a system-triggered consequence of
+      // enabling the module, not a user-initiated product edit, so it
+      // shouldn't depend on the caller also holding products.edit on top
+      // of the settings.manage this action already requires. Best-
+      // effort: a failure here shouldn't block the module from turning
+      // on, since the tenant can still track products individually via
+      // Edit either way.
+      await new ProductService(createServiceRoleClient()).enableTrackingForExistingProducts(tenantId).catch(() => {});
+    }
     revalidatePath(`/t/${tenantSlug}/settings`);
+    revalidatePath(`/t/${tenantSlug}/stock`);
   }
 
   if (!enabled) {

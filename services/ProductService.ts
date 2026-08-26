@@ -129,6 +129,37 @@ export class ProductService {
   }
 
   /**
+   * Turning the Inventory module on left every product a tenant created
+   * BEFORE that moment permanently invisible on the Stock page -- new
+   * products default to tracks_inventory=false (Phase 5's deliberate
+   * per-product opt-in), and nothing ever went back to flip it for
+   * products that already existed, so a tenant who just enabled the
+   * module saw an empty Stock list despite having a full catalog. Called
+   * once from setInventoryEnabledAction's enable path: gives every
+   * active, non-system product without tracking yet a default UOM
+   * ("pcs", the first Count-category code -- reasonable for most retail
+   * goods, and always editable per-product afterward) so it shows up
+   * immediately with a real (zero) balance instead of staying hidden
+   * until someone finds the per-product edit form. Products that
+   * already opted in (tracks_inventory=true) are left untouched, so a
+   * tenant's own choice of UOM/threshold is never clobbered by a repeat
+   * toggle-off-then-on.
+   */
+  async enableTrackingForExistingProducts(tenantId: string, defaultUnitOfMeasure = "pcs"): Promise<void> {
+    const { error } = await this.supabase
+      .from("products")
+      .update({ tracks_inventory: true, unit_of_measure: defaultUnitOfMeasure })
+      .eq("tenant_id", tenantId)
+      .eq("tracks_inventory", false)
+      .eq("is_system", false)
+      .eq("status", "active");
+
+    if (error) {
+      throw new Error(`ProductService.enableTrackingForExistingProducts: ${error.message}`);
+    }
+  }
+
+  /**
    * The system "Others" product (spec: Product Enhancements #2) --
    * ensured (not just created once) alongside every real product create
    * so it's always present from the tenant's first product onward,

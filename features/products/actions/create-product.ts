@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { AuditService } from "@/services/AuditService";
 import { ProductService, type Product } from "@/services/ProductService";
 import { AUDIT_ACTION } from "@/lib/audit/actions";
+import { getInventoryEntitlement } from "@/lib/inventory/entitlement";
 import { assertCan } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
@@ -61,6 +62,15 @@ export async function createProductAction(
   try {
     await assertCan("products.create", { tenantId });
 
+    // A tenant with Inventory already on expects every product they add
+    // from here on to just show up in Stock -- without this, each new
+    // product would need a separate trip through Edit to turn tracking
+    // on, the same gap that left an inventory-enabled tenant's EXISTING
+    // catalog invisible until enableTrackingForExistingProducts backfilled
+    // it (set-inventory-enabled.ts). "pcs" mirrors that same backfill's
+    // default; still editable per-product afterward.
+    const { enabled: inventoryEnabled } = await getInventoryEntitlement(tenantId);
+
     product = await productService.create(tenantId, {
       id: typeof id === "string" && id ? id : undefined,
       name: parsed.data.name,
@@ -69,6 +79,7 @@ export async function createProductAction(
       imageStoragePath: typeof imageStoragePath === "string" && imageStoragePath ? imageStoragePath : null,
       showNameInPhotoView,
       createdBy: user.id,
+      ...(inventoryEnabled ? { tracksInventory: true, unitOfMeasure: "pcs" } : {}),
     });
 
     await new AuditService(createServiceRoleClient())
@@ -89,6 +100,7 @@ export async function createProductAction(
 
   revalidatePath(`/t/${tenantSlug}/products`);
   revalidatePath(`/t/${tenantSlug}/sales`);
+  revalidatePath(`/t/${tenantSlug}/stock`);
 
   return { success: true, product };
 }
