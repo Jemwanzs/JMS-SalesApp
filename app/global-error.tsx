@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import * as Sentry from "@sentry/nextjs";
 
 /**
  * Hardening roadmap Phase 2.6 (docs/22-hardening-roadmap.md). Next.js
@@ -11,11 +12,15 @@ import { useEffect } from "react";
  * plain (no shared components, no Tailwind utility classes beyond
  * basics, inline styles) -- if something is broken badly enough to reach
  * this boundary, the fallback shouldn't risk depending on anything else
- * in the app that might also be broken.
+ * in the app that might also be broken. Sentry is the one exception
+ * (Phase 4.1) -- it's specifically built to stay safe to call from a
+ * degraded app, and Sentry's own docs treat wiring it into this exact
+ * file as standard practice, not a risk.
  */
 export default function GlobalError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => {
     console.error(error);
+    Sentry.captureException(error);
   }, [error]);
 
   return (

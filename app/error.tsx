@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import * as Sentry from "@sentry/nextjs";
 import { AlertTriangle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -12,14 +13,15 @@ import { Button } from "@/components/ui/button";
  * Catches everything below the root layout (root layout's own render
  * errors are global-error.tsx's job instead, a Next.js requirement).
  *
- * console.error here is a placeholder, not the real fix -- Phase 4.1
- * (Sentry) is what actually reports this anywhere a human would see it.
- * Wiring that in later only means adding a call inside this same effect,
- * not restructuring anything about how the boundary itself works.
+ * Sentry.captureException wired in via Phase 4.1 -- a no-op until
+ * NEXT_PUBLIC_SENTRY_DSN is actually set (see instrumentation.ts's own
+ * header comment), console.error stays alongside it as the always-on
+ * local/dev fallback regardless of whether Sentry is configured.
  */
 export default function ErrorBoundary({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => {
     console.error(error);
+    Sentry.captureException(error);
   }, [error]);
 
   return (

@@ -1,3 +1,4 @@
+import { withSentryConfig } from "@sentry/nextjs";
 import type { NextConfig } from "next";
 
 // Read once at build/start time -- next.config.ts runs in plain Node, not
@@ -49,7 +50,15 @@ const nextConfig: NextConfig = {
               // never an embedded widget/iframe -- lib/paystack/client.ts
               // is server-only), so it needs no connect-src/frame-src
               // allowance here; CSP doesn't govern top-level navigation.
-              `connect-src 'self'${supabaseHostname ? ` https://${supabaseHostname} wss://${supabaseHostname}` : ""}`,
+              // Sentry's browser SDK (Phase 4.1) DOES need one -- its
+              // ingest endpoint is a region-specific subdomain
+              // (o<id>.ingest.<region>.sentry.io); this covers the
+              // regions Sentry actually offers today. Re-check against
+              // the real DSN once a Sentry project exists -- an
+              // unlisted region would silently have its client-side
+              // error reports blocked by this same CSP, not sent
+              // anywhere with an error visible in the console instead.
+              `connect-src 'self'${supabaseHostname ? ` https://${supabaseHostname} wss://${supabaseHostname}` : ""} https://*.ingest.sentry.io https://*.ingest.us.sentry.io https://*.ingest.de.sentry.io`,
               "frame-ancestors 'none'",
               "base-uri 'self'",
               "form-action 'self'",
@@ -65,4 +74,24 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+// Hardening roadmap Phase 4.1: uploads source maps to Sentry at build
+// time (so stack traces show real code, not minified output) and
+// injects the release/tunnel wiring instrumentation.ts and
+// instrumentation-client.ts rely on. SENTRY_AUTH_TOKEN/SENTRY_ORG/
+// SENTRY_PROJECT being unset (true until a real Sentry project exists)
+// makes this step a no-op with a build-log warning, not a failure --
+// same safe-by-default posture as the empty DSN in the instrumentation
+// files themselves, and why this doesn't break the CI build (Phase 2.7)
+// or local `next build` before those env vars are ever set.
+export default withSentryConfig(nextConfig, {
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  silent: true,
+  widenClientFileUpload: true,
+  // Source maps are deleted after upload by default (sourcemaps.deleteSourcemapsAfterUpload) -- no separate "hide" flag needed.
+  webpack: {
+    treeshake: { removeDebugLogging: true },
+    reactComponentAnnotation: { enabled: true },
+  },
+});
