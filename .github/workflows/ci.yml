@@ -3,10 +3,18 @@ name: CI
 # Hardening roadmap Phase 2.7 (docs/22-hardening-roadmap.md): lint,
 # typecheck, and build previously only ever ran manually/locally, never
 # gated on push or PR. Uses GitHub, which this repo already has -- no
-# new external account. Deliberately doesn't run tests: there aren't any
-# to run yet (Phase 5 of the same roadmap). Vercel's own git integration
-# already handles preview/production deploys independently of this
-# workflow; this exists purely as a fast, always-on correctness gate.
+# new external account. Vercel's own git integration already handles
+# preview/production deploys independently of this workflow; this
+# exists purely as a fast, always-on correctness gate.
+#
+# Phase 5.2 added the Playwright step: smoke tests only, no Supabase
+# backend involved (tests/e2e/smoke.spec.ts's own header comment has
+# the full reasoning) -- they verify the build boots and the public,
+# unauthenticated surface renders, using the exact same placeholder env
+# vars as the Build step below. Real golden-path tests (sign up, log
+# in, record a sale) would need a dedicated test Supabase project,
+# which doesn't exist yet -- an explicit scope decision, not an
+# oversight.
 
 on:
   push:
@@ -46,3 +54,21 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: "https://placeholder.supabase.co"
           NEXT_PUBLIC_SUPABASE_ANON_KEY: "placeholder-anon-key"
           NEXT_PUBLIC_APP_URL: "https://placeholder.example.com"
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E smoke tests
+        run: npm run test:e2e
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: "https://placeholder.supabase.co"
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: "placeholder-anon-key"
+          NEXT_PUBLIC_APP_URL: "https://placeholder.example.com"
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
