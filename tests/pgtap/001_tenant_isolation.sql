@@ -57,10 +57,19 @@ insert into public.roles (id, tenant_id, name, is_system_default) values
   ('d1111111-1111-1111-1111-111111111111', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Tenant Administrator', true),
   ('d2222222-2222-2222-2222-222222222222', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'Tenant Administrator', true);
 
+-- Explicit ::uuid casts -- without them, a string literal on the SELECT
+-- side of a UNION ALL resolves to `text` (not the target column's uuid
+-- type the way a plain VALUES list would coerce it), and Postgres
+-- refuses the implicit text->uuid cast on INSERT. Real bug, caught the
+-- first time this file was ever actually executed (hardening roadmap
+-- Phase 5.1, docs/22-hardening-roadmap.md) -- everything below this
+-- point had never run before either, since the transaction aborts on
+-- the first error and every subsequent statement in the same
+-- transaction block is a no-op.
 insert into public.role_permissions (role_id, permission_id)
-select 'd1111111-1111-1111-1111-111111111111', id from public.permissions where key in ('roles.manage', 'settings.manage', 'sales.view_all')
+select 'd1111111-1111-1111-1111-111111111111'::uuid, id from public.permissions where key in ('roles.manage', 'settings.manage', 'sales.view_all')
 union all
-select 'd2222222-2222-2222-2222-222222222222', id from public.permissions where key in ('roles.manage', 'settings.manage', 'sales.view_all');
+select 'd2222222-2222-2222-2222-222222222222'::uuid, id from public.permissions where key in ('roles.manage', 'settings.manage', 'sales.view_all');
 
 insert into public.user_role_assignments (id, tenant_id, tenant_membership_id, role_id) values
   ('e1111111-1111-1111-1111-111111111111', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'c1111111-1111-1111-1111-111111111111', 'd1111111-1111-1111-1111-111111111111'),

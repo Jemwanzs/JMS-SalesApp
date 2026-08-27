@@ -57,10 +57,10 @@ Everything here ships with what the project already has: no new package, no new 
 
 ## Phase 5 — Test infrastructure (needs local tooling beyond what's installed)
 
-| # | Item | Notes |
-|---|---|---|
-| 5.1 | Get the pgTAP tenant-isolation suite running | `tests/pgtap/001_tenant_isolation.sql` (20 assertions) has never been executed — needs a local Supabase stack (`supabase start`, Docker). |
-| 5.2 | CI-wired smoke tests | A handful of Playwright tests covering the golden paths, added to Phase 2.7's CI workflow once it exists. |
+| # | Item | Status | Notes |
+|---|---|---|---|
+| 5.1 | Get the pgTAP tenant-isolation suite running | **Done — 20/20 pass** | Docker Desktop was installed but not running (started it); Supabase CLI has no Windows npm binary, so the CLI was downloaded directly from its GitHub release instead. `supabase start` initially failed pulling images (registry TLS handshake timeouts from this environment) — `--dns-resolver https` fixed it. Migration 0011 needs `pg_cron`, which isn't enabled on a fresh local stack the way it is on the real hosted project (enabled once, manually, outside any migration) -- since this suite only exercises migration 0001's schema, migrations 0002+ were temporarily moved out of `supabase/migrations/`, started with just 0001, then moved back afterward (confirmed byte-identical via `git status` — nothing about the real migration files changed). `supabase test db` itself looks in `supabase/tests/`, not this repo's actual `tests/pgtap/` location, so the suite was run directly via `psql` inside the running container instead — exactly the alternative the test file's own header already documents. **Caught a real bug on the very first execution**: the `role_permissions` seed insert used a bare string literal on the `UNION ALL` side of a `role_id` (uuid column) insert, which Postgres resolves to `text` in that position (unlike a plain `VALUES` list, which does coerce) — fixed with an explicit `::uuid` cast. Every assertion after that point had never actually run before either, since the failure aborted the whole transaction. All 20 assertions pass now, verified fresh. Local stack fully torn down afterward (`supabase stop`, confirmed zero containers). |
+| 5.2 | CI-wired smoke tests | | A handful of Playwright tests covering the golden paths, added to Phase 2.7's CI workflow once it exists. |
 
 ## Phase 6 — Larger strategic projects (real scoping needed, deliberately last)
 
