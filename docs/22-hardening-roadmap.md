@@ -69,13 +69,13 @@ Everything here ships with what the project already has: no new package, no new 
 | 6.1 | A second payment gateway (e.g. Stripe) | | Paystack-only is a hard regional limit outside Africa. New account, new webhook endpoint, real work behind the existing `BillingService` abstraction. |
 | 6.2 | i18n rollout | | `next-intl` is installed and listed in the stack but wired up nowhere — every string is hardcoded English. A real content/translation project, not a config flip. |
 | ~~6.3~~ | ~~Account deletion / self-service data export~~ | **Redirected — shipped as login-time enforcement instead (2026-08-27)** | Reconsidered by explicit user decision before building: true account/tenant deletion was judged not the best fit given the schema's own RESTRICT constraints on `sales.recorded_by` and friends (a hard delete of anyone with sales history fails outright today, by design — see the discussion this decision came out of). Deactivation is the existing, preferred mechanism instead. That surfaced a real, separate gap worth checking and fixing: `UserService.setActive(false)` (Tenant Admin disabling an employee) and `PlatformAdminService.deactivateTenant`/`suspendTenant` (Super Admin acting on a whole business) **already existed** and already blocked every in-app action via `has_permission()` (migration 0031) — but neither actually blocked **login itself**. A disabled member's password still worked and they landed on a generic `/no-tenant` page with no explanation; a suspended/deactivated tenant's still-active member could sign in and land inside a fully broken, empty app. New `AuthService.checkAccountStatus()`, checked in `sign-in.ts` immediately after password auth succeeds and before the existing tenant-resolution/access-gate logic, now rejects the sign-in outright with a clear, specific message (`"Your account has been deactivated..."` / `"This business account is suspended/deactivated/cancelled..."`) instead of falling through to either confusing state. Verified live against real seeded data: baseline allowed, disabled-member blocked, suspended-tenant blocked, deactivated-tenant blocked, cancelled-tenant blocked, and restored-to-active allowed again — all six with the correct reason text. |
-| 6.4 | Backup/disaster-recovery plan (Google Drive advisory below) | | No documented backup/restore story exists (`docs/17-devops-deployment.md` covers everything else about deployment but not this). Needs a decision on retention and an actual tested restore drill, not just a paragraph. |
+| 6.4 | Backup/disaster-recovery plan (Google Drive, implemented below) | **Code done (2026-08-27) — needs real Google Cloud credentials before it runs for real** | `.github/workflows/backup.yml` + `scripts/backup-to-drive.mjs` + `supabase/migrations/0042_backup_settings.sql` (applied). See "6.4 implementation" below for exactly what was built, what changed from the original advisory, and the setup steps needed before the first real backup can run. |
 
 ---
 
 ### 6.4 advisory — using Google Drive for backups
 
-*Advisory only, nothing implemented — same status as `docs/AndroidAdvisory.md`/`docs/OfflineFirstSyncAdvisory.md`. Written 2026-08-27.*
+*Advisory written 2026-08-27, implemented the same day — see "6.4 implementation" below the advisory for what's actually built, what changed from this original design, and the concrete setup steps needed before it can run for real.*
 
 **Is it possible? Yes, cleanly, with one important caveat.** Google Drive should be a **second, portable, off-platform copy** — not a replacement for Supabase's own native backup/PITR (Point-in-Time Recovery, a paid-tier feature). Supabase's own backups are the right tool for "restore to 10 minutes ago after a bad migration"; a Drive copy is the right tool for "Supabase itself became unreachable, the project got deleted, or the account was locked" — a genuinely different failure mode that an in-platform backup can never cover, no matter how good it is.
 
@@ -100,6 +100,45 @@ Everything here ships with what the project already has: no new package, no new 
 **Retention.** Without a rotation policy, this silently fills Drive's quota over time (a free/personal Google account caps at 15GB shared across the whole account; Workspace plans vary) and the backup job would start failing quietly. A simple policy — e.g. keep daily backups for 30 days, one per week for a year, delete anything older — needs to be part of the same workflow, not an afterthought added later.
 
 **Restore drills.** A backup nobody has ever restored from isn't a verified backup, it's an assumption. Once this exists, an actual periodic restore-into-a-scratch-project drill (not just "the upload succeeded") is what turns this from a checkbox into something trustworthy in a real emergency.
+
+---
+
+### 6.4 implementation
+
+Built as three pieces: `supabase/migrations/0042_backup_settings.sql` (applied), `scripts/backup-to-drive.mjs`, `.github/workflows/backup.yml`. Follows the advisory above closely, with two deliberate simplifications:
+
+- **Tick cadence is every 6 hours, not hourly.** The advisory's "runs on a fixed, frequent tick" reasoning still holds, but a literal hourly tick means 24 GitHub Actions runs/day forever just to check whether a (default: daily) backup is due — real minute usage for close to zero benefit on top of what 6-hourly already gives, while still supporting a `backup_frequency_hours` setting as low as 6.
+- **No `last_backup_completed_at` column.** The advisory proposed one; the shipped version instead asks the Drive folder itself for its most recent file's `createdTime` before deciding whether a backup is due. One fewer moving part, and no possibility of the DB's own idea of "last backup" drifting out of sync with what's actually sitting in Drive.
+
+Everything else matches the advisory as designed: the same 17-table allow-list (Tier 1 + Tier 2, `BACKUP_TABLES` in the script), `pg_dump --format=custom` scoped to just those tables, mandatory `gpg --symmetric --cipher-algo AES256` encryption before the file ever leaves the runner, upload via the Drive API v3 using a service-account JWT (`google-auth-library`, installed ad hoc in the workflow via `npm install --no-save` — never added to this app's own `package.json`/`package-lock.json`, the same discipline `scripts/build-user-guide-pdf.mjs`'s ad hoc Playwright install already established), and pruning down to `backup_retention_count` most-recent files after each successful upload.
+
+**Verified without a real Google Cloud account (which only you can create):**
+- `node --check` — script syntax is valid.
+- Every required env var is checked up front with `requireEnv()`; running with none set fails fast with a clear, actionable message (`Missing required environment variable: NEXT_PUBLIC_SUPABASE_URL` etc.) and a non-zero exit code, instead of a cryptic crash partway through — confirmed by actually running it locally with nothing set.
+- The `platform_settings` read (the due-check frequency and retention count) was verified against the real live database after you applied migration 0042 — `backup_frequency_hours: 24`, `backup_retention_count: 30`, exactly as seeded.
+- `npx tsc --noEmit` and `npm run lint` both pass clean across everything touched.
+
+**Not verified, and can't be from here**: the actual `pg_dump` → encrypt → upload → prune pipeline against a real Google Drive folder. That needs the real credentials below, which only you can create — once they're in place, trigger the workflow manually once (`workflow_dispatch`, from the Actions tab) to confirm a real encrypted file lands in the Drive folder before trusting the schedule.
+
+**Setup steps (one-time, do these in order):**
+
+1. **Google Cloud service account.**
+   - Go to [Google Cloud Console](https://console.cloud.google.com/) → create a new project (or reuse one) → **APIs & Services → Library** → enable the **Google Drive API**.
+   - **IAM & Admin → Service Accounts → Create Service Account** — any name (e.g. `jms-sales-backup`), no project-level roles needed (it only ever touches the one Drive folder you share with it, nothing else in your Cloud project).
+   - Open the new service account → **Keys → Add Key → Create new key → JSON** — downloads a `.json` file. This file's *entire contents* become the `GOOGLE_SERVICE_ACCOUNT_KEY` secret in step 4. Treat it as a real credential — never commit it, never paste it anywhere but the GitHub secret box.
+2. **Google Drive folder.**
+   - Create one dedicated folder in Drive (e.g. "JMS Sales App Backups") — not your general Drive, a folder used for nothing else.
+   - Share it with the service account's email address (looks like `jms-sales-backup@your-project.iam.gserviceaccount.com`, shown on its Service Accounts page) — **Editor** access, nothing broader.
+   - Open the folder in a browser and copy the ID from the URL: `https://drive.google.com/drive/folders/`**`THIS_PART`** — that's `BACKUP_DRIVE_FOLDER_ID`.
+3. **A dedicated Postgres connection string.** Supabase Studio → **Project Settings → Database → Connection string** (the direct connection, not the pooler) — this is `SUPABASE_DB_URL`, and it's a real secret (contains your DB password), separate from the anon/service-role API keys already in use elsewhere.
+4. **A real encryption passphrase.** Generate a long, random one (e.g. `openssl rand -base64 32`) and store it somewhere durable *outside both GitHub and Google* (a password manager) — this is `BACKUP_ENCRYPTION_PASSPHRASE`. If it's ever lost, every existing backup becomes permanently unrecoverable, so this is the one credential in this whole setup that genuinely cannot be regenerated after the fact.
+5. **Add six repository secrets** — GitHub repo → **Settings → Secrets and variables → Actions → New repository secret**:
+   - `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` (same values already used elsewhere for this project — GitHub Actions has its own separate secret store from Vercel, so these need to be added here too even though they already exist there).
+   - `SUPABASE_DB_URL` (step 3).
+   - `BACKUP_ENCRYPTION_PASSPHRASE` (step 4).
+   - `GOOGLE_SERVICE_ACCOUNT_KEY` (the full JSON file contents from step 1).
+   - `BACKUP_DRIVE_FOLDER_ID` (step 2).
+6. **Trigger one manual run** — Actions tab → "Database Backup to Google Drive" → **Run workflow** — confirm it succeeds and a real `.dump.gpg` file appears in the Drive folder. After that, it runs on its own schedule.
 
 ---
 
