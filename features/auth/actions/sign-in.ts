@@ -108,6 +108,47 @@ export async function signInAction(
     return { error: err instanceof Error ? err.message : "Sign in failed" };
   }
 
+  // Hardening roadmap Phase 6 (docs/22-hardening-roadmap.md): checked
+  // immediately after password auth succeeds, before
+  // resolveActiveTenant's own active-only lookup -- see
+  // AuthService.checkAccountStatus's own header comment for exactly
+  // what gap this closes (a disabled member or a suspended/deactivated
+  // tenant could previously still complete sign-in and land on a
+  // confusing fallback instead of a clear rejection).
+  const accountStatus = await authService.checkAccountStatus(userId);
+  if (accountStatus.blocked) {
+    // Password WAS correct -- signInWithPassword already established a
+    // real session/cookies -- so it must be torn back down before
+    // returning an error, same as the access-gate rejection below.
+    await supabase.auth.signOut();
+
+    await securityService
+      .logLoginEvent({
+        tenantId: null,
+        profileId: userId,
+        ip,
+        userAgent,
+        success: false,
+        failureReason: accountStatus.reason ?? "Account status blocked sign-in",
+      })
+      .catch(() => {});
+
+    await auditService
+      .log({
+        tenantId: null,
+        actorProfileId: userId,
+        action: AUDIT_ACTION.FAILED_LOGIN,
+        entityType: "session",
+        reason: accountStatus.reason ?? "Account status blocked sign-in",
+        ipAddress: ip,
+        device: userAgent,
+        metadata: accountStatus.blockedBy ? { blockedBy: accountStatus.blockedBy } : null,
+      })
+      .catch(() => {});
+
+    return { error: accountStatus.reason ?? "Sign in is currently unavailable for this account." };
+  }
+
   const tenant = await resolveActiveTenant(supabase, userId);
   let bypassNotice: "working_hours" | "geofence" | undefined;
 

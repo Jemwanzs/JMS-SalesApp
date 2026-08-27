@@ -60,6 +60,12 @@ export interface AccessGateResult {
   bypassed?: boolean;
 }
 
+export interface AccountStatusResult {
+  blocked: boolean;
+  reason?: string;
+  blockedBy?: "member_disabled" | "tenant_suspended" | "tenant_deactivated" | "tenant_cancelled";
+}
+
 export class AuthService {
   constructor(private readonly supabase: SupabaseClient<Database>) {}
 
@@ -138,6 +144,84 @@ export class AuthService {
     if (error) {
       throw new Error(`AuthService.updatePassword: ${error.message}`);
     }
+  }
+
+  /**
+   * Hardening roadmap Phase 6 (docs/22-hardening-roadmap.md): both
+   * UserService.setActive(false) (Tenant Admin disabling one of their
+   * own employees) and PlatformAdminService.deactivateTenant/
+   * suspendTenant (Super Admin acting on a whole business) already
+   * existed and already worked -- has_permission() has always denied
+   * everything for a disabled member or a non-active tenant (migration
+   * 0031). What was missing is a check AT LOGIN ITSELF: password auth
+   * would still succeed, and the user would either land on a generic
+   * "/no-tenant" page (disabled member -- resolveActiveTenant's own
+   * `status = 'active'` filter just doesn't find their membership, with
+   * no explanation why) or get dropped into a fully broken, empty app
+   * (tenant suspended/deactivated -- resolveActiveTenant never checked
+   * the TENANT's own status at all, only the caller's membership
+   * status). This runs deliberately EARLY in sign-in.ts, right after
+   * password auth succeeds and before resolveActiveTenant's own
+   * active-only lookup, so the caller gets a real, specific reason
+   * instead of a confusing silent fallback.
+   *
+   * Looks up the membership WITHOUT resolveActiveTenant's `status =
+   * 'active'` filter (that's the whole point -- a disabled membership
+   * must be found here, not silently skipped), then the tenant's own
+   * status. 'invited' is deliberately not a blocked status here: a
+   * user who hasn't accepted their invite yet has no working password
+   * to reach this check with in practice (UserService.inviteUser's own
+   * flow sets one only at accept-invite time), so there's no real
+   * "invited user hits /login" case to design a message for.
+   */
+  async checkAccountStatus(profileId: string): Promise<AccountStatusResult> {
+    const { data: membership } = await this.supabase
+      .from("tenant_memberships")
+      .select("tenant_id, status")
+      .eq("profile_id", profileId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!membership) {
+      return { blocked: false };
+    }
+
+    if (membership.status === "disabled") {
+      return {
+        blocked: true,
+        reason: "Your account has been deactivated. Contact your business administrator for access.",
+        blockedBy: "member_disabled",
+      };
+    }
+
+    const { data: tenant } = await this.supabase.from("tenants").select("status").eq("id", membership.tenant_id).maybeSingle();
+
+    if (tenant?.status === "suspended") {
+      return {
+        blocked: true,
+        reason: "This business account is suspended. Contact support to restore access.",
+        blockedBy: "tenant_suspended",
+      };
+    }
+
+    if (tenant?.status === "deactivated") {
+      return {
+        blocked: true,
+        reason: "This business account has been deactivated. Contact support for assistance.",
+        blockedBy: "tenant_deactivated",
+      };
+    }
+
+    if (tenant?.status === "cancelled") {
+      return {
+        blocked: true,
+        reason: "This business account has been cancelled. Contact support for assistance.",
+        blockedBy: "tenant_cancelled",
+      };
+    }
+
+    return { blocked: false };
   }
 
   /**

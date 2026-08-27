@@ -64,12 +64,12 @@ Everything here ships with what the project already has: no new package, no new 
 
 ## Phase 6 — Larger strategic projects (real scoping needed, deliberately last)
 
-| # | Item | Notes |
-|---|---|---|
-| 6.1 | A second payment gateway (e.g. Stripe) | Paystack-only is a hard regional limit outside Africa. New account, new webhook endpoint, real work behind the existing `BillingService` abstraction. |
-| 6.2 | i18n rollout | `next-intl` is installed and listed in the stack but wired up nowhere — every string is hardcoded English. A real content/translation project, not a config flip. |
-| 6.3 | Account deletion / self-service data export | Beyond the existing sales-history CSV export — a real feature needing product decisions about tenant-owner vs. invited-member deletion semantics (mirrors the same distinction already made for tenant deactivation). |
-| 6.4 | Backup/disaster-recovery plan (Google Drive advisory below) | No documented backup/restore story exists (`docs/17-devops-deployment.md` covers everything else about deployment but not this). Needs a decision on retention and an actual tested restore drill, not just a paragraph. |
+| # | Item | Status | Notes |
+|---|---|---|---|
+| 6.1 | A second payment gateway (e.g. Stripe) | | Paystack-only is a hard regional limit outside Africa. New account, new webhook endpoint, real work behind the existing `BillingService` abstraction. |
+| 6.2 | i18n rollout | | `next-intl` is installed and listed in the stack but wired up nowhere — every string is hardcoded English. A real content/translation project, not a config flip. |
+| ~~6.3~~ | ~~Account deletion / self-service data export~~ | **Redirected — shipped as login-time enforcement instead (2026-08-27)** | Reconsidered by explicit user decision before building: true account/tenant deletion was judged not the best fit given the schema's own RESTRICT constraints on `sales.recorded_by` and friends (a hard delete of anyone with sales history fails outright today, by design — see the discussion this decision came out of). Deactivation is the existing, preferred mechanism instead. That surfaced a real, separate gap worth checking and fixing: `UserService.setActive(false)` (Tenant Admin disabling an employee) and `PlatformAdminService.deactivateTenant`/`suspendTenant` (Super Admin acting on a whole business) **already existed** and already blocked every in-app action via `has_permission()` (migration 0031) — but neither actually blocked **login itself**. A disabled member's password still worked and they landed on a generic `/no-tenant` page with no explanation; a suspended/deactivated tenant's still-active member could sign in and land inside a fully broken, empty app. New `AuthService.checkAccountStatus()`, checked in `sign-in.ts` immediately after password auth succeeds and before the existing tenant-resolution/access-gate logic, now rejects the sign-in outright with a clear, specific message (`"Your account has been deactivated..."` / `"This business account is suspended/deactivated/cancelled..."`) instead of falling through to either confusing state. Verified live against real seeded data: baseline allowed, disabled-member blocked, suspended-tenant blocked, deactivated-tenant blocked, cancelled-tenant blocked, and restored-to-active allowed again — all six with the correct reason text. |
+| 6.4 | Backup/disaster-recovery plan (Google Drive advisory below) | | No documented backup/restore story exists (`docs/17-devops-deployment.md` covers everything else about deployment but not this). Needs a decision on retention and an actual tested restore drill, not just a paragraph. |
 
 ---
 
