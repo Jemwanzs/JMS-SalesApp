@@ -43,9 +43,9 @@ Everything here ships with what the project already has: no new package, no new 
 
 ## Phase 3 — Content (no new tool, but real writing, not a config change)
 
-| # | Item | Notes |
-|---|---|---|
-| 3.1 | `/privacy-policy`, `/terms-of-service`, `/support` | Currently exist only as an unchecked Play Store checklist item in `docs/AndroidAdvisory.md`. Needed for the live web app regardless of whether a native app ever ships — it's handling payment data and PII today. |
+| # | Item | Status | Notes |
+|---|---|---|---|
+| 3.1 | `/privacy-policy`, `/terms-of-service`, `/support` | **Done** | New `app/(marketing)/` route group (an empty, untracked scaffold since very early in the project — this is its first real use) with its own layout, separate from `(auth)`/`(tenant)`'s ~430px-constrained shells since these are ordinary reading content that should work at any width. Content is specific to this app (real vendor list — Supabase/Vercel/Paystack — real data categories actually collected, real optional-Inventory-add-on billing terms), not generic boilerplate; contact email and governing jurisdiction (Kenya) confirmed with the user rather than assumed. Support also covers account-deletion requests and links the User Guide PDF. Wired in two places: the sign-up form now links both legal pages below the submit button, and More's "Help & Support" entry (previously removed for pointing nowhere real) came back now that it does. All three pages build fully static. **Not legal advice** — worth an actual lawyer's review before being treated as final, same as any AI-drafted legal text would be. |
 
 ## Phase 4 — New external tools (need an account/signup, still no new server infrastructure beyond what Vercel already runs)
 

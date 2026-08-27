@@ -197,6 +197,18 @@ export function SignUpForm() {
           {isPending ? "Creating account..." : "Create account"}
         </Button>
 
+        <p className="text-center text-xs text-muted-foreground">
+          By creating an account, you agree to our{" "}
+          <Link href="/terms-of-service" className="underline">
+            Terms of Service
+          </Link>{" "}
+          and{" "}
+          <Link href="/privacy-policy" className="underline">
+            Privacy Policy
+          </Link>
+          .
+        </p>
+
         <p className="text-center text-sm text-muted-foreground">
           Already have an account?{" "}
           <Link href="/login" className="font-medium text-foreground underline">

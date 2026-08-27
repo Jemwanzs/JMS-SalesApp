@@ -3,6 +3,7 @@ import {
   Building2,
   ChevronRight,
   CreditCard,
+  HelpCircle,
   Lock,
   LogOut,
   Package,
@@ -35,9 +36,11 @@ import { getTenantBySlug } from "@/lib/tenant/resolve-tenant-by-slug";
  * (4c) is a real, always-present link -- every signed-in user manages
  * their own sessions/login history there regardless of permissions (RLS
  * gates the tenant-wide activity section within the page itself, not
- * this menu entry). Notifications and Help were removed from this list
- * (they only ever rendered as disabled "Coming soon" rows) per explicit
- * request -- re-add once those features actually ship. Approvals (2g),
+ * this menu entry). Notifications and Help were originally removed from
+ * this list (they only ever rendered as disabled "Coming soon" rows) per
+ * explicit request -- re-add once those features actually ship; Help
+ * came back as "Help & Support" (hardening roadmap Phase 3.1) once
+ * /support was a real page, not a stub. Approvals (2g),
  * Roles (4a), Users (4b), Imports (Phase 5), Billing (Phase 6), and
  * Settings (Phase 7d's anniversary wish-mode toggle, its first real
  * setting) are all appended conditionally instead, only for users who
@@ -47,9 +50,10 @@ import { getTenantBySlug } from "@/lib/tenant/resolve-tenant-by-slug";
  * everyone, since most users will never have anything to review or
  * manage there.
  */
-const EVERYDAY_ITEMS: { label: string; icon: LucideIcon; href?: string }[] = [
+const EVERYDAY_ITEMS: { label: string; icon: LucideIcon; href?: string; absoluteHref?: string }[] = [
   { label: "Products", icon: Package, href: "products" },
   { label: "Security", icon: Lock, href: "security" },
+  { label: "Help & Support", icon: HelpCircle, absoluteHref: "/support" },
 ];
 
 export default async function MorePage({
