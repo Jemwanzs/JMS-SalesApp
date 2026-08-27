@@ -1,6 +1,7 @@
 "use server";
 
 import { AuthService } from "@/services/AuthService";
+import { checkRateLimit, getClientIp, passwordResetRateLimit } from "@/lib/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 import { firstIssuePerField } from "@/lib/utils/form-errors";
 import {
@@ -10,6 +11,7 @@ import {
 
 export interface RequestPasswordResetActionState {
   fieldErrors?: Partial<Record<keyof RequestPasswordResetInput, string>>;
+  error?: string;
   success?: boolean;
 }
 
@@ -27,6 +29,16 @@ export async function requestPasswordResetAction(
         parsed.error.issues
       ),
     };
+  }
+
+  // Hardening roadmap Phase 4.3 -- IP-based, not email-based (the point
+  // is to stop a scripted sweep across many emails from one source; an
+  // email-keyed limit wouldn't catch that at all). Checked before any
+  // real work, same as sign-in's lockout check.
+  const ip = await getClientIp();
+  const { allowed } = await checkRateLimit(passwordResetRateLimit, ip);
+  if (!allowed) {
+    return { error: "Too many password reset requests. Please wait a while and try again." };
   }
 
   const supabase = await createClient();

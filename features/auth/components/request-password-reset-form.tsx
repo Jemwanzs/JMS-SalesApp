@@ -24,6 +24,7 @@ import {
 export function RequestPasswordResetForm() {
   const [isPending, startTransition] = useTransition();
   const [submitted, setSubmitted] = useState(false);
+  const [serverError, setServerError] = useState<string | null>(null);
 
   const form = useForm<RequestPasswordResetInput>({
     resolver: zodResolver(requestPasswordResetSchema),
@@ -33,6 +34,8 @@ export function RequestPasswordResetForm() {
   function onSubmit(values: RequestPasswordResetInput) {
     const formData = new FormData();
     formData.set("email", values.email);
+
+    setServerError(null);
 
     startTransition(async () => {
       const result = await requestPasswordResetAction({}, formData);
@@ -44,6 +47,11 @@ export function RequestPasswordResetForm() {
             { message }
           );
         }
+        return;
+      }
+
+      if (result?.error) {
+        setServerError(result.error);
         return;
       }
 
@@ -76,6 +84,10 @@ export function RequestPasswordResetForm() {
             </FormItem>
           )}
         />
+
+        {serverError && (
+          <p className="text-sm text-destructive">{serverError}</p>
+        )}
 
         <Button type="submit" className="w-full" disabled={isPending}>
           {isPending ? "Sending..." : "Send reset link"}

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 
 import { AuthService } from "@/services/AuthService";
 import { TenantService } from "@/services/TenantService";
+import { checkRateLimit, getClientIp, signUpRateLimit } from "@/lib/rate-limit";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { firstIssuePerField } from "@/lib/utils/form-errors";
@@ -33,6 +34,14 @@ export async function signUpAction(
     return {
       fieldErrors: firstIssuePerField<keyof SignUpInput>(parsed.error.issues),
     };
+  }
+
+  // Hardening roadmap Phase 4.3 (docs/22-hardening-roadmap.md) -- IP-based,
+  // checked before any real work (Supabase Auth call, tenant bootstrap).
+  const ip = await getClientIp();
+  const { allowed } = await checkRateLimit(signUpRateLimit, ip);
+  if (!allowed) {
+    return { error: "Too many sign-up attempts. Please wait a while and try again." };
   }
 
   const input = parsed.data;
