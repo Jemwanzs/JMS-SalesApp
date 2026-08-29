@@ -2,9 +2,11 @@ import type { Metadata } from "next";
 
 import { BackLink } from "@/components/shared/back-link";
 import { FontPreferenceCard } from "@/features/preferences/components/font-preference-card";
+import { LanguagePreferenceCard } from "@/features/preferences/components/language-preference-card";
 import { ThemePreferenceCard } from "@/features/preferences/components/theme-preference-card";
 import { resolveColorPalette } from "@/lib/branding/color-palette";
 import { resolvePreferredFont } from "@/lib/branding/preferred-font";
+import { resolvePreferredLocale } from "@/lib/i18n/config";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 
@@ -31,9 +33,10 @@ export default async function PreferencesPage({
   const supabase = await createClient();
   const user = await getCurrentUser();
 
-  const [preferredFont, colorPalette] = await Promise.all([
+  const [preferredFont, colorPalette, preferredLocale] = await Promise.all([
     resolvePreferredFont(supabase, user!.id),
     resolveColorPalette(supabase, user!.id),
+    resolvePreferredLocale(supabase, user!.id),
   ]);
 
   return (
@@ -41,6 +44,7 @@ export default async function PreferencesPage({
       <BackLink href={`/t/${tenantSlug}/more`} label="More" />
       <h1 className="text-xl font-semibold">My Preferences</h1>
       <FontPreferenceCard tenantSlug={tenantSlug} initialFont={preferredFont} />
+      <LanguagePreferenceCard tenantSlug={tenantSlug} initialLocale={preferredLocale} />
       <ThemePreferenceCard tenantSlug={tenantSlug} initialPalette={colorPalette} />
     </div>
   );

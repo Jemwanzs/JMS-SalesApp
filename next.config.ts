@@ -1,5 +1,12 @@
 import { withSentryConfig } from "@sentry/nextjs";
 import type { NextConfig } from "next";
+import createNextIntlPlugin from "next-intl/plugin";
+
+// My Preferences (Language): points at i18n/request.ts, the single
+// locale-resolution point for the whole app (see that file's own header
+// comment for why requestLocale/[locale]-segment routing is deliberately
+// unused here).
+const withNextIntl = createNextIntlPlugin("./i18n/request.ts");
 
 // Read once at build/start time -- next.config.ts runs in plain Node, not
 // the client bundle, so process.env is safe here regardless of the
@@ -83,7 +90,7 @@ const nextConfig: NextConfig = {
 // same safe-by-default posture as the empty DSN in the instrumentation
 // files themselves, and why this doesn't break the CI build (Phase 2.7)
 // or local `next build` before those env vars are ever set.
-export default withSentryConfig(nextConfig, {
+export default withSentryConfig(withNextIntl(nextConfig), {
   org: process.env.SENTRY_ORG,
   project: process.env.SENTRY_PROJECT,
   authToken: process.env.SENTRY_AUTH_TOKEN,

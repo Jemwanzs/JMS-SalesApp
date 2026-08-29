@@ -1,0 +1,67 @@
+{
+  "Nav": {
+    "sales": "Sales",
+    "history": "History",
+    "analytics": "Analytics",
+    "reports": "Reports",
+    "stock": "Stock",
+    "more": "More"
+  },
+  "Common": {
+    "close": "Close",
+    "checkEntries": "Please check your entries"
+  },
+  "Sales": {
+    "greeting": "Good day, {name}",
+    "reopenedUntil": "Reopened until {time}",
+    "businessDayClosed": "Business day is closed",
+    "businessDayNotOpen": "Business day not open",
+    "reopenToAddMissedSale": "Reopen it to add a sale that was missed.",
+    "askAdminToReopen": "Ask an administrator to reopen today's business day.",
+    "openToStartRecording": "Open the business day to start recording sales.",
+    "askAdminToOpen": "Ask an administrator to open today's business day.",
+
+    "emptyProducts": "No products yet. Add some from {path}.",
+    "searchProducts": "Search products",
+    "noProductsMatch": "No products match \"{search}\".",
+    "saleRecordedTitle": "Sale Recorded",
+    "alreadyRecorded": "(already recorded)",
+    "recordSaleFor": "Record a sale for {name}",
+    "tierGold": "🥇 Gold",
+    "tierSilver": "🥈 Silver",
+    "tierBronze": "🥉 Bronze",
+    "today": "today",
+
+    "enterProductNameError": "Enter a product name for this sale.",
+    "expectedPrice": "Expected price: {price}",
+    "enterProductName": "Enter Product Name",
+    "whatDidCustomerBuy": "What did the customer buy?",
+    "amountSold": "Amount sold",
+    "quantity": "Quantity",
+    "notesOptional": "Notes (optional)",
+    "recording": "Recording...",
+    "recordSale": "Record Sale",
+
+    "openBusinessDay": "Open Business Day",
+    "opening": "Opening...",
+
+    "reopenBusinessDay": "Reopen business day",
+    "reopenThisBusinessDay": "Reopen this business day",
+    "reopenDescription": "Sales can be recorded again until the time below, then it automatically locks back.",
+    "reason": "Reason",
+    "reopenUntil": "Reopen until",
+    "continue": "Continue",
+    "mfaHelper": "Enter the 6-digit code from your authenticator app to confirm.",
+    "sixDigitCode": "6-digit code",
+    "reopening": "Reopening...",
+    "verifyAndReopen": "Verify & Reopen",
+    "passcodeHelper": "You don't have two-factor authentication enabled -- enter your workspace's security passcode to confirm.",
+    "securityPasscode": "Security passcode",
+    "submittedForApproval": "Submitted for approval",
+    "submittedForApprovalDescription": "This will reopen once a reviewer approves it.",
+    "businessDayReopened": "Business day reopened",
+
+    "businessWideVisibility": "Business-wide sales visibility",
+    "ownSalesOnly": "Own sales only"
+  }
+}

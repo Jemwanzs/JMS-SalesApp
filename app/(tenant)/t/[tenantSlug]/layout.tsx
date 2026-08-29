@@ -1,5 +1,7 @@
 import { Suspense } from "react";
 import { notFound, redirect } from "next/navigation";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getMessages } from "next-intl/server";
 
 import { AdminBypassToast } from "@/components/shared/admin-bypass-toast";
 import { ImpersonationBanner } from "@/components/shared/impersonation-banner";
@@ -8,6 +10,7 @@ import { SubscriptionBanner } from "@/components/shared/subscription-banner";
 import { TenantProvider } from "@/hooks/tenant-context";
 import { resolveColorPalette } from "@/lib/branding/color-palette";
 import { resolvePreferredFont } from "@/lib/branding/preferred-font";
+import { RTL_LOCALES, type SupportedLocale } from "@/lib/i18n/config";
 import { getInventoryEntitlement } from "@/lib/inventory/entitlement";
 import { getMyPermissions } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
@@ -138,14 +141,23 @@ export default async function TenantLayout({
   // in app/layout.tsx -- see that file's own header comment) since this
   // is the first per-request-dynamic layout a signed-in user's requests
   // actually reach.
-  const [permissions, activeWish, subscription, inventoryEntitlement, preferredFont, colorPalette] = await Promise.all([
+  const [permissions, activeWish, subscription, inventoryEntitlement, preferredFont, colorPalette, locale, messages] = await Promise.all([
     getMyPermissions(tenant.id),
     new AnniversaryService(supabase).getActiveWish(tenant.id).catch(() => null),
     new BillingService(createServiceRoleClient()).getSubscription(tenant.id).catch(() => null),
     getInventoryEntitlement(tenant.id).catch(() => ({ enabled: false, status: null })),
     resolvePreferredFont(supabase, user.id),
     resolveColorPalette(supabase, user.id),
+    // My Preferences (Language): getLocale()/getMessages() both resolve
+    // via i18n/request.ts, which independently re-reads
+    // profiles.default_locale for this same user -- one extra DB read,
+    // not duplicated resolution logic (see that file's own header
+    // comment for why requestLocale/[locale]-segment routing is
+    // deliberately unused here).
+    getLocale(),
+    getMessages(),
   ]);
+  const isRtl = RTL_LOCALES.has(locale as SupportedLocale);
 
   return (
     <TenantProvider
@@ -173,38 +185,50 @@ export default async function TenantLayout({
           id="app-shell"
           data-font={preferredFont}
           data-palette={colorPalette}
+          dir={isRtl ? "rtl" : "ltr"}
           className="relative flex w-full max-w-[430px] flex-col contain-layout bg-background"
         >
-          <Suspense fallback={null}>
-            <AdminBypassToast />
-          </Suspense>
-          {impersonation && <ImpersonationBanner tenantId={tenant.id} impersonation={impersonation} />}
-          <SubscriptionBanner tenantId={tenant.id} tenantSlug={tenant.slug} subscription={subscription} />
-          <div className="flex items-center justify-between border-b px-6 py-4">
-            <Logo />
-            {/* User & Tenant Branding Personalization: icon only, no
-                business name next to it, per the explicit requirement --
-                stays completely absent (not an empty placeholder) when
-                the tenant hasn't uploaded one, exactly as this area
-                looked before this feature existed. Plain <img>, not
-                next/image -- the upload accepts SVG (features/workspace/
-                components/logo-upload.tsx), and next/image's optimizer
-                refuses SVGs without extra dangerouslyAllowSVG config; a
-                small fixed-size header icon gets no real benefit from
-                Next's responsive-image machinery anyway. object-contain
-                (never object-cover) so a logo's own aspect ratio is
-                always preserved, never stretched or cropped. */}
-            {tenant.logo_url && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={tenant.logo_url} alt="" className="h-8 max-w-[120px] object-contain" />
-            )}
-          </div>
-          {activeWish && (
-            <div className="border-b bg-amber-50 px-6 py-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200">
-              {activeWish.message}
+          {/* My Preferences (Language): NextIntlClientProvider wraps
+              children here, not app/layout.tsx's <html> -- same reasoning
+              as data-font/data-palette above (root layout stays fully
+              static). dir="rtl" above correctly flips text direction and
+              native form-control mirroring for Arabic; it does NOT
+              auto-mirror bespoke flex/grid layouts built with physical
+              Tailwind utilities (pl-4, text-left, etc.) -- a follow-up
+              RTL-audit pass, not this one, per docs/22-hardening-roadmap.md's
+              i18n advisory. */}
+          <NextIntlClientProvider locale={locale} messages={messages}>
+            <Suspense fallback={null}>
+              <AdminBypassToast />
+            </Suspense>
+            {impersonation && <ImpersonationBanner tenantId={tenant.id} impersonation={impersonation} />}
+            <SubscriptionBanner tenantId={tenant.id} tenantSlug={tenant.slug} subscription={subscription} />
+            <div className="flex items-center justify-between border-b px-6 py-4">
+              <Logo />
+              {/* User & Tenant Branding Personalization: icon only, no
+                  business name next to it, per the explicit requirement --
+                  stays completely absent (not an empty placeholder) when
+                  the tenant hasn't uploaded one, exactly as this area
+                  looked before this feature existed. Plain <img>, not
+                  next/image -- the upload accepts SVG (features/workspace/
+                  components/logo-upload.tsx), and next/image's optimizer
+                  refuses SVGs without extra dangerouslyAllowSVG config; a
+                  small fixed-size header icon gets no real benefit from
+                  Next's responsive-image machinery anyway. object-contain
+                  (never object-cover) so a logo's own aspect ratio is
+                  always preserved, never stretched or cropped. */}
+              {tenant.logo_url && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={tenant.logo_url} alt="" className="h-8 max-w-[120px] object-contain" />
+              )}
             </div>
-          )}
-          {children}
+            {activeWish && (
+              <div className="border-b bg-amber-50 px-6 py-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                {activeWish.message}
+              </div>
+            )}
+            {children}
+          </NextIntlClientProvider>
         </div>
       </div>
     </TenantProvider>

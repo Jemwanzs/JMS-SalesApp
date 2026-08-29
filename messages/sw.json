@@ -1,0 +1,67 @@
+{
+  "Nav": {
+    "sales": "Mauzo",
+    "history": "Historia",
+    "analytics": "Uchambuzi",
+    "reports": "Ripoti",
+    "stock": "Bidhaa",
+    "more": "Zaidi"
+  },
+  "Common": {
+    "close": "Funga",
+    "checkEntries": "Tafadhali kagua ulichoingiza"
+  },
+  "Sales": {
+    "greeting": "Habari za leo, {name}",
+    "reopenedUntil": "Imefunguliwa tena hadi {time}",
+    "businessDayClosed": "Siku ya biashara imefungwa",
+    "businessDayNotOpen": "Siku ya biashara haijafunguliwa",
+    "reopenToAddMissedSale": "Ifungue tena ili kuongeza mauzo yaliyokosekana.",
+    "askAdminToReopen": "Muombe msimamizi afungue tena siku ya biashara ya leo.",
+    "openToStartRecording": "Fungua siku ya biashara ili kuanza kurekodi mauzo.",
+    "askAdminToOpen": "Muombe msimamizi afungue siku ya biashara ya leo.",
+
+    "emptyProducts": "Bidhaa hazijaongezwa bado. Ongeza kutoka {path}.",
+    "searchProducts": "Tafuta bidhaa",
+    "noProductsMatch": "Hakuna bidhaa inayolingana na \"{search}\".",
+    "saleRecordedTitle": "Mauzo Yamerekodiwa",
+    "alreadyRecorded": "(tayari imerekodiwa)",
+    "recordSaleFor": "Rekodi mauzo ya {name}",
+    "tierGold": "🥇 Dhahabu",
+    "tierSilver": "🥈 Fedha",
+    "tierBronze": "🥉 Shaba",
+    "today": "leo",
+
+    "enterProductNameError": "Ingiza jina la bidhaa kwa mauzo haya.",
+    "expectedPrice": "Bei inayotarajiwa: {price}",
+    "enterProductName": "Ingiza Jina la Bidhaa",
+    "whatDidCustomerBuy": "Mteja alinunua nini?",
+    "amountSold": "Kiasi kilichouzwa",
+    "quantity": "Idadi",
+    "notesOptional": "Maelezo (si lazima)",
+    "recording": "Inarekodi...",
+    "recordSale": "Rekodi Mauzo",
+
+    "openBusinessDay": "Fungua Siku ya Biashara",
+    "opening": "Inafungua...",
+
+    "reopenBusinessDay": "Fungua tena siku ya biashara",
+    "reopenThisBusinessDay": "Fungua tena siku hii ya biashara",
+    "reopenDescription": "Mauzo yanaweza kurekodiwa tena hadi muda ulio hapa chini, kisha itafungwa moja kwa moja.",
+    "reason": "Sababu",
+    "reopenUntil": "Fungua tena hadi",
+    "continue": "Endelea",
+    "mfaHelper": "Ingiza msimbo wa tarakimu 6 kutoka programu yako ya uthibitishaji ili kuthibitisha.",
+    "sixDigitCode": "Msimbo wa tarakimu 6",
+    "reopening": "Inafungua tena...",
+    "verifyAndReopen": "Thibitisha na Ufungue Tena",
+    "passcodeHelper": "Hujawasha uthibitishaji wa hatua mbili -- ingiza msimbo wa usalama wa eneo lako la kazi ili kuthibitisha.",
+    "securityPasscode": "Msimbo wa Usalama",
+    "submittedForApproval": "Imewasilishwa kwa idhini",
+    "submittedForApprovalDescription": "Hii itafungua tena mara mkaguzi atakapoidhinisha.",
+    "businessDayReopened": "Siku ya biashara imefunguliwa tena",
+
+    "businessWideVisibility": "Mwonekano wa mauzo ya biashara nzima",
+    "ownSalesOnly": "Mauzo yako pekee"
+  }
+}

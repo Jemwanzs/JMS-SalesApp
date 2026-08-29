@@ -1,9 +1,12 @@
 import { redirect } from "next/navigation";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getMessages } from "next-intl/server";
 
 import { PlatformAdminBottomNav } from "@/features/platform-admin/components/platform-admin-bottom-nav";
 import { PlatformAdminService } from "@/services/PlatformAdminService";
 import { resolveColorPalette } from "@/lib/branding/color-palette";
 import { resolvePreferredFont } from "@/lib/branding/preferred-font";
+import { RTL_LOCALES, type SupportedLocale } from "@/lib/i18n/config";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
@@ -54,10 +57,13 @@ export default async function PlatformAdminLayout({
   // for the accent-color palette -- no picker UI lives in this console,
   // a platform admin who's also a real tenant member sets it from their
   // own tenant's My Preferences page and it follows them in here too.
-  const [preferredFont, colorPalette] = await Promise.all([
+  const [preferredFont, colorPalette, locale, messages] = await Promise.all([
     resolvePreferredFont(supabase, user.id),
     resolveColorPalette(supabase, user.id),
+    getLocale(),
+    getMessages(),
   ]);
+  const isRtl = RTL_LOCALES.has(locale as SupportedLocale);
 
   return (
     <div className="flex min-h-screen w-full justify-center bg-[#05070D]">
@@ -65,14 +71,17 @@ export default async function PlatformAdminLayout({
         id="platform-admin-shell"
         data-font={preferredFont}
         data-palette={colorPalette}
+        dir={isRtl ? "rtl" : "ltr"}
         className="relative flex w-full max-w-[430px] flex-col contain-layout bg-[#0B1220] text-[#F2F1EC]"
       >
-        <header className="border-b border-white/10 px-4 py-4">
-          <p className="text-sm font-semibold tracking-wide">PLATFORM ADMIN</p>
-          <p className="mt-0.5 truncate text-xs text-white/50">{user.email}</p>
-        </header>
-        <main className="flex-1 p-4">{children}</main>
-        <PlatformAdminBottomNav />
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          <header className="border-b border-white/10 px-4 py-4">
+            <p className="text-sm font-semibold tracking-wide">PLATFORM ADMIN</p>
+            <p className="mt-0.5 truncate text-xs text-white/50">{user.email}</p>
+          </header>
+          <main className="flex-1 p-4">{children}</main>
+          <PlatformAdminBottomNav />
+        </NextIntlClientProvider>
       </div>
     </div>
   );

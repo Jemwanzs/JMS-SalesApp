@@ -1,0 +1,67 @@
+{
+  "Nav": {
+    "sales": "Ventes",
+    "history": "Historique",
+    "analytics": "Analyses",
+    "reports": "Rapports",
+    "stock": "Stock",
+    "more": "Plus"
+  },
+  "Common": {
+    "close": "Fermer",
+    "checkEntries": "Veuillez vérifier vos saisies"
+  },
+  "Sales": {
+    "greeting": "Bonjour, {name}",
+    "reopenedUntil": "Rouvert jusqu'à {time}",
+    "businessDayClosed": "La journée commerciale est clôturée",
+    "businessDayNotOpen": "La journée commerciale n'est pas ouverte",
+    "reopenToAddMissedSale": "Rouvrez-la pour ajouter une vente manquée.",
+    "askAdminToReopen": "Demandez à un administrateur de rouvrir la journée commerciale d'aujourd'hui.",
+    "openToStartRecording": "Ouvrez la journée commerciale pour commencer à enregistrer des ventes.",
+    "askAdminToOpen": "Demandez à un administrateur d'ouvrir la journée commerciale d'aujourd'hui.",
+
+    "emptyProducts": "Aucun produit pour l'instant. Ajoutez-en depuis {path}.",
+    "searchProducts": "Rechercher des produits",
+    "noProductsMatch": "Aucun produit ne correspond à « {search} ».",
+    "saleRecordedTitle": "Vente enregistrée",
+    "alreadyRecorded": "(déjà enregistrée)",
+    "recordSaleFor": "Enregistrer une vente pour {name}",
+    "tierGold": "🥇 Or",
+    "tierSilver": "🥈 Argent",
+    "tierBronze": "🥉 Bronze",
+    "today": "aujourd'hui",
+
+    "enterProductNameError": "Saisissez un nom de produit pour cette vente.",
+    "expectedPrice": "Prix prévu : {price}",
+    "enterProductName": "Saisir le nom du produit",
+    "whatDidCustomerBuy": "Qu'est-ce que le client a acheté ?",
+    "amountSold": "Montant vendu",
+    "quantity": "Quantité",
+    "notesOptional": "Notes (facultatif)",
+    "recording": "Enregistrement...",
+    "recordSale": "Enregistrer la vente",
+
+    "openBusinessDay": "Ouvrir la journée commerciale",
+    "opening": "Ouverture...",
+
+    "reopenBusinessDay": "Rouvrir la journée commerciale",
+    "reopenThisBusinessDay": "Rouvrir cette journée commerciale",
+    "reopenDescription": "Les ventes peuvent à nouveau être enregistrées jusqu'à l'heure ci-dessous, puis elle se reclôture automatiquement.",
+    "reason": "Motif",
+    "reopenUntil": "Rouvrir jusqu'à",
+    "continue": "Continuer",
+    "mfaHelper": "Saisissez le code à 6 chiffres de votre application d'authentification pour confirmer.",
+    "sixDigitCode": "Code à 6 chiffres",
+    "reopening": "Réouverture...",
+    "verifyAndReopen": "Vérifier et rouvrir",
+    "passcodeHelper": "Vous n'avez pas activé l'authentification à deux facteurs -- saisissez le code de sécurité de votre espace de travail pour confirmer.",
+    "securityPasscode": "Code de sécurité",
+    "submittedForApproval": "Soumis pour approbation",
+    "submittedForApprovalDescription": "Cela rouvrira la journée une fois qu'un réviseur l'aura approuvée.",
+    "businessDayReopened": "Journée commerciale rouverte",
+
+    "businessWideVisibility": "Visibilité sur toutes les ventes de l'entreprise",
+    "ownSalesOnly": "Vos ventes uniquement"
+  }
+}

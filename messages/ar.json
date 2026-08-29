@@ -1,0 +1,67 @@
+{
+  "Nav": {
+    "sales": "المبيعات",
+    "history": "السجل",
+    "analytics": "التحليلات",
+    "reports": "التقارير",
+    "stock": "المخزون",
+    "more": "المزيد"
+  },
+  "Common": {
+    "close": "إغلاق",
+    "checkEntries": "يرجى التحقق من إدخالاتك"
+  },
+  "Sales": {
+    "greeting": "نهارك سعيد، {name}",
+    "reopenedUntil": "أُعيد الفتح حتى {time}",
+    "businessDayClosed": "يوم العمل مغلق",
+    "businessDayNotOpen": "يوم العمل غير مفتوح",
+    "reopenToAddMissedSale": "أعد فتحه لإضافة عملية بيع فائتة.",
+    "askAdminToReopen": "اطلب من المسؤول إعادة فتح يوم العمل لهذا اليوم.",
+    "openToStartRecording": "افتح يوم العمل لبدء تسجيل المبيعات.",
+    "askAdminToOpen": "اطلب من المسؤول فتح يوم العمل لهذا اليوم.",
+
+    "emptyProducts": "لا توجد منتجات بعد. أضِف بعضها من {path}.",
+    "searchProducts": "ابحث عن المنتجات",
+    "noProductsMatch": "لا توجد منتجات مطابقة لـ \"{search}\".",
+    "saleRecordedTitle": "تم تسجيل البيع",
+    "alreadyRecorded": "(تم تسجيله مسبقًا)",
+    "recordSaleFor": "تسجيل عملية بيع لـ {name}",
+    "tierGold": "🥇 ذهبي",
+    "tierSilver": "🥈 فضي",
+    "tierBronze": "🥉 برونزي",
+    "today": "اليوم",
+
+    "enterProductNameError": "أدخل اسم المنتج لهذه العملية.",
+    "expectedPrice": "السعر المتوقع: {price}",
+    "enterProductName": "أدخل اسم المنتج",
+    "whatDidCustomerBuy": "ماذا اشترى العميل؟",
+    "amountSold": "المبلغ المباع",
+    "quantity": "الكمية",
+    "notesOptional": "ملاحظات (اختياري)",
+    "recording": "جارٍ التسجيل...",
+    "recordSale": "تسجيل البيع",
+
+    "openBusinessDay": "فتح يوم العمل",
+    "opening": "جارٍ الفتح...",
+
+    "reopenBusinessDay": "إعادة فتح يوم العمل",
+    "reopenThisBusinessDay": "إعادة فتح يوم العمل هذا",
+    "reopenDescription": "يمكن تسجيل المبيعات مجددًا حتى الوقت أدناه، ثم يُقفل تلقائيًا بعد ذلك.",
+    "reason": "السبب",
+    "reopenUntil": "إعادة الفتح حتى",
+    "continue": "متابعة",
+    "mfaHelper": "أدخل الرمز المكوّن من 6 أرقام من تطبيق المصادقة لديك للتأكيد.",
+    "sixDigitCode": "رمز مكوّن من 6 أرقام",
+    "reopening": "جارٍ إعادة الفتح...",
+    "verifyAndReopen": "تحقق وأعد الفتح",
+    "passcodeHelper": "لم تُفعّل المصادقة الثنائية -- أدخل رمز الأمان الخاص بمساحة عملك للتأكيد.",
+    "securityPasscode": "رمز الأمان",
+    "submittedForApproval": "تم الإرسال للموافقة",
+    "submittedForApprovalDescription": "سيُعاد فتحه بمجرد موافقة المراجع.",
+    "businessDayReopened": "أُعيد فتح يوم العمل",
+
+    "businessWideVisibility": "رؤية المبيعات على مستوى الشركة",
+    "ownSalesOnly": "مبيعاتك فقط"
+  }
+}
