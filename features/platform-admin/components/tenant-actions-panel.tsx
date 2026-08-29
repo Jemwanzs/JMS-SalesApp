@@ -24,11 +24,14 @@ export function TenantActionsPanel({
   status,
   subscriptionStatus,
   currency,
+  isPlatformOwner,
 }: {
   tenantId: string;
   status: TenantStatus;
   subscriptionStatus: SubscriptionStatus | null;
   currency: string;
+  /** The platform owner's own tenant -- suspendTenant/deactivateTenant refuse these server-side regardless, but hiding the buttons avoids showing an action that will always error. */
+  isPlatformOwner: boolean;
 }) {
   const [open, setOpen] = useState<ActionKind>(null);
   const [isPending, startTransition] = useTransition();
@@ -93,8 +96,11 @@ export function TenantActionsPanel({
   return (
     <div className="rounded-lg border border-white/10 bg-white/5 p-4">
       <h2 className="mb-3 text-sm font-semibold text-white/70">Actions</h2>
+      {isPlatformOwner && (
+        <p className="mb-3 text-xs text-emerald-300">This is the platform owner&apos;s own tenant -- always active, never billing-pushed.</p>
+      )}
       <div className="flex flex-wrap gap-2">
-        {(status === "active" || status === "suspended") && (
+        {!isPlatformOwner && (status === "active" || status === "suspended") && (
           <button
             type="button"
             onClick={() => setOpen(open === "suspend" ? null : "suspend")}
@@ -103,7 +109,7 @@ export function TenantActionsPanel({
             Suspend
           </button>
         )}
-        {(status === "active" || status === "suspended") && (
+        {!isPlatformOwner && (status === "active" || status === "suspended") && (
           <button
             type="button"
             onClick={() => setOpen(open === "deactivate" ? null : "deactivate")}

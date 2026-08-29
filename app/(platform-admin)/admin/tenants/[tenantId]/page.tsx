@@ -138,6 +138,7 @@ export default async function PlatformAdminTenantDetailPage({
         status={detail.status}
         subscriptionStatus={detail.subscriptionStatus}
         currency={detail.currency}
+        isPlatformOwner={detail.isPlatformOwner}
       />
 
       <TenantAddonPanel tenantId={tenantId} addonKey="inventory" addon={inventoryAddon} currency={detail.currency} />

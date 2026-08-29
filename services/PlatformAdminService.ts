@@ -71,6 +71,8 @@ export interface TenantDetail extends TenantListItem {
   locationAddress: string | null;
   /** Null when the tenant has no location yet (onboarding Step 2 skipped) -- distinct from "location exists but every day is closedAllDay", which is a real, displayable answer. */
   businessHours: { dayOfWeek: number; openTime: string; closeTime: string; closedAllDay: boolean }[] | null;
+  /** True when billing_owner_profile_id resolves to a real platform_admins row -- the platform owner's own tenant, which suspendTenant/deactivateTenant refuse to touch and the billing sweep (migration 0044) never pushes. Drives TenantActionsPanel hiding those two buttons. */
+  isPlatformOwner: boolean;
 }
 
 export interface TenantCreditView {
@@ -485,6 +487,7 @@ export class PlatformAdminService {
       { data: lastLogin },
       { data: primaryLocation },
       { data: soldSales },
+      { data: platformAdminRow },
     ] = await Promise.all([
       this.supabase
         .from("subscriptions")
@@ -529,6 +532,9 @@ export class PlatformAdminService {
         .eq("tenant_id", tenantId)
         .neq("status", "voided")
         .neq("status", "corrected"),
+      tenant.billing_owner_profile_id
+        ? this.supabase.from("platform_admins").select("id").eq("profile_id", tenant.billing_owner_profile_id).maybeSingle()
+        : Promise.resolve({ data: null }),
     ]);
 
     const plan = sub?.plan_id
@@ -571,10 +577,40 @@ export class PlatformAdminService {
       locationAddress: primaryLocation?.address ?? null,
       businessHours,
       productsSoldCount: new Set((soldSales ?? []).map((s) => s.product_id)).size,
+      isPlatformOwner: !!platformAdminRow,
     };
   }
 
+  /**
+   * The platform owner's own tenant (billing_owner_profile_id resolving to
+   * a real platform_admins row -- never a hardcoded email, same check as
+   * BillingService.resolveAddonTrialDays) must always stay active: it's
+   * always readily available and never billing-pushed. This is app-layer
+   * defense for a clean UI error; migration 0044's trigger on tenants is
+   * the DB-level backstop if this check is ever bypassed, and that same
+   * migration excludes this tenant from run_billing_sweep()/
+   * run_addon_billing_sweep() entirely so it's never automatically pushed
+   * toward suspension in the first place.
+   */
+  private async assertNotPlatformOwnerTenant(tenantId: string, verb: "suspend" | "deactivate"): Promise<void> {
+    const { data: tenant } = await this.supabase.from("tenants").select("billing_owner_profile_id").eq("id", tenantId).maybeSingle();
+
+    if (!tenant?.billing_owner_profile_id) return;
+
+    const { data: admin } = await this.supabase
+      .from("platform_admins")
+      .select("id")
+      .eq("profile_id", tenant.billing_owner_profile_id)
+      .maybeSingle();
+
+    if (admin) {
+      throw new Error(`Cannot ${verb} the platform owner's own tenant`);
+    }
+  }
+
   async suspendTenant(platformAdminId: string, tenantId: string, reason: string): Promise<void> {
+    await this.assertNotPlatformOwnerTenant(tenantId, "suspend");
+
     const { data: before } = await this.supabase.from("tenants").select("status").eq("id", tenantId).single();
 
     const { error } = await this.supabase.from("tenants").update({ status: "suspended" }).eq("id", tenantId);
@@ -606,6 +642,8 @@ export class PlatformAdminService {
    * sets status='active' unconditionally regardless of prior status).
    */
   async deactivateTenant(platformAdminId: string, tenantId: string, reason: string): Promise<void> {
+    await this.assertNotPlatformOwnerTenant(tenantId, "deactivate");
+
     const { data: before } = await this.supabase.from("tenants").select("status").eq("id", tenantId).single();
 
     const { error } = await this.supabase.from("tenants").update({ status: "deactivated" }).eq("id", tenantId);

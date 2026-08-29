@@ -1064,6 +1064,10 @@ export interface Database {
         Args: Record<string, never>;
         Returns: BillingSweepResult;
       };
+      run_addon_billing_sweep: {
+        Args: Record<string, never>;
+        Returns: BillingSweepResult;
+      };
       record_stock_reconciliation: {
         Args: {
           p_tenant_id: string;
