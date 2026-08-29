@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useTranslations } from "next-intl";
 
 import { correctSaleAction } from "@/features/sales/actions/correct-sale";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,9 @@ export function CorrectSaleDialog({
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const t = useTranslations("SalesHistory");
+  const tCommon = useTranslations("Common");
+  const tSales = useTranslations("Sales");
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -53,7 +57,7 @@ export function CorrectSaleDialog({
         return;
       }
       if (result.fieldErrors) {
-        setError(Object.values(result.fieldErrors)[0] ?? "Please check your entries");
+        setError(Object.values(result.fieldErrors)[0] ?? tCommon("checkEntries"));
         return;
       }
       if (result.result) {
@@ -66,18 +70,17 @@ export function CorrectSaleDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button variant="outline" size="sm" />}>Correct</DialogTrigger>
+      <DialogTrigger render={<Button variant="outline" size="sm" />}>{t("correct")}</DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Correct this sale</DialogTitle>
+          <DialogTitle>{t("correctThisSale")}</DialogTitle>
           <DialogDescription>
-            The original is kept and marked corrected; a new sale is recorded with the fixed
-            amount, linked back to this one.
+            {t("correctDescription")}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="correct-amount">Corrected amount</Label>
+            <Label htmlFor="correct-amount">{t("correctedAmount")}</Label>
             <Input
               id="correct-amount"
               type="number"
@@ -90,7 +93,7 @@ export function CorrectSaleDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="correct-reason">Reason</Label>
+            <Label htmlFor="correct-reason">{tSales("reason")}</Label>
             <Input
               id="correct-reason"
               value={reason}
@@ -101,7 +104,7 @@ export function CorrectSaleDialog({
           {error && <p className="text-sm text-destructive">{error}</p>}
           <DialogFooter>
             <Button type="submit" disabled={isPending}>
-              {isPending ? "Submitting..." : "Correct sale"}
+              {isPending ? t("submitting") : t("correctSale")}
             </Button>
           </DialogFooter>
         </form>

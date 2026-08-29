@@ -1,11 +1,14 @@
+import { getTranslations } from "next-intl/server";
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { PerformanceTier, UserPerformanceItem } from "@/services/AnalyticsService";
 
-const TIER_LABEL: Record<PerformanceTier, string> = {
-  gold: "🥇 Gold",
-  silver: "🥈 Silver",
-  bronze: "🥉 Bronze",
+/** Keys into the "Analytics" namespace -- see the tier Badge's own usage below. */
+const TIER_LABEL_KEY: Record<PerformanceTier, "tierGold" | "tierSilver" | "tierBronze"> = {
+  gold: "tierGold",
+  silver: "tierSilver",
+  bronze: "tierBronze",
 };
 
 const TIER_BADGE_CLASS: Record<PerformanceTier, string> = {
@@ -20,15 +23,17 @@ const TIER_BADGE_CLASS: Record<PerformanceTier, string> = {
  * product-performance-list.tsx, so the two feel like one consistent
  * "performance" idiom rather than two different UI patterns.
  */
-export function UserPerformanceList({ items }: { items: UserPerformanceItem[] }) {
+export async function UserPerformanceList({ items }: { items: UserPerformanceItem[] }) {
+  const t = await getTranslations("Analytics");
+
   if (items.length === 0) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Team Performance</CardTitle>
+          <CardTitle>{t("teamPerformance")}</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">No sales recorded for this period yet.</p>
+          <p className="text-sm text-muted-foreground">{t("noSalesThisPeriod")}</p>
         </CardContent>
       </Card>
     );
@@ -39,7 +44,7 @@ export function UserPerformanceList({ items }: { items: UserPerformanceItem[] })
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Team Performance</CardTitle>
+        <CardTitle>{t("teamPerformance")}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         {items.map((item, index) => (
@@ -49,12 +54,11 @@ export function UserPerformanceList({ items }: { items: UserPerformanceItem[] })
                 <span className="shrink-0 text-xs tabular-nums text-muted-foreground">#{index + 1}</span>
                 <span className="truncate font-medium">{item.name}</span>
                 {item.tier && (
-                  <Badge className={`shrink-0 ${TIER_BADGE_CLASS[item.tier]}`}>{TIER_LABEL[item.tier]}</Badge>
+                  <Badge className={`shrink-0 ${TIER_BADGE_CLASS[item.tier]}`}>{t(TIER_LABEL_KEY[item.tier])}</Badge>
                 )}
               </span>
               <span className="shrink-0 tabular-nums text-muted-foreground">
-                {item.totalRevenue.toFixed(2)} · {item.saleCount} sale
-                {item.saleCount === 1 ? "" : "s"}
+                {item.totalRevenue.toFixed(2)} · {t("saleCount", { count: item.saleCount })}
               </span>
             </div>
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">

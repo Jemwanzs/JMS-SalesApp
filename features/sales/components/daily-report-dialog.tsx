@@ -1,15 +1,17 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useLocale, useTranslations } from "next-intl";
 import { toast } from "sonner";
 
 import { getDailySalesReportAction, type DailySalesReportData } from "@/features/sales/actions/get-daily-sales-report";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { LOCALE_BCP47, type SupportedLocale } from "@/lib/i18n/config";
 import { buildDailySalesReportPdf } from "@/lib/utils/generate-daily-report-pdf";
 
-function formatReportDate(dateStr: string): string {
-  return new Date(`${dateStr}T00:00:00`).toLocaleDateString(undefined, {
+function formatReportDate(dateStr: string, bcp47: string): string {
+  return new Date(`${dateStr}T00:00:00`).toLocaleDateString(bcp47, {
     weekday: "long",
     year: "numeric",
     month: "long",
@@ -30,6 +32,9 @@ export function DailyReportDialog({ tenantId, todayDate }: { tenantId: string; t
   const [data, setData] = useState<DailySalesReportData | null>(null);
   const [isLoading, startLoading] = useTransition();
   const [isExporting, startExporting] = useTransition();
+  const t = useTranslations("SalesHistory");
+  const locale = useLocale() as SupportedLocale;
+  const bcp47 = LOCALE_BCP47[locale];
 
   function onOpen() {
     setOpen(true);
@@ -39,7 +44,7 @@ export function DailyReportDialog({ tenantId, todayDate }: { tenantId: string; t
         const result = await getDailySalesReportAction(tenantId, todayDate);
         setData(result);
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Could not load the daily report");
+        toast.error(err instanceof Error ? err.message : t("couldNotLoadReport"));
         setOpen(false);
       }
     });
@@ -62,7 +67,7 @@ export function DailyReportDialog({ tenantId, todayDate }: { tenantId: string; t
 
       if (navigator.canShare?.({ files: [file] })) {
         try {
-          await navigator.share({ files: [file], title: `Daily Sales — ${data.tenantName}` });
+          await navigator.share({ files: [file], title: t("shareTitle", { tenantName: data.tenantName }) });
           return;
         } catch {
           // User cancelled the share sheet, or it failed -- fall through
@@ -76,36 +81,40 @@ export function DailyReportDialog({ tenantId, todayDate }: { tenantId: string; t
   return (
     <>
       <Button type="button" size="sm" variant="outline" onClick={onOpen}>
-        Daily Report
+        {t("dailyReport")}
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Daily Sales Summary</DialogTitle>
-            <DialogDescription>Preview for {formatReportDate(todayDate)}</DialogDescription>
+            <DialogTitle>{t("dailySalesSummary")}</DialogTitle>
+            <DialogDescription>{t("previewFor", { date: formatReportDate(todayDate, bcp47) })}</DialogDescription>
           </DialogHeader>
 
-          {isLoading && <p className="py-6 text-center text-sm text-muted-foreground">Loading…</p>}
+          {isLoading && <p className="py-6 text-center text-sm text-muted-foreground">{t("loadingEllipsis")}</p>}
 
           {data && !isLoading && (
             <div className="space-y-4 text-sm">
               <div>
                 <p className="text-base font-semibold">{data.tenantName}</p>
-                {data.adminEmail && <p className="text-xs text-muted-foreground">Admin: {data.adminEmail}</p>}
-                <p className="text-xs text-muted-foreground">Report Date: {formatReportDate(data.reportDate)}</p>
+                {data.adminEmail && (
+                  <p className="text-xs text-muted-foreground">{t("adminLabel", { email: data.adminEmail })}</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  {t("reportDateLabel", { date: formatReportDate(data.reportDate, bcp47) })}
+                </p>
               </div>
 
               <div className="border-t" />
 
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Total Sales</span>
+                <span className="text-muted-foreground">{t("totalSales")}</span>
                 <span className="font-semibold tabular-nums">
                   {data.currency} {data.totalSalesAmount.toFixed(2)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Transactions</span>
+                <span className="text-muted-foreground">{t("transactions")}</span>
                 <span className="font-medium tabular-nums">{data.transactionCount}</span>
               </div>
 
@@ -122,30 +131,30 @@ export function DailyReportDialog({ tenantId, todayDate }: { tenantId: string; t
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-muted-foreground">No sales recorded for this date.</p>
+                <p className="text-xs text-muted-foreground">{t("noSalesRecorded")}</p>
               )}
 
               <div className="border-t" />
 
               <div className="flex items-center justify-between">
-                <span className="font-semibold">Daily Total</span>
+                <span className="font-semibold">{t("dailyTotal")}</span>
                 <span className="font-semibold tabular-nums">
                   {data.currency} {data.totalSalesAmount.toFixed(2)}
                 </span>
               </div>
 
               <p className="text-[11px] text-muted-foreground">
-                This is a system-generated report. Generated on {new Date(data.generatedAt).toLocaleString()}.
+                {t("generatedFooter", { timestamp: new Date(data.generatedAt).toLocaleString(bcp47) })}
               </p>
             </div>
           )}
 
           <DialogFooter className="gap-2 sm:gap-2">
             <Button type="button" variant="outline" disabled={!data || isExporting} onClick={share} className="flex-1">
-              Share / Save Poster
+              {t("sharePoster")}
             </Button>
             <Button type="button" disabled={!data || isExporting} onClick={download} className="flex-1">
-              {isExporting ? "Preparing…" : "Download PDF"}
+              {isExporting ? t("preparing") : t("downloadPdf")}
             </Button>
           </DialogFooter>
         </DialogContent>

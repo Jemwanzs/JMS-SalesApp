@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { getTranslations } from "next-intl/server";
 
 import { AnalyticsFilters } from "@/features/analytics/components/analytics-filters";
 import { InsightsList } from "@/features/analytics/components/insights-list";
@@ -53,6 +54,7 @@ export default async function AnalyticsPage({
   const { tenantSlug } = await params;
   const { preset, from, to } = await searchParams;
   const supabase = await createClient();
+  const t = await getTranslations("Analytics");
 
   const [user, tenant] = await Promise.all([getCurrentUser(), getTenantBySlug(supabase, tenantSlug)]);
 
@@ -100,12 +102,12 @@ export default async function AnalyticsPage({
       viewAll ? new InsightsService(supabase).listRecent(tenantId) : Promise.resolve([]),
     ]);
   } catch (err) {
-    errorMessage = err instanceof Error ? err.message : "Could not load analytics";
+    errorMessage = err instanceof Error ? err.message : t("couldNotLoad");
   }
 
   return (
     <div className="flex flex-1 flex-col p-6">
-      <h1 className="mb-4 text-xl font-semibold">Analytics</h1>
+      <h1 className="mb-4 text-xl font-semibold">{t("heading")}</h1>
       <AnalyticsFilters canPastDates={pastDates} canDateRange={dateRange} />
 
       {errorMessage ? (
@@ -119,8 +121,8 @@ export default async function AnalyticsPage({
           {canRankUsers ? (
             <Tabs defaultValue="products">
               <TabsList>
-                <TabsTrigger value="products">Products</TabsTrigger>
-                <TabsTrigger value="users">User Performance</TabsTrigger>
+                <TabsTrigger value="products">{t("productsTab")}</TabsTrigger>
+                <TabsTrigger value="users">{t("userPerformanceTab")}</TabsTrigger>
               </TabsList>
               <TabsContent value="products">
                 <ProductPerformanceList items={productPerformance} />

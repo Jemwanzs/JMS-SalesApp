@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useTranslations } from "next-intl";
 
 import { reverseSaleAction } from "@/features/sales/actions/reverse-sale";
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,9 @@ export function ReverseSaleDialog({
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const t = useTranslations("SalesHistory");
+  const tCommon = useTranslations("Common");
+  const tSales = useTranslations("Sales");
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -54,7 +58,7 @@ export function ReverseSaleDialog({
         return;
       }
       if (result.fieldErrors) {
-        setError(Object.values(result.fieldErrors)[0] ?? "Please check your entry");
+        setError(Object.values(result.fieldErrors)[0] ?? tCommon("checkEntries"));
         return;
       }
       if (result.result) {
@@ -67,18 +71,17 @@ export function ReverseSaleDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button variant="outline" size="sm" />}>Reverse</DialogTrigger>
+      <DialogTrigger render={<Button variant="outline" size="sm" />}>{t("reverse")}</DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Reverse this sale</DialogTitle>
+          <DialogTitle>{t("reverseThisSale")}</DialogTitle>
           <DialogDescription>
-            The sale stays on record. A new offsetting entry for the same amount will be recorded alongside it,
-            netting to zero in your totals. This cannot be undone.
+            {t("reverseDescription")}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="reverse-reason">Reason</Label>
+            <Label htmlFor="reverse-reason">{tSales("reason")}</Label>
             <Input
               id="reverse-reason"
               value={reason}
@@ -90,7 +93,7 @@ export function ReverseSaleDialog({
           {error && <p className="text-sm text-destructive">{error}</p>}
           <DialogFooter>
             <Button type="submit" variant="destructive" disabled={isPending}>
-              {isPending ? "Reversing..." : "Reverse sale"}
+              {isPending ? t("reversing") : t("reverseSale")}
             </Button>
           </DialogFooter>
         </form>

@@ -1,37 +1,57 @@
+import { getLocale, getTranslations } from "next-intl/server";
+
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { LOCALE_BCP47, type SupportedLocale } from "@/lib/i18n/config";
 import type { CorrectionsReportPayload, DailyReportPayload } from "@/services/ReportService";
 
-function formatPeriod(periodStart: string) {
-  return new Date(periodStart).toLocaleDateString(undefined, {
+function formatPeriod(periodStart: string, bcp47: string) {
+  return new Date(periodStart).toLocaleDateString(bcp47, {
     weekday: "long",
     month: "long",
     day: "numeric",
   });
 }
 
-function DailyReportCard({ periodStart, payload }: { periodStart: string; payload: DailyReportPayload }) {
+/** Keys into the "Reports" namespace -- see the correction-type Badge's own usage below. */
+const CORRECTION_TYPE_LABEL_KEY: Record<string, "correctionTypeVoid" | "correctionTypeCorrect" | "correctionTypeReverse"> = {
+  void: "correctionTypeVoid",
+  correct: "correctionTypeCorrect",
+  reverse: "correctionTypeReverse",
+};
+
+async function DailyReportCard({
+  periodStart,
+  payload,
+  bcp47,
+}: {
+  periodStart: string;
+  payload: DailyReportPayload;
+  bcp47: string;
+}) {
+  const t = await getTranslations("Reports");
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{formatPeriod(periodStart)}</CardTitle>
+        <CardTitle>{formatPeriod(periodStart, bcp47)}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2 text-sm">
         <div className="flex justify-between">
-          <span className="text-muted-foreground">Gross Sales</span>
+          <span className="text-muted-foreground">{t("grossSales")}</span>
           <span className="font-medium tabular-nums">{payload.grossSales.toFixed(2)}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-muted-foreground">Transactions</span>
+          <span className="text-muted-foreground">{t("transactions")}</span>
           <span className="font-medium tabular-nums">{payload.transactionCount}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-muted-foreground">Average Sale</span>
+          <span className="text-muted-foreground">{t("averageSale")}</span>
           <span className="font-medium tabular-nums">{payload.averageSale.toFixed(2)}</span>
         </div>
         {payload.topProduct && (
           <div className="flex justify-between gap-2">
-            <span className="shrink-0 text-muted-foreground">Top Product</span>
+            <span className="shrink-0 text-muted-foreground">{t("topProduct")}</span>
             <span className="min-w-0 truncate font-medium">
               {payload.topProduct.name} ({payload.topProduct.revenue.toFixed(2)})
             </span>
@@ -39,13 +59,13 @@ function DailyReportCard({ periodStart, payload }: { periodStart: string; payloa
         )}
         {payload.topSalesPerson && (
           <div className="flex justify-between gap-2">
-            <span className="shrink-0 text-muted-foreground">Top Sales Person</span>
+            <span className="shrink-0 text-muted-foreground">{t("topSalesPerson")}</span>
             <span className="min-w-0 truncate font-medium">{payload.topSalesPerson.name}</span>
           </div>
         )}
         {payload.vsPreviousDay && (
           <div className="flex justify-between">
-            <span className="text-muted-foreground">vs. Previous Day</span>
+            <span className="text-muted-foreground">{t("vsPreviousDay")}</span>
             <span className="font-medium tabular-nums">
               {payload.vsPreviousDay.changePercent === null
                 ? "—"
@@ -58,27 +78,31 @@ function DailyReportCard({ periodStart, payload }: { periodStart: string; payloa
   );
 }
 
-function CorrectionsReportCard({
+async function CorrectionsReportCard({
   periodStart,
   payload,
+  bcp47,
 }: {
   periodStart: string;
   payload: CorrectionsReportPayload;
+  bcp47: string;
 }) {
+  const t = await getTranslations("Reports");
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Corrections &amp; Voids — {formatPeriod(periodStart)}</CardTitle>
+        <CardTitle>{t("correctionsAndVoids", { date: formatPeriod(periodStart, bcp47) })}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
         <div className="flex justify-between">
-          <span className="text-muted-foreground">Voided</span>
+          <span className="text-muted-foreground">{t("voided")}</span>
           <span className="font-medium tabular-nums">
             {payload.voidCount} ({payload.totalVoided.toFixed(2)})
           </span>
         </div>
         <div className="flex justify-between">
-          <span className="text-muted-foreground">Corrected</span>
+          <span className="text-muted-foreground">{t("corrected")}</span>
           <span className="font-medium tabular-nums">
             {payload.correctionCount} ({payload.totalCorrectedDelta >= 0 ? "+" : ""}
             {payload.totalCorrectedDelta.toFixed(2)})
@@ -86,7 +110,7 @@ function CorrectionsReportCard({
         </div>
         {payload.reversalCount > 0 && (
           <div className="flex justify-between">
-            <span className="text-muted-foreground">Reversed</span>
+            <span className="text-muted-foreground">{t("reversed")}</span>
             <span className="font-medium tabular-nums">
               {payload.reversalCount} ({payload.totalReversed.toFixed(2)})
             </span>
@@ -98,14 +122,14 @@ function CorrectionsReportCard({
               <div className="flex items-center justify-between gap-2">
                 <span className="truncate font-medium">{entry.productName}</span>
                 <Badge variant={entry.correctionType === "void" ? "destructive" : "secondary"}>
-                  {entry.correctionType}
+                  {t(CORRECTION_TYPE_LABEL_KEY[entry.correctionType])}
                 </Badge>
               </div>
               <p className="text-xs text-muted-foreground">
                 {entry.saleNumber ?? "—"} · {entry.oldAmount.toFixed(2)}
                 {entry.newAmount !== null ? ` → ${entry.newAmount.toFixed(2)}` : ""} · {entry.requestedBy}
               </p>
-              <p className="text-xs text-muted-foreground">&ldquo;{entry.reason}&rdquo;</p>
+              <p className="text-xs text-muted-foreground">{t("quotedReason", { reason: entry.reason })}</p>
             </div>
           ))}
         </div>
@@ -120,7 +144,7 @@ function CorrectionsReportCard({
  * payload is a frozen snapshot computed at generation time, not
  * re-derived on render.
  */
-export function ReportList({
+export async function ReportList({
   reports,
 }: {
   reports: Array<{
@@ -130,11 +154,14 @@ export function ReportList({
     payload: DailyReportPayload | CorrectionsReportPayload;
   }>;
 }) {
+  const [t, locale] = await Promise.all([getTranslations("Reports"), getLocale()]);
+  const bcp47 = LOCALE_BCP47[locale as SupportedLocale];
+
   if (reports.length === 0) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
         <p className="text-sm text-muted-foreground">
-          No reports yet. A daily report is generated automatically each time a business day closes.
+          {t("noReportsYet")}
         </p>
       </div>
     );
@@ -148,11 +175,13 @@ export function ReportList({
             key={report.id}
             periodStart={report.periodStart}
             payload={report.payload as CorrectionsReportPayload}
+            bcp47={bcp47}
           />
         ) : (
           <DailyReportCard
             key={report.id}
             periodStart={report.periodStart}
+            bcp47={bcp47}
             payload={report.payload as DailyReportPayload}
           />
         )

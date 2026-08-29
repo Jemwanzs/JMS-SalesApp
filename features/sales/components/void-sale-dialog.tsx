@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useTranslations } from "next-intl";
 
 import { voidSaleAction } from "@/features/sales/actions/void-sale";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,9 @@ export function VoidSaleDialog({
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const t = useTranslations("SalesHistory");
+  const tCommon = useTranslations("Common");
+  const tSales = useTranslations("Sales");
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -47,7 +51,7 @@ export function VoidSaleDialog({
         return;
       }
       if (result.fieldErrors) {
-        setError(Object.values(result.fieldErrors)[0] ?? "Please check your entry");
+        setError(Object.values(result.fieldErrors)[0] ?? tCommon("checkEntries"));
         return;
       }
       if (result.result) {
@@ -60,17 +64,17 @@ export function VoidSaleDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={<Button variant="outline" size="sm" />}>Void</DialogTrigger>
+      <DialogTrigger render={<Button variant="outline" size="sm" />}>{t("void")}</DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Void this sale</DialogTitle>
+          <DialogTitle>{t("voidThisSale")}</DialogTitle>
           <DialogDescription>
-            The sale record is kept for audit purposes but marked voided. This cannot be undone.
+            {t("voidDescription")}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="void-reason">Reason</Label>
+            <Label htmlFor="void-reason">{tSales("reason")}</Label>
             <Input
               id="void-reason"
               value={reason}
@@ -82,7 +86,7 @@ export function VoidSaleDialog({
           {error && <p className="text-sm text-destructive">{error}</p>}
           <DialogFooter>
             <Button type="submit" variant="destructive" disabled={isPending}>
-              {isPending ? "Voiding..." : "Void sale"}
+              {isPending ? t("voiding") : t("voidSale")}
             </Button>
           </DialogFooter>
         </form>

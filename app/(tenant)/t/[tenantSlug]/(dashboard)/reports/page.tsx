@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { getTranslations } from "next-intl/server";
 
 import { ReportList } from "@/features/reports/components/report-list";
 import { ReportService } from "@/services/ReportService";
@@ -23,6 +24,7 @@ export default async function ReportsPage({
 }) {
   const { tenantSlug } = await params;
   const supabase = await createClient();
+  const t = await getTranslations("Reports");
 
   const tenant = await getTenantBySlug(supabase, tenantSlug);
 
@@ -30,7 +32,7 @@ export default async function ReportsPage({
 
   return (
     <div className="flex flex-1 flex-col p-6">
-      <h1 className="mb-4 text-xl font-semibold">Reports</h1>
+      <h1 className="mb-4 text-xl font-semibold">{t("heading")}</h1>
       <ReportList reports={reports} />
     </div>
   );

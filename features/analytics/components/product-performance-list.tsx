@@ -1,3 +1,5 @@
+import { getTranslations } from "next-intl/server";
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { ProductPerformanceItem } from "@/services/AnalyticsService";
 
@@ -8,17 +10,18 @@ import type { ProductPerformanceItem } from "@/services/AnalyticsService";
  * here (see dataviz skill: a single-series ranked list doesn't require
  * palette validation).
  */
-export function ProductPerformanceList({ items }: { items: ProductPerformanceItem[] }) {
+export async function ProductPerformanceList({ items }: { items: ProductPerformanceItem[] }) {
   if (items.length === 0) {
     return null;
   }
 
+  const t = await getTranslations("Analytics");
   const maxRevenue = Math.max(...items.map((i) => i.totalRevenue));
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Top Products</CardTitle>
+        <CardTitle>{t("topProducts")}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         {items.map((item) => (
@@ -26,8 +29,7 @@ export function ProductPerformanceList({ items }: { items: ProductPerformanceIte
             <div className="flex items-baseline justify-between gap-2 text-sm">
               <span className="truncate font-medium">{item.name}</span>
               <span className="shrink-0 tabular-nums text-muted-foreground">
-                {item.totalRevenue.toFixed(2)} · {item.saleCount} sale
-                {item.saleCount === 1 ? "" : "s"}
+                {item.totalRevenue.toFixed(2)} · {t("saleCount", { count: item.saleCount })}
               </span>
             </div>
             <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">

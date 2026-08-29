@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
 
 import { DailyReportDialog } from "@/features/sales/components/daily-report-dialog";
 import { Button } from "@/components/ui/button";
@@ -20,6 +21,7 @@ export function SaleHistoryFilters({ tenantId, todayDate }: { tenantId: string; 
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
+  const t = useTranslations("SalesHistory");
 
   const [from, setFrom] = useState(searchParams.get("from") ?? "");
   const [to, setTo] = useState(searchParams.get("to") ?? "");
@@ -78,17 +80,17 @@ export function SaleHistoryFilters({ tenantId, todayDate }: { tenantId: string; 
           disabled={isPending}
           onClick={goToday}
         >
-          Today
+          {t("today")}
         </Button>
         <DailyReportDialog tenantId={tenantId} todayDate={todayDate} />
         {!hasDateFilter && (
-          <span className="text-xs text-muted-foreground">Showing today&apos;s sales by default</span>
+          <span className="text-xs text-muted-foreground">{t("showingTodayDefault")}</span>
         )}
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1">
           <Label htmlFor="sh-from" className="text-xs">
-            From
+            {t("from")}
           </Label>
           <Input
             id="sh-from"
@@ -99,7 +101,7 @@ export function SaleHistoryFilters({ tenantId, todayDate }: { tenantId: string; 
         </div>
         <div className="space-y-1">
           <Label htmlFor="sh-to" className="text-xs">
-            To
+            {t("to")}
           </Label>
           <Input
             id="sh-to"
@@ -111,18 +113,18 @@ export function SaleHistoryFilters({ tenantId, todayDate }: { tenantId: string; 
       </div>
       <div className="space-y-1">
         <Label htmlFor="sh-q" className="text-xs">
-          Search (sale number or product)
+          {t("searchLabel")}
         </Label>
         <Input
           id="sh-q"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="SALE-2026-000012 or product name"
+          placeholder={t("searchPlaceholder")}
         />
       </div>
       <div className="flex gap-2">
         <Button type="submit" size="sm" disabled={isPending}>
-          {isPending ? "Applying..." : "Apply"}
+          {isPending ? t("applying") : t("apply")}
         </Button>
         {hasFilters && (
           <Button
@@ -132,7 +134,7 @@ export function SaleHistoryFilters({ tenantId, todayDate }: { tenantId: string; 
             onClick={clear}
             disabled={isPending}
           >
-            Clear
+            {t("clear")}
           </Button>
         )}
       </div>

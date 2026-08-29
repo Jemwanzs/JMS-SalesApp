@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { getTranslations } from "next-intl/server";
 
 import { SaleHistoryFilters } from "@/features/sales/components/sale-history-filters";
 import { SaleHistoryList } from "@/features/sales/components/sale-history-list";
@@ -46,6 +47,7 @@ export default async function SalesHistoryPage({
   const { tenantSlug } = await params;
   const { from, to, q } = await searchParams;
   const supabase = await createClient();
+  const t = await getTranslations("SalesHistory");
 
   const [user, tenant] = await Promise.all([getCurrentUser(), getTenantBySlug(supabase, tenantSlug)]);
 
@@ -70,7 +72,7 @@ export default async function SalesHistoryPage({
 
   return (
     <div className="flex flex-1 flex-col p-6">
-      <h1 className="mb-4 text-xl font-semibold">Sales History</h1>
+      <h1 className="mb-4 text-xl font-semibold">{t("heading")}</h1>
       <SaleHistoryFilters tenantId={tenantId} todayDate={today} />
       <SaleHistoryList
         sales={sales}

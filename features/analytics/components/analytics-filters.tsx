@@ -2,19 +2,21 @@
 
 import { useState, useTransition } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { DatePreset } from "@/lib/utils/date-ranges";
 
-const PRESETS: { key: DatePreset; label: string }[] = [
-  { key: "today", label: "Today" },
-  { key: "yesterday", label: "Yesterday" },
-  { key: "this_week", label: "This Week" },
-  { key: "last_week", label: "Last Week" },
-  { key: "this_month", label: "This Month" },
-  { key: "last_month", label: "Last Month" },
+/** Keys into the "Analytics" namespace -- not the display label itself, see PRESETS' own usage below. */
+const PRESETS: { key: DatePreset; labelKey: "presetToday" | "presetYesterday" | "presetThisWeek" | "presetLastWeek" | "presetThisMonth" | "presetLastMonth" }[] = [
+  { key: "today", labelKey: "presetToday" },
+  { key: "yesterday", labelKey: "presetYesterday" },
+  { key: "this_week", labelKey: "presetThisWeek" },
+  { key: "last_week", labelKey: "presetLastWeek" },
+  { key: "this_month", labelKey: "presetThisMonth" },
+  { key: "last_month", labelKey: "presetLastMonth" },
 ];
 
 /**
@@ -36,6 +38,7 @@ export function AnalyticsFilters({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
+  const t = useTranslations("Analytics");
 
   const activePreset = searchParams.get("preset") ?? (searchParams.get("from") ? null : "today");
   const [customFrom, setCustomFrom] = useState(searchParams.get("from") ?? "");
@@ -70,7 +73,7 @@ export function AnalyticsFilters({
             disabled={isPending}
             onClick={() => goToPreset(p.key)}
           >
-            {p.label}
+            {t(p.labelKey)}
           </Button>
         ))}
       </div>
@@ -79,7 +82,7 @@ export function AnalyticsFilters({
         <form onSubmit={applyCustom} className="flex flex-wrap items-end gap-2 rounded-lg border p-3">
           <div className="space-y-1">
             <Label htmlFor="an-from" className="text-xs">
-              {canDateRange ? "From" : "Custom date"}
+              {canDateRange ? t("from") : t("customDate")}
             </Label>
             <Input
               id="an-from"
@@ -91,7 +94,7 @@ export function AnalyticsFilters({
           {canDateRange && (
             <div className="space-y-1">
               <Label htmlFor="an-to" className="text-xs">
-                To
+                {t("to")}
               </Label>
               <Input
                 id="an-to"
@@ -102,7 +105,7 @@ export function AnalyticsFilters({
             </div>
           )}
           <Button type="submit" size="sm" variant="outline" disabled={isPending || !customFrom}>
-            Apply
+            {t("apply")}
           </Button>
         </form>
       )}

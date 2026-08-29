@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Bar, BarChart, Tooltip, XAxis, YAxis } from "recharts";
 
 import { ChartContainer, type ChartConfig } from "@/components/ui/chart";
@@ -8,10 +9,6 @@ import type { ProductPerformanceItem } from "@/services/AnalyticsService";
 
 const MAX_BARS = 6;
 const LABEL_MAX_CHARS = 14;
-
-const chartConfig: ChartConfig = {
-  totalRevenue: { label: "Revenue", color: "var(--primary)" },
-};
 
 function truncateLabel(name: string): string {
   return name.length > LABEL_MAX_CHARS ? `${name.slice(0, LABEL_MAX_CHARS - 1)}…` : name;
@@ -33,6 +30,7 @@ function ProductTooltip({
   label?: string;
   items: ProductPerformanceItem[];
 }) {
+  const t = useTranslations("Analytics");
   if (!active || label == null) return null;
   const item = items.find((i) => i.name === label);
   if (!item) return null;
@@ -41,11 +39,11 @@ function ProductTooltip({
     <div className="rounded-xl bg-popover px-3 py-2 text-xs text-popover-foreground shadow-lg ring-1 ring-foreground/10">
       <p className="mb-1 font-medium">{item.name}</p>
       <div className="flex items-center gap-1.5">
-        <span className="text-muted-foreground">Revenue</span>
+        <span className="text-muted-foreground">{t("revenue")}</span>
         <span className="ml-auto font-medium tabular-nums">{item.totalRevenue.toFixed(2)}</span>
       </div>
       <div className="flex items-center gap-1.5">
-        <span className="text-muted-foreground">Sales</span>
+        <span className="text-muted-foreground">{t("salesSeries")}</span>
         <span className="ml-auto font-medium tabular-nums">{item.saleCount}</span>
       </div>
     </div>
@@ -67,6 +65,10 @@ function ProductTooltip({
  * touch-aware tooltip -- "tap a chart to view detailed figures."
  */
 export function ProductPerformanceChart({ items }: { items: ProductPerformanceItem[] }) {
+  const t = useTranslations("Analytics");
+  const chartConfig: ChartConfig = {
+    totalRevenue: { label: t("revenue"), color: "var(--primary)" },
+  };
   const top = items.slice(0, MAX_BARS);
   const remaining = items.length - top.length;
 
@@ -79,7 +81,7 @@ export function ProductPerformanceChart({ items }: { items: ProductPerformanceIt
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Product Performance</CardTitle>
+        <CardTitle>{t("productPerformance")}</CardTitle>
       </CardHeader>
       <CardContent>
         <ChartContainer config={chartConfig} style={{ height: chartHeight }}>
@@ -99,7 +101,7 @@ export function ProductPerformanceChart({ items }: { items: ProductPerformanceIt
           </BarChart>
         </ChartContainer>
         {remaining > 0 && (
-          <p className="mt-2 text-xs text-muted-foreground">+{remaining} more in the list below</p>
+          <p className="mt-2 text-xs text-muted-foreground">{t("moreInList", { count: remaining })}</p>
         )}
       </CardContent>
     </Card>

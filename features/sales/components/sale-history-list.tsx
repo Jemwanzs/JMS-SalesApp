@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 
 import { exportSalesHistoryCsvAction } from "@/features/sales/actions/export-sales-history";
@@ -50,6 +51,7 @@ function ExportCsvButton({
   const [dialogOpen, setDialogOpen] = useState(false);
   const [passcode, setPasscode] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const t = useTranslations("SalesHistory");
 
   function runExport(enteredPasscode: string | null) {
     setError(null);
@@ -76,14 +78,14 @@ function ExportCsvButton({
   return (
     <>
       <Button type="button" variant="outline" size="sm" disabled={isPending} onClick={onClick}>
-        {isPending ? "Exporting..." : "Export CSV"}
+        {isPending ? t("exporting") : t("exportCsv")}
       </Button>
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Enter download passcode</DialogTitle>
+            <DialogTitle>{t("enterDownloadPasscode")}</DialogTitle>
             <DialogDescription>
-              This tenant requires a passcode to export sales data.
+              {t("passcodeDescription")}
             </DialogDescription>
           </DialogHeader>
           <Input
@@ -95,7 +97,7 @@ function ExportCsvButton({
           {error && <p className="text-sm text-destructive">{error}</p>}
           <DialogFooter>
             <Button disabled={isPending || !passcode} onClick={() => runExport(passcode)}>
-              {isPending ? "Verifying..." : "Download"}
+              {isPending ? t("verifying") : t("download")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -113,6 +115,15 @@ const STATUS_VARIANT: Record<
   corrected: "secondary",
   voided: "destructive",
   reversed: "secondary",
+};
+
+/** Keys into the "SalesHistory" namespace -- see the status Badge's own usage below. */
+const STATUS_LABEL_KEY: Record<SaleListItem["status"], "statusOpen" | "statusLocked" | "statusCorrected" | "statusVoided" | "statusReversed"> = {
+  open: "statusOpen",
+  locked: "statusLocked",
+  corrected: "statusCorrected",
+  voided: "statusVoided",
+  reversed: "statusReversed",
 };
 
 export function SaleHistoryList({
@@ -139,12 +150,12 @@ export function SaleHistoryList({
   filters: { from?: string; to?: string; q?: string };
 }) {
   const [items, setItems] = useState(sales);
+  const t = useTranslations("SalesHistory");
 
   function onResolved(saleId: string, result: VoidOrCorrectResult) {
     if (result.status === "pending_approval") {
-      toast("Submitted for approval", {
-        description:
-          "This change needs a reviewer's sign-off before it takes effect.",
+      toast(t("submittedForApproval"), {
+        description: t("needsReviewerSignoff"),
       });
       return;
     }
@@ -153,7 +164,7 @@ export function SaleHistoryList({
       setItems((prev) =>
         prev.map((s) => (s.id === saleId ? { ...s, status: "voided" } : s)),
       );
-      toast.success("Sale voided");
+      toast.success(t("saleVoided"));
       return;
     }
 
@@ -161,8 +172,8 @@ export function SaleHistoryList({
       setItems((prev) =>
         prev.map((s) => (s.id === saleId ? { ...s, status: "corrected" } : s)),
       );
-      toast.success("Sale corrected", {
-        description: "A replacement sale was recorded with the new amount.",
+      toast.success(t("saleCorrected"), {
+        description: t("replacementRecorded"),
       });
       return;
     }
@@ -171,8 +182,8 @@ export function SaleHistoryList({
       setItems((prev) =>
         prev.map((s) => (s.id === saleId ? { ...s, status: "reversed" } : s)),
       );
-      toast.success("Sale reversed", {
-        description: "An offsetting entry was recorded for the same amount.",
+      toast.success(t("saleReversed"), {
+        description: t("offsettingRecorded"),
       });
     }
   }
@@ -181,7 +192,7 @@ export function SaleHistoryList({
     return (
       <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
         <p className="text-sm text-muted-foreground">
-          No sales match these filters.
+          {t("noSalesMatch")}
         </p>
       </div>
     );
@@ -191,7 +202,7 @@ export function SaleHistoryList({
     <div>
       <div className="mb-2 flex items-center justify-between">
         <p className="text-xs text-muted-foreground">
-          {items.length} sale{items.length === 1 ? "" : "s"}
+          {t("saleCount", { count: items.length })}
         </p>
         <ExportCsvButton tenantId={tenantId} filters={filters} requiresPasscode={requiresDownloadPasscode} />
       </div>
@@ -221,7 +232,7 @@ export function SaleHistoryList({
                     {sale.actualAmount.toFixed(2)}
                   </p>
                   <Badge variant={STATUS_VARIANT[sale.status]}>
-                    {sale.status}
+                    {t(STATUS_LABEL_KEY[sale.status])}
                   </Badge>
                 </div>
               </div>
