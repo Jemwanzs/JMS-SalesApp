@@ -10,11 +10,10 @@ export interface SetPreferredFontState {
 }
 
 /**
- * User & Tenant Branding Personalization: purely personal, no
- * settings.manage/permission gate at all -- any signed-in user may set
- * their OWN font preference, same "every user manages their own
- * account here" posture as MFA enrollment/session management on this
- * same page. profiles_update_own RLS (migration 0001) already only
+ * User & Tenant Branding Personalization (moved into My Preferences,
+ * see features/preferences): purely personal, no settings.manage/
+ * permission gate at all -- any signed-in user may set their OWN font
+ * preference. profiles_update_own RLS (migration 0001) already only
  * ever lets a caller write their own row regardless of what tenantId/
  * profileId a client might try to send, so there's no cross-user or
  * cross-tenant write surface here to defend against beyond that.

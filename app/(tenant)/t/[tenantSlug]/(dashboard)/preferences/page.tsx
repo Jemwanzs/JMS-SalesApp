@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 import { BackLink } from "@/components/shared/back-link";
-import { FontPreferenceCard } from "@/features/security/components/font-preference-card";
+import { FontPreferenceCard } from "@/features/preferences/components/font-preference-card";
 import { ThemePreferenceCard } from "@/features/preferences/components/theme-preference-card";
 import { resolveColorPalette } from "@/lib/branding/color-palette";
 import { resolvePreferredFont } from "@/lib/branding/preferred-font";

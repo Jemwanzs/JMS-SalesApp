@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 
-import { setPreferredFontAction } from "@/features/security/actions/set-preferred-font";
+import { setPreferredFontAction } from "@/features/preferences/actions/set-preferred-font";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FONT_LABELS, KNOWN_FONTS, type KnownFont } from "@/lib/branding/preferred-font";
 import { cn } from "@/lib/utils";
@@ -17,10 +17,9 @@ const FONT_VAR: Record<KnownFont, string> = {
 };
 
 /**
- * User & Tenant Branding Personalization: purely personal, no
- * permission gate -- lives on the Security page alongside MFA/session
- * management, the existing "every signed-in user manages their own
- * account here" section (that page's own header comment).
+ * User & Tenant Branding Personalization (moved into My Preferences,
+ * see features/preferences): purely personal, no permission gate --
+ * every signed-in user manages their own account here.
  *
  * Each option is rendered IN its own actual font (inline style against
  * the same CSS variables app/globals.css's [data-font="..."] rules
