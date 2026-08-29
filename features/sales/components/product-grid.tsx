@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { Plus } from "lucide-react";
 import { toast } from "sonner";
 
@@ -14,10 +15,11 @@ import type { ProductTier } from "@/lib/utils/product-ranking";
 import type { Product } from "@/services/ProductService";
 import type { RecordSaleState } from "@/features/sales/actions/record-sale";
 
-const TIER_LABEL: Record<ProductTier, string> = {
-  gold: "🥇 Gold",
-  silver: "🥈 Silver",
-  bronze: "🥉 Bronze",
+/** Keys into the "Sales" namespace -- see TIER_LABEL's own usage below. */
+const TIER_LABEL_KEY: Record<ProductTier, "tierGold" | "tierSilver" | "tierBronze"> = {
+  gold: "tierGold",
+  silver: "tierSilver",
+  bronze: "tierBronze",
 };
 
 const TIER_BADGE_CLASS: Record<ProductTier, string> = {
@@ -65,6 +67,7 @@ export function ProductGrid({
 }) {
   const [selected, setSelected] = useState<Product | null>(null);
   const [search, setSearch] = useState("");
+  const t = useTranslations("Sales");
 
   const visibleProducts = search.trim()
     ? products.filter((p) => p.name.toLowerCase().includes(search.trim().toLowerCase()))
@@ -72,10 +75,10 @@ export function ProductGrid({
 
   function onRecorded(sale: NonNullable<RecordSaleState["sale"]>) {
     setSelected(null);
-    toast.success("Sale Recorded", {
+    toast.success(t("saleRecordedTitle"), {
       description: `${sale.actualAmount.toFixed(2)} · ${sale.productNameSnapshot}${
         sale.saleNumber ? ` · ${sale.saleNumber}` : ""
-      }${sale.replayed ? " (already recorded)" : ""}`,
+      }${sale.replayed ? ` ${t("alreadyRecorded")}` : ""}`,
     });
   }
 
@@ -83,7 +86,12 @@ export function ProductGrid({
     return (
       <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
         <p className="text-sm text-muted-foreground">
-          No products yet. Add some from More → Products.
+          {/* "More → Products" is deliberately NOT translated -- the More
+              menu's own Products entry isn't converted in this pass (see
+              messages/en.json's own key comment / the i18n advisory's
+              phased scope), so a half-translated breadcrumb would be
+              worse than a consistent literal one. */}
+          {t("emptyProducts", { path: "More → Products" })}
         </p>
       </div>
     );
@@ -96,13 +104,13 @@ export function ProductGrid({
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search products"
+          placeholder={t("searchProducts")}
           className="pl-9"
         />
       </div>
 
       {visibleProducts.length === 0 && (
-        <p className="p-8 text-center text-sm text-muted-foreground">No products match &quot;{search}&quot;.</p>
+        <p className="p-8 text-center text-sm text-muted-foreground">{t("noProductsMatch", { search })}</p>
       )}
 
       <div className="divide-y">
@@ -134,7 +142,7 @@ export function ProductGrid({
                 <p className="truncate font-medium">{product.name}</p>
                 {product.tier && (
                   <Badge className={`shrink-0 ${TIER_BADGE_CLASS[product.tier]}`}>
-                    {TIER_LABEL[product.tier]}
+                    {t(TIER_LABEL_KEY[product.tier])}
                   </Badge>
                 )}
               </div>
@@ -150,13 +158,13 @@ export function ProductGrid({
               )}
               {showDailyVolume && (todayRevenue?.get(product.id) ?? 0) > 0 && (
                 <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
-                  {todayRevenue!.get(product.id)!.toFixed(2)} today
+                  {todayRevenue!.get(product.id)!.toFixed(2)} {t("today")}
                 </p>
               )}
             </div>
             <button
               type="button"
-              aria-label={`Record a sale for ${product.name}`}
+              aria-label={t("recordSaleFor", { name: product.name })}
               onClick={(e) => {
                 e.stopPropagation();
                 setSelected(product);

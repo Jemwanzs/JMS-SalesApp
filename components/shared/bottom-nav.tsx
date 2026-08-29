@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { BarChart3, Boxes, FileText, History, Menu, ShoppingCart } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -10,7 +11,8 @@ import { useTenant, usePermission } from "@/hooks/tenant-context";
 
 interface NavItem {
   href: string;
-  label: string;
+  /** Key into the "Nav" message namespace (messages/{locale}.json) -- not the display label itself, see NavLink's useTranslations call. */
+  labelKey: "sales" | "history" | "analytics" | "reports" | "stock" | "more";
   icon: LucideIcon;
   /** null = always visible (e.g. More/settings/logout). */
   permission: string | null;
@@ -40,12 +42,12 @@ interface NavItem {
  * already governs what rows the page itself can show, same as before).
  */
 const NAV_ITEMS: NavItem[] = [
-  { href: "sales", label: "Sales", icon: ShoppingCart, permission: "sales.view_own" },
-  { href: "sales-history", label: "History", icon: History, permission: null },
-  { href: "analytics", label: "Analytics", icon: BarChart3, permission: "analytics.view_own" },
-  { href: "reports", label: "Reports", icon: FileText, permission: "reports.view" },
-  { href: "stock", label: "Stock", icon: Boxes, permission: "inventory.view", requiresSetting: "inventoryEnabled" },
-  { href: "more", label: "More", icon: Menu, permission: null },
+  { href: "sales", labelKey: "sales", icon: ShoppingCart, permission: "sales.view_own" },
+  { href: "sales-history", labelKey: "history", icon: History, permission: null },
+  { href: "analytics", labelKey: "analytics", icon: BarChart3, permission: "analytics.view_own" },
+  { href: "reports", labelKey: "reports", icon: FileText, permission: "reports.view" },
+  { href: "stock", labelKey: "stock", icon: Boxes, permission: "inventory.view", requiresSetting: "inventoryEnabled" },
+  { href: "more", labelKey: "more", icon: Menu, permission: null },
 ];
 
 export function BottomNav() {
@@ -81,6 +83,7 @@ function NavLink({
   // is null.
   const hasPermission = usePermission(item.permission ?? "__always__");
   const { inventoryEnabled } = useTenant();
+  const t = useTranslations("Nav");
   const permitted = item.permission === null || hasPermission;
   const settingSatisfied = item.requiresSetting == null || (item.requiresSetting === "inventoryEnabled" && inventoryEnabled);
   const visible = permitted && settingSatisfied;
@@ -102,7 +105,7 @@ function NavLink({
       )}
     >
       <Icon className="h-5 w-5" />
-      {item.label}
+      {t(item.labelKey)}
     </Link>
   );
 }

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { getLocale, getTranslations } from "next-intl/server";
 
 import { AnniversaryCelebrationDialog } from "@/features/sales/components/anniversary-celebration-dialog";
 import { OpenBusinessDayButton } from "@/features/sales/components/open-business-day-button";
@@ -10,6 +11,7 @@ import { AnniversaryService } from "@/services/AnniversaryService";
 import { BusinessDayService } from "@/services/BusinessDayService";
 import { ProductService } from "@/services/ProductService";
 import { TenantService } from "@/services/TenantService";
+import { LOCALE_BCP47, type SupportedLocale } from "@/lib/i18n/config";
 import { can } from "@/lib/permissions/can";
 import { todayString, trailingDaysRange } from "@/lib/utils/date-ranges";
 import { rankProducts } from "@/lib/utils/product-ranking";
@@ -67,9 +69,16 @@ export default async function SalesPage({
   const location = locationRow!;
 
   const businessDayService = new BusinessDayService(supabase);
+  const t = await getTranslations("Sales");
+  // Display-facing only -- the "en-CA" ISO-date-key call at line ~101
+  // below is a different thing entirely (business-day key generation,
+  // not display) and must stay locale-independent, see that line's own
+  // comment.
+  const locale = (await getLocale()) as SupportedLocale;
+  const bcp47 = LOCALE_BCP47[locale];
 
   const firstName = profile?.full_name?.split(" ")[0] ?? "there";
-  const today = new Date().toLocaleDateString("en-US", {
+  const today = new Date().toLocaleDateString(bcp47, {
     weekday: "long",
     month: "long",
     day: "numeric",
@@ -106,7 +115,7 @@ export default async function SalesPage({
         <AnniversaryCelebrationDialog wishId={`${activeWish.id}-${todayDateKey}`} message={activeWish.message} />
       )}
       <p className="text-sm text-muted-foreground">{today}</p>
-      <h1 className="mt-1 text-xl font-semibold">Good day, {firstName}</h1>
+      <h1 className="mt-1 text-xl font-semibold">{t("greeting", { name: firstName })}</h1>
 
       <div className="mt-6">
         <SalesVisibilityBadge />
@@ -114,10 +123,11 @@ export default async function SalesPage({
 
       {businessDay?.status === "reopened" && businessDay.reopenExpiresAt && (
         <p className="mt-2 text-xs text-muted-foreground">
-          Reopened until{" "}
-          {new Date(businessDay.reopenExpiresAt).toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
+          {t("reopenedUntil", {
+            time: new Date(businessDay.reopenExpiresAt).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
           })}
         </p>
       )}
@@ -134,16 +144,16 @@ export default async function SalesPage({
       ) : (
         <div className="mt-8 flex flex-1 flex-col items-center justify-center rounded-lg border border-dashed p-8 text-center">
           <p className="text-lg font-medium">
-            {businessDay?.status === "closed" ? "Business day is closed" : "Business day not open"}
+            {businessDay?.status === "closed" ? t("businessDayClosed") : t("businessDayNotOpen")}
           </p>
           <p className="mt-2 max-w-[28ch] text-sm text-muted-foreground">
             {businessDay?.status === "closed"
               ? canReopenDay
-                ? "Reopen it to add a sale that was missed."
-                : "Ask an administrator to reopen today's business day."
+                ? t("reopenToAddMissedSale")
+                : t("askAdminToReopen")
               : canOpenDay
-                ? "Open the business day to start recording sales."
-                : "Ask an administrator to open today's business day."}
+                ? t("openToStartRecording")
+                : t("askAdminToOpen")}
           </p>
           <div className="mt-4 w-full max-w-[240px]">
             {businessDay?.status === "closed"

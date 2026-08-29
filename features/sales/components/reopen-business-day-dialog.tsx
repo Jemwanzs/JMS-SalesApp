@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 
 import { reopenBusinessDayAction } from "@/features/sales/actions/reopen-business-day";
@@ -56,6 +57,8 @@ export function ReopenBusinessDayDialog({
   const [factorId, setFactorId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const t = useTranslations("Sales");
+  const tCommon = useTranslations("Common");
 
   function reset() {
     setStep("details");
@@ -110,7 +113,7 @@ export function ReopenBusinessDayDialog({
         return;
       }
       if (result.fieldErrors) {
-        setError(Object.values(result.fieldErrors)[0] ?? "Please check your entries");
+        setError(Object.values(result.fieldErrors)[0] ?? tCommon("checkEntries"));
         return;
       }
       if (result.result) {
@@ -118,11 +121,11 @@ export function ReopenBusinessDayDialog({
         reset();
 
         if (result.result.status === "pending_approval") {
-          toast("Submitted for approval", {
-            description: "This will reopen once a reviewer approves it.",
+          toast(t("submittedForApproval"), {
+            description: t("submittedForApprovalDescription"),
           });
         } else {
-          toast.success("Business day reopened");
+          toast.success(t("businessDayReopened"));
         }
       }
     });
@@ -158,30 +161,30 @@ export function ReopenBusinessDayDialog({
       }}
     >
       <DialogTrigger render={<Button variant="outline" className="w-full" />}>
-        Reopen business day
+        {t("reopenBusinessDay")}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Reopen this business day</DialogTitle>
+          <DialogTitle>{t("reopenThisBusinessDay")}</DialogTitle>
           <DialogDescription>
-            Sales can be recorded again until the time below, then it automatically locks back.
+            {t("reopenDescription")}
           </DialogDescription>
         </DialogHeader>
 
         {step === "details" && (
           <form onSubmit={onContinue} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="reopen-reason">Reason</Label>
+              <Label htmlFor="reopen-reason">{t("reason")}</Label>
               <Input id="reopen-reason" value={reason} onChange={(e) => setReason(e.target.value)} autoFocus required />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="reopen-until">Reopen until</Label>
+              <Label htmlFor="reopen-until">{t("reopenUntil")}</Label>
               <Input id="reopen-until" type="time" value={untilTime} onChange={(e) => setUntilTime(e.target.value)} required />
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
             <DialogFooter>
               <Button type="submit" disabled={!reason.trim()}>
-                Continue
+                {t("continue")}
               </Button>
             </DialogFooter>
           </form>
@@ -189,15 +192,15 @@ export function ReopenBusinessDayDialog({
 
         {step === "mfa" && (
           <form onSubmit={onSubmitMfa} className="space-y-4">
-            <p className="text-sm text-muted-foreground">Enter the 6-digit code from your authenticator app to confirm.</p>
+            <p className="text-sm text-muted-foreground">{t("mfaHelper")}</p>
             <div className="space-y-2">
-              <Label htmlFor="reopen-mfa-code">6-digit code</Label>
+              <Label htmlFor="reopen-mfa-code">{t("sixDigitCode")}</Label>
               <Input id="reopen-mfa-code" value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" maxLength={6} autoFocus required />
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
             <DialogFooter>
               <Button type="submit" disabled={isPending}>
-                {isPending ? "Reopening..." : "Verify & Reopen"}
+                {isPending ? t("reopening") : t("verifyAndReopen")}
               </Button>
             </DialogFooter>
           </form>
@@ -206,16 +209,16 @@ export function ReopenBusinessDayDialog({
         {step === "passcode" && (
           <form onSubmit={onSubmitPasscode} className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              You don&rsquo;t have two-factor authentication enabled -- enter your workspace&rsquo;s security passcode to confirm.
+              {t("passcodeHelper")}
             </p>
             <div className="space-y-2">
-              <Label htmlFor="reopen-passcode">Security passcode</Label>
+              <Label htmlFor="reopen-passcode">{t("securityPasscode")}</Label>
               <Input id="reopen-passcode" type="password" value={passcode} onChange={(e) => setPasscode(e.target.value)} autoFocus required />
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
             <DialogFooter>
               <Button type="submit" disabled={isPending}>
-                {isPending ? "Reopening..." : "Verify & Reopen"}
+                {isPending ? t("reopening") : t("verifyAndReopen")}
               </Button>
             </DialogFooter>
           </form>

@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+
 import { Badge } from "@/components/ui/badge";
 import { usePermission } from "@/hooks/tenant-context";
 
@@ -11,10 +13,11 @@ import { usePermission } from "@/hooks/tenant-context";
  */
 export function SalesVisibilityBadge() {
   const canViewAll = usePermission("sales.view_all");
+  const t = useTranslations("Sales");
 
   return (
     <Badge variant={canViewAll ? "default" : "secondary"}>
-      {canViewAll ? "Business-wide sales visibility" : "Own sales only"}
+      {canViewAll ? t("businessWideVisibility") : t("ownSalesOnly")}
     </Badge>
   );
 }

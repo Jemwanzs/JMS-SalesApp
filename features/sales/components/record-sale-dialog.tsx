@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { useTranslations } from "next-intl";
 
 import { recordSaleAction, type RecordSaleState } from "@/features/sales/actions/record-sale";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,8 @@ export function RecordSaleDialog({
   onRecorded: (sale: NonNullable<RecordSaleState["sale"]>) => void;
 }) {
   const [isPending, startTransition] = useTransition();
+  const t = useTranslations("Sales");
+  const tCommon = useTranslations("Common");
   const [amount, setAmount] = useState("");
   const [quantity, setQuantity] = useState("1");
   const [notes, setNotes] = useState("");
@@ -61,7 +64,7 @@ export function RecordSaleDialog({
     e.preventDefault();
     if (!product) return;
     if (product.isSystem && !manualProductName.trim()) {
-      setError("Enter a product name for this sale.");
+      setError(t("enterProductNameError"));
       return;
     }
     setError(null);
@@ -96,7 +99,7 @@ export function RecordSaleDialog({
       }
 
       if (result.fieldErrors) {
-        setError(Object.values(result.fieldErrors)[0] ?? "Please check your entries");
+        setError(Object.values(result.fieldErrors)[0] ?? tCommon("checkEntries"));
         return;
       }
 
@@ -115,7 +118,7 @@ export function RecordSaleDialog({
               <DialogTitle>{product.name}</DialogTitle>
               {product.expectedPrice !== null && product.showExpectedPrice && (
                 <DialogDescription>
-                  Expected price: {product.expectedPrice.toFixed(2)}
+                  {t("expectedPrice", { price: product.expectedPrice.toFixed(2) })}
                 </DialogDescription>
               )}
             </DialogHeader>
@@ -123,12 +126,12 @@ export function RecordSaleDialog({
             <form onSubmit={onSubmit} className="space-y-4">
               {product.isSystem && (
                 <div className="space-y-2">
-                  <Label htmlFor="manualProductName">Enter Product Name</Label>
+                  <Label htmlFor="manualProductName">{t("enterProductName")}</Label>
                   <Input
                     id="manualProductName"
                     value={manualProductName}
                     onChange={(e) => setManualProductName(e.target.value)}
-                    placeholder="What did the customer buy?"
+                    placeholder={t("whatDidCustomerBuy")}
                     autoFocus
                     required
                   />
@@ -136,7 +139,7 @@ export function RecordSaleDialog({
               )}
 
               <div className="space-y-2">
-                <Label htmlFor="amount">Amount sold</Label>
+                <Label htmlFor="amount">{t("amountSold")}</Label>
                 <Input
                   id="amount"
                   type="number"
@@ -151,7 +154,7 @@ export function RecordSaleDialog({
 
               {quantityEnabled && (
                 <div className="space-y-2">
-                  <Label htmlFor="quantity">Quantity</Label>
+                  <Label htmlFor="quantity">{t("quantity")}</Label>
                   <Input
                     id="quantity"
                     type="number"
@@ -164,7 +167,7 @@ export function RecordSaleDialog({
               )}
 
               <div className="space-y-2">
-                <Label htmlFor="notes">Notes (optional)</Label>
+                <Label htmlFor="notes">{t("notesOptional")}</Label>
                 <Input
                   id="notes"
                   value={notes}
@@ -180,7 +183,7 @@ export function RecordSaleDialog({
                   disabled={isPending || (product.isSystem && !manualProductName.trim())}
                   className="w-full"
                 >
-                  {isPending ? "Recording..." : "Record Sale"}
+                  {isPending ? t("recording") : t("recordSale")}
                 </Button>
               </DialogFooter>
             </form>
