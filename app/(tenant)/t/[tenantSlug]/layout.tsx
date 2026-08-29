@@ -186,7 +186,20 @@ export default async function TenantLayout({
           data-font={preferredFont}
           data-palette={colorPalette}
           dir={isRtl ? "rtl" : "ltr"}
-          className="relative flex w-full max-w-[430px] flex-col contain-layout bg-background"
+          // font-sans here is load-bearing, not decorative: app/globals.css's
+          // html { @apply font-sans; } is the ONLY other font-family
+          // declaration in the app, and CSS inheritance carries an
+          // already-COMPUTED font-family value down the tree, not a live
+          // var() reference -- so without re-declaring font-family HERE,
+          // every descendant that doesn't itself apply .font-sans/.font-heading
+          // (i.e. almost everything except a few Dialog/Sheet/Card titles)
+          // would keep inheriting <html>'s permanently-Outfit value
+          // regardless of data-font above. This one declaration re-resolves
+          // --font-sans fresh within this [data-font]-scoped subtree, and
+          // normal inheritance then correctly carries the chosen font to
+          // every descendant -- headings, tables, forms, buttons, modals
+          // (portaled into #app-shell, see the comment below), everything.
+          className="relative flex w-full max-w-[430px] flex-col contain-layout bg-background font-sans"
         >
           {/* My Preferences (Language): NextIntlClientProvider wraps
               children here, not app/layout.tsx's <html> -- same reasoning

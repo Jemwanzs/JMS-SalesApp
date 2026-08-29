@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react"
 import { useTheme } from "next-themes"
 import { Toaster as Sonner, type ToasterProps } from "sonner"
 import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
@@ -18,14 +19,58 @@ import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon
  * wide desktop viewport anyway, since Sonner centers itself on the same
  * page-center axis the shell's own `justify-center` wrapper already
  * uses, and a toast's own width never approaches the shell's.
+ *
+ * My Preferences (Font/Language): because Sonner always portals to
+ * document.body (see above -- it has no container prop), a toast is
+ * NEVER a DOM descendant of #app-shell/#platform-admin-shell, so it
+ * can't pick up data-font/dir via ordinary CSS scoping/inheritance the
+ * way everything else in the app now does (see those shells' own
+ * font-sans comments). This reads the shell's own already-resolved
+ * data-font/dir straight off the DOM instead -- no new fetch, no extra
+ * per-user state to keep in sync, just mirroring what the server
+ * already decided. A MutationObserver (not a one-time read) keeps this
+ * live across an optimistic font-preference change (FontPreferenceCard
+ * flips #app-shell's attribute immediately, before the server action
+ * confirms) and across a language change's router.refresh().
  */
+const KNOWN_FONT_VARS = new Set(["outfit", "inter", "roboto", "poppins", "lato"])
+
+function useShellFontAndDir(): { fontFamily: string; dir: "ltr" | "rtl" } {
+  const [state, setState] = React.useState<{ fontFamily: string; dir: "ltr" | "rtl" }>({
+    fontFamily: "var(--font-outfit)",
+    dir: "ltr",
+  })
+
+  React.useEffect(() => {
+    const shell = document.getElementById("app-shell") ?? document.getElementById("platform-admin-shell")
+    if (!shell) return
+
+    function sync() {
+      const font = shell!.getAttribute("data-font") ?? "outfit";
+      setState({
+        fontFamily: `var(--font-${KNOWN_FONT_VARS.has(font) ? font : "outfit"})`,
+        dir: shell!.getAttribute("dir") === "rtl" ? "rtl" : "ltr",
+      });
+    }
+
+    sync();
+    const observer = new MutationObserver(sync);
+    observer.observe(shell, { attributes: true, attributeFilter: ["data-font", "dir"] });
+    return () => observer.disconnect();
+  }, []);
+
+  return state;
+}
+
 const Toaster = ({ ...props }: ToasterProps) => {
   const { theme = "system" } = useTheme()
+  const { fontFamily, dir } = useShellFontAndDir()
 
   return (
     <Sonner
       theme={theme as ToasterProps["theme"]}
       position="top-center"
+      dir={dir}
       className="toaster group"
       icons={{
         success: (
@@ -50,6 +95,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
           "--normal-text": "var(--popover-foreground)",
           "--normal-border": "var(--border)",
           "--border-radius": "var(--radius)",
+          fontFamily,
         } as React.CSSProperties
       }
       toastOptions={{

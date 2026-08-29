@@ -72,7 +72,10 @@ export default async function PlatformAdminLayout({
         data-font={preferredFont}
         data-palette={colorPalette}
         dir={isRtl ? "rtl" : "ltr"}
-        className="relative flex w-full max-w-[430px] flex-col contain-layout bg-[#0B1220] text-[#F2F1EC]"
+        // font-sans re-declaration is load-bearing here too -- see the
+        // matching comment on app/(tenant)/t/[tenantSlug]/layout.tsx's
+        // own #app-shell div for the full explanation.
+        className="relative flex w-full max-w-[430px] flex-col contain-layout bg-[#0B1220] text-[#F2F1EC] font-sans"
       >
         <NextIntlClientProvider locale={locale} messages={messages}>
           <header className="border-b border-white/10 px-4 py-4">
