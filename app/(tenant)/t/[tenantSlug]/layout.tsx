@@ -6,6 +6,7 @@ import { ImpersonationBanner } from "@/components/shared/impersonation-banner";
 import { Logo } from "@/components/shared/logo";
 import { SubscriptionBanner } from "@/components/shared/subscription-banner";
 import { TenantProvider } from "@/hooks/tenant-context";
+import { resolvePreferredFont } from "@/lib/branding/preferred-font";
 import { getInventoryEntitlement } from "@/lib/inventory/entitlement";
 import { getMyPermissions } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
@@ -132,11 +133,16 @@ export default async function TenantLayout({
   // lapsed subscription restricts everyone, not just the owner), same
   // "cross-cutting, needed-for-everyone" reasoning as the impersonation
   // check above.
-  const [permissions, activeWish, subscription, inventoryEntitlement] = await Promise.all([
+  // User & Tenant Branding Personalization: resolved here (not on <html>
+  // in app/layout.tsx -- see that file's own header comment) since this
+  // is the first per-request-dynamic layout a signed-in user's requests
+  // actually reach.
+  const [permissions, activeWish, subscription, inventoryEntitlement, preferredFont] = await Promise.all([
     getMyPermissions(tenant.id),
     new AnniversaryService(supabase).getActiveWish(tenant.id).catch(() => null),
     new BillingService(createServiceRoleClient()).getSubscription(tenant.id).catch(() => null),
     getInventoryEntitlement(tenant.id).catch(() => ({ enabled: false, status: null })),
+    resolvePreferredFont(supabase, user.id),
   ]);
 
   return (
@@ -161,14 +167,34 @@ export default async function TenantLayout({
             bottom sheet or centered dialog stays within the mobile
             column on desktop instead of spanning/centering on the full
             browser window. */}
-        <div id="app-shell" className="relative flex w-full max-w-[430px] flex-col contain-layout bg-background">
+        <div
+          id="app-shell"
+          data-font={preferredFont}
+          className="relative flex w-full max-w-[430px] flex-col contain-layout bg-background"
+        >
           <Suspense fallback={null}>
             <AdminBypassToast />
           </Suspense>
           {impersonation && <ImpersonationBanner tenantId={tenant.id} impersonation={impersonation} />}
           <SubscriptionBanner tenantId={tenant.id} tenantSlug={tenant.slug} subscription={subscription} />
-          <div className="border-b px-6 py-4">
+          <div className="flex items-center justify-between border-b px-6 py-4">
             <Logo />
+            {/* User & Tenant Branding Personalization: icon only, no
+                business name next to it, per the explicit requirement --
+                stays completely absent (not an empty placeholder) when
+                the tenant hasn't uploaded one, exactly as this area
+                looked before this feature existed. Plain <img>, not
+                next/image -- the upload accepts SVG (features/workspace/
+                components/logo-upload.tsx), and next/image's optimizer
+                refuses SVGs without extra dangerouslyAllowSVG config; a
+                small fixed-size header icon gets no real benefit from
+                Next's responsive-image machinery anyway. object-contain
+                (never object-cover) so a logo's own aspect ratio is
+                always preserved, never stretched or cropped. */}
+            {tenant.logo_url && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={tenant.logo_url} alt="" className="h-8 max-w-[120px] object-contain" />
+            )}
           </div>
           {activeWish && (
             <div className="border-b bg-amber-50 px-6 py-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200">

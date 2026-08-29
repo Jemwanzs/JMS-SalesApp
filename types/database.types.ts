@@ -100,6 +100,7 @@ export interface Database {
           email: string;
           phone: string | null;
           default_locale: string;
+          preferred_font: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -120,6 +121,7 @@ export interface Database {
           default_locale: string;
           currency: string;
           logo_url: string | null;
+          logo_storage_path: string | null;
           business_type: string | null;
           website: string | null;
           country: string | null;

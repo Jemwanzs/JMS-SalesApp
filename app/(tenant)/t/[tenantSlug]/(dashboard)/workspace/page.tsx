@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { BackLink } from "@/components/shared/back-link";
 import { redirect } from "next/navigation";
 
+import { BrandingForm } from "@/features/workspace/components/branding-form";
 import { BusinessHoursForm } from "@/features/workspace/components/business-hours-form";
 import { BusinessProfileForm } from "@/features/workspace/components/business-profile-form";
 import { TenantService } from "@/services/TenantService";
@@ -72,6 +73,12 @@ export default async function WorkspacePage({
       <p className="-mt-2 text-sm text-muted-foreground">
         The business details set up when this workspace was created.
       </p>
+
+      <BrandingForm
+        tenantId={tenantId}
+        tenantSlug={tenantSlug}
+        initial={tenant!.logo_url && tenant!.logo_storage_path ? { url: tenant!.logo_url, storagePath: tenant!.logo_storage_path } : null}
+      />
 
       <BusinessProfileForm
         tenantId={tenantId}

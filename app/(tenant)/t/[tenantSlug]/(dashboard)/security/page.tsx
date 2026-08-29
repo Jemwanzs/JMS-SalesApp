@@ -3,6 +3,7 @@ import { BackLink } from "@/components/shared/back-link";
 import { cookies } from "next/headers";
 
 import { DownloadSecurityCard } from "@/features/security/components/download-security-card";
+import { FontPreferenceCard } from "@/features/security/components/font-preference-card";
 import { GeofenceRestrictionCard } from "@/features/security/components/geofence-restriction-card";
 import { LoginEventList } from "@/features/security/components/login-event-list";
 import { MfaEnrollment } from "@/features/security/components/mfa-enrollment";
@@ -11,6 +12,7 @@ import { TenantSessionList } from "@/features/security/components/tenant-session
 import { WorkingHoursRestrictionToggle } from "@/features/security/components/working-hours-restriction-toggle";
 import { SecurityService } from "@/services/SecurityService";
 import { TenantService } from "@/services/TenantService";
+import { resolvePreferredFont } from "@/lib/branding/preferred-font";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
@@ -68,6 +70,7 @@ export default async function SecurityPage({
     geofence,
     requireDownloadPasscode,
     hashedDownloadPasscode,
+    preferredFont,
   ] = await Promise.all([
     securityService.listSessions(user!.id),
     securityService.listLoginEvents(user!.id),
@@ -86,12 +89,14 @@ export default async function SecurityPage({
     canManageSettings
       ? tenantService.getSetting<string>(tenantId, "hashed_download_passcode")
       : Promise.resolve(null),
+    resolvePreferredFont(supabase, user!.id),
   ]);
 
   return (
     <div className="flex flex-1 flex-col gap-4 p-6">
       <BackLink href={`/t/${tenantSlug}/more`} label="More" />
       <h1 className="text-xl font-semibold">Security</h1>
+      <FontPreferenceCard tenantSlug={tenantSlug} initialFont={preferredFont} />
       <MfaEnrollment />
       {canManageSettings && (
         <WorkingHoursRestrictionToggle

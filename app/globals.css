@@ -49,6 +49,16 @@
 }
 
 :root {
+  /* User & Tenant Branding Personalization: Outfit is the base/default
+     --font-sans value app-wide. app/(tenant)/t/[tenantSlug]/layout.tsx
+     and the platform-admin layout each set a [data-font="..."] attribute
+     on their own app-shell wrapper (never on <html> -- see
+     app/layout.tsx's own header comment for why) when a signed-in user
+     has picked something else; the four rules right after this block
+     redefine --font-sans locally within that subtree only, via
+     Tailwind's @theme inline passthrough above. */
+  --font-sans: var(--font-outfit);
+
   /* Warm cream page background (docs/07-ui-ux-screen-map.md's mobile
      shell sits on this everywhere) with white card/popover surfaces
      lifted on top of it. Everything else stays neutral for now --
@@ -85,6 +95,23 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+}
+
+/* User & Tenant Branding Personalization -- per-user font preference.
+   "outfit" needs no rule of its own; it's already the :root default
+   above. Each applies only within whichever element actually carries
+   the data-font attribute (and its descendants), never globally. */
+[data-font="inter"] {
+  --font-sans: var(--font-inter);
+}
+[data-font="roboto"] {
+  --font-sans: var(--font-roboto);
+}
+[data-font="poppins"] {
+  --font-sans: var(--font-poppins);
+}
+[data-font="lato"] {
+  --font-sans: var(--font-lato);
 }
 
 .dark {

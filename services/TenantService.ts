@@ -202,6 +202,55 @@ export class TenantService {
   }
 
   /**
+   * User & Tenant Branding Personalization: sets (or replaces) a
+   * tenant's logo. Mirrors ProductService.setImage/removeImage's shape
+   * (delete the previous Storage object first, so a replace never
+   * orphans it) but without a product_images-style side table -- a
+   * tenant has exactly one current logo, never a gallery/history, so
+   * the two columns directly on `tenants` are the right-sized version
+   * of that pattern, not an under-build.
+   */
+  async setLogo(tenantId: string, storagePath: string, publicUrl: string): Promise<void> {
+    await this.deletePreviousLogo(tenantId);
+
+    const { error } = await this.supabase
+      .from("tenants")
+      .update({ logo_url: publicUrl, logo_storage_path: storagePath })
+      .eq("id", tenantId);
+
+    if (error) {
+      throw new Error(`TenantService.setLogo: ${error.message}`);
+    }
+  }
+
+  async removeLogo(tenantId: string): Promise<void> {
+    await this.deletePreviousLogo(tenantId);
+
+    const { error } = await this.supabase
+      .from("tenants")
+      .update({ logo_url: null, logo_storage_path: null })
+      .eq("id", tenantId);
+
+    if (error) {
+      throw new Error(`TenantService.removeLogo: ${error.message}`);
+    }
+  }
+
+  private async deletePreviousLogo(tenantId: string): Promise<void> {
+    const { data: existing } = await this.supabase.from("tenants").select("logo_storage_path").eq("id", tenantId).maybeSingle();
+
+    if (!existing?.logo_storage_path) {
+      return;
+    }
+
+    const { error } = await this.supabase.storage.from("tenant-branding").remove([existing.logo_storage_path]);
+
+    if (error) {
+      throw new Error(`TenantService.deletePreviousLogo: ${error.message}`);
+    }
+  }
+
+  /**
    * The primary location's own identifying fields -- separate from
    * getPrimaryLocationGeofence (different concern, Security page vs
    * Workspace page) even though both re-resolve "the tenant's first
