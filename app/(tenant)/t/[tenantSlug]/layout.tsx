@@ -6,6 +6,7 @@ import { ImpersonationBanner } from "@/components/shared/impersonation-banner";
 import { Logo } from "@/components/shared/logo";
 import { SubscriptionBanner } from "@/components/shared/subscription-banner";
 import { TenantProvider } from "@/hooks/tenant-context";
+import { resolveColorPalette } from "@/lib/branding/color-palette";
 import { resolvePreferredFont } from "@/lib/branding/preferred-font";
 import { getInventoryEntitlement } from "@/lib/inventory/entitlement";
 import { getMyPermissions } from "@/lib/permissions/can";
@@ -137,12 +138,13 @@ export default async function TenantLayout({
   // in app/layout.tsx -- see that file's own header comment) since this
   // is the first per-request-dynamic layout a signed-in user's requests
   // actually reach.
-  const [permissions, activeWish, subscription, inventoryEntitlement, preferredFont] = await Promise.all([
+  const [permissions, activeWish, subscription, inventoryEntitlement, preferredFont, colorPalette] = await Promise.all([
     getMyPermissions(tenant.id),
     new AnniversaryService(supabase).getActiveWish(tenant.id).catch(() => null),
     new BillingService(createServiceRoleClient()).getSubscription(tenant.id).catch(() => null),
     getInventoryEntitlement(tenant.id).catch(() => ({ enabled: false, status: null })),
     resolvePreferredFont(supabase, user.id),
+    resolveColorPalette(supabase, user.id),
   ]);
 
   return (
@@ -170,6 +172,7 @@ export default async function TenantLayout({
         <div
           id="app-shell"
           data-font={preferredFont}
+          data-palette={colorPalette}
           className="relative flex w-full max-w-[430px] flex-col contain-layout bg-background"
         >
           <Suspense fallback={null}>

@@ -9,6 +9,7 @@ import {
   Package,
   Settings,
   ShieldCheck,
+  Sliders,
   Store,
   Upload,
   UserCog,
@@ -52,6 +53,7 @@ import { getTenantBySlug } from "@/lib/tenant/resolve-tenant-by-slug";
  */
 const EVERYDAY_ITEMS: { label: string; icon: LucideIcon; href?: string; absoluteHref?: string }[] = [
   { label: "Products", icon: Package, href: "products" },
+  { label: "My Preferences", icon: Sliders, href: "preferences" },
   { label: "Security", icon: Lock, href: "security" },
   { label: "Help & Support", icon: HelpCircle, absoluteHref: "/support" },
 ];

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { PlatformAdminBottomNav } from "@/features/platform-admin/components/platform-admin-bottom-nav";
 import { PlatformAdminService } from "@/services/PlatformAdminService";
+import { resolveColorPalette } from "@/lib/branding/color-palette";
 import { resolvePreferredFont } from "@/lib/branding/preferred-font";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
@@ -49,14 +50,21 @@ export default async function PlatformAdminLayout({
   // User & Tenant Branding Personalization: same per-user font
   // preference the tenant shell applies (lib/branding/preferred-font.ts),
   // set on this shell's own wrapper rather than <html> -- see
-  // app/layout.tsx's own header comment for why.
-  const preferredFont = await resolvePreferredFont(supabase, user.id);
+  // app/layout.tsx's own header comment for why. My Preferences: same
+  // for the accent-color palette -- no picker UI lives in this console,
+  // a platform admin who's also a real tenant member sets it from their
+  // own tenant's My Preferences page and it follows them in here too.
+  const [preferredFont, colorPalette] = await Promise.all([
+    resolvePreferredFont(supabase, user.id),
+    resolveColorPalette(supabase, user.id),
+  ]);
 
   return (
     <div className="flex min-h-screen w-full justify-center bg-[#05070D]">
       <div
         id="platform-admin-shell"
         data-font={preferredFont}
+        data-palette={colorPalette}
         className="relative flex w-full max-w-[430px] flex-col contain-layout bg-[#0B1220] text-[#F2F1EC]"
       >
         <header className="border-b border-white/10 px-4 py-4">

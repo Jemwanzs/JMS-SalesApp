@@ -114,6 +114,45 @@
   --font-sans: var(--font-lato);
 }
 
+/* My Preferences (Theme & Colors) -- per-user accent-color palette, same
+   [data-attribute]-scoped-to-#app-shell mechanism as [data-font="..."]
+   above. "default" needs no rule of its own (already :root's values).
+   Deliberately only overrides accent/interactive tokens, never
+   --background/--card/--muted/--border, so contrast stays guaranteed
+   regardless of preset -- see lib/branding/color-palette.ts. */
+[data-palette="ocean"] {
+  --primary: #0e7490;
+  --primary-foreground: oklch(0.985 0 0);
+  --ring: #0e7490;
+  --sidebar-primary: #0e7490;
+  --sidebar-ring: #0e7490;
+  --chart-1: #0e7490;
+}
+[data-palette="forest"] {
+  --primary: #15803d;
+  --primary-foreground: oklch(0.985 0 0);
+  --ring: #15803d;
+  --sidebar-primary: #15803d;
+  --sidebar-ring: #15803d;
+  --chart-1: #15803d;
+}
+[data-palette="sunset"] {
+  --primary: #c2410c;
+  --primary-foreground: oklch(0.985 0 0);
+  --ring: #c2410c;
+  --sidebar-primary: #c2410c;
+  --sidebar-ring: #c2410c;
+  --chart-1: #c2410c;
+}
+[data-palette="slate"] {
+  --primary: #475569;
+  --primary-foreground: oklch(0.985 0 0);
+  --ring: #475569;
+  --sidebar-primary: #475569;
+  --sidebar-ring: #475569;
+  --chart-1: #475569;
+}
+
 .dark {
   /* Warm dark counterpart -- a warm near-black rather than a neutral
      charcoal, so the "warm" character holds in dark mode too. */
