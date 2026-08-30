@@ -30,12 +30,12 @@ export async function setColorPaletteAction(tenantSlug: string, palette: KnownPa
     return { error: "Not signed in" };
   }
 
-  // "default" is stored as null, same "unset = default" convention
+  // "green" is stored as null, same "unset = default" convention
   // resolveColorPalette already treats identically -- no reason to
-  // persist the literal string "default" when null already means it.
+  // persist the literal string "green" when null already means it.
   const { error } = await supabase
     .from("profiles")
-    .update({ color_palette: palette === "default" ? null : palette })
+    .update({ color_palette: palette === "green" ? null : palette })
     .eq("id", user.id);
 
   if (error) {

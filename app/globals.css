@@ -120,6 +120,14 @@
    Deliberately only overrides accent/interactive tokens, never
    --background/--card/--muted/--border, so contrast stays guaranteed
    regardless of preset -- see lib/branding/color-palette.ts. */
+[data-palette="green"] {
+  --primary: #16a34a;
+  --primary-foreground: oklch(0.985 0 0);
+  --ring: #16a34a;
+  --sidebar-primary: #16a34a;
+  --sidebar-ring: #16a34a;
+  --chart-1: #16a34a;
+}
 [data-palette="ocean"] {
   --primary: #0e7490;
   --primary-foreground: oklch(0.985 0 0);

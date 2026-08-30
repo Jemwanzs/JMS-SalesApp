@@ -36,7 +36,7 @@ export function ThemePreferenceCard({ tenantSlug, initialPalette }: { tenantSlug
         toast.error(result.error);
         return;
       }
-      toast.success(palette === "default" ? "Theme reset to default" : "Theme updated");
+      toast.success(palette === "green" ? "Theme reset to default" : "Theme updated");
     });
   }
 
@@ -44,7 +44,7 @@ export function ThemePreferenceCard({ tenantSlug, initialPalette }: { tenantSlug
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>Theme &amp; Colors</CardTitle>
-        <Button type="button" variant="outline" size="sm" disabled={isPending || selected === "default"} onClick={() => choose("default")}>
+        <Button type="button" variant="outline" size="sm" disabled={isPending || selected === "green"} onClick={() => choose("green")}>
           Default Color
         </Button>
       </CardHeader>
