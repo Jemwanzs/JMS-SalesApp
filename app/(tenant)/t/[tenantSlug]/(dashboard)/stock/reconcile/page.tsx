@@ -34,7 +34,7 @@ export default async function StockReconcilePage({ params }: { params: Promise<{
   }
 
   try {
-    await assertInventoryEnabled(tenantId);
+    await assertInventoryEnabled(tenantId, "write");
   } catch {
     redirect(`/t/${tenantSlug}/more`);
   }

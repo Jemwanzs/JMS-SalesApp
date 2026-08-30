@@ -54,7 +54,6 @@ export interface RequestTemporaryAccessResult {
 }
 
 export interface BillingSweepResult {
-  paymentDue: number;
   gracePeriod: number;
   suspended: number;
   ranAt: string;

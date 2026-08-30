@@ -42,7 +42,7 @@ export async function recordMovementAction(
   }
 
   try {
-    await assertInventoryEnabled(tenantId);
+    await assertInventoryEnabled(tenantId, "write");
     await assertCan("stock.movement.record", { tenantId });
 
     const supabase = await createClient();

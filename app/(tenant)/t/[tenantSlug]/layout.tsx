@@ -133,10 +133,11 @@ export default async function TenantLayout({
 
   // Service-role, not the RLS-respecting client -- subscriptions_select
   // RLS only grants the billing owner or a settings.manage holder read
-  // access, but the trial/renewal banner is meant for every member (a
-  // lapsed subscription restricts everyone, not just the owner), same
-  // "cross-cutting, needed-for-everyone" reasoning as the impersonation
-  // check above.
+  // access. Fetched for every member here (cheap, request-scoped), but
+  // Product Enhancements (Subscription Due) now restricts who actually
+  // SEES the resulting banner to Tenant Admins/the billing owner only
+  // (isBillingAdmin, below) -- invited employees must never see
+  // subscription/billing alerts at all, not even a softened version.
   // User & Tenant Branding Personalization: resolved here (not on <html>
   // in app/layout.tsx -- see that file's own header comment) since this
   // is the first per-request-dynamic layout a signed-in user's requests
@@ -158,6 +159,15 @@ export default async function TenantLayout({
     getMessages(),
   ]);
   const isRtl = RTL_LOCALES.has(locale as SupportedLocale);
+
+  // Product Enhancements (Subscription Due / Overdue Read-Only Mode):
+  // "Invited employees and ordinary users should never see subscription,
+  // renewal, payment, or billing alerts" -- same admin check /billing's
+  // own page gate already uses (tenant.billing_owner_profile_id ===
+  // user.id || settings.manage), reusing the permissions array already
+  // resolved above instead of a second can() query.
+  const isBillingAdmin =
+    tenant.billing_owner_profile_id === user.id || permissions.some((p) => p.permissionKey === "settings.manage");
 
   return (
     <TenantProvider
@@ -215,7 +225,11 @@ export default async function TenantLayout({
               <AdminBypassToast />
             </Suspense>
             {impersonation && <ImpersonationBanner tenantId={tenant.id} impersonation={impersonation} />}
-            <SubscriptionBanner tenantId={tenant.id} tenantSlug={tenant.slug} subscription={subscription} />
+            <SubscriptionBanner
+              tenantId={tenant.id}
+              tenantSlug={tenant.slug}
+              subscription={isBillingAdmin ? subscription : null}
+            />
             <div className="flex items-center justify-between border-b px-6 py-4">
               <Logo />
               {/* User & Tenant Branding Personalization: icon only, no

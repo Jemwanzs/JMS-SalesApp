@@ -9,8 +9,14 @@ import type { SubscriptionView } from "@/services/BillingService";
 /**
  * Trial/renewal alert banner (Product Enhancements #2) -- a compact,
  * non-intrusive strip surfacing the same subscription state
- * BillingStatusCard already shows on the dedicated /billing page, but
- * visible everywhere so a tenant doesn't have to go looking for it.
+ * BillingStatusCard already shows on the dedicated /billing page.
+ *
+ * Product Enhancements (Subscription Due / Overdue Read-Only Mode):
+ * `subscription` is only ever passed non-null for a Tenant Admin/the
+ * billing owner (see the tenant layout's own isBillingAdmin check) --
+ * an invited employee always renders `subscription: null` here, and
+ * `if (!message) return null` below already handles that with zero
+ * further changes needed in this component.
  *
  * Dismissible until the next calendar day (localStorage, keyed per
  * tenant+day so it reappears tomorrow with an updated day-count) --
@@ -34,6 +40,7 @@ export function SubscriptionBanner({
 
   const message = subscription ? getMessage(subscription) : null;
   const isSuspended = subscription?.status === "SUSPENDED";
+  const isOverdue = subscription?.status === "PAYMENT_DUE" || subscription?.status === "GRACE_PERIOD" || isSuspended;
   const storageKey = message
     ? `subscription-banner-dismissed-${tenantId}-${new Date().toISOString().slice(0, 10)}`
     : null;
@@ -68,7 +75,7 @@ export function SubscriptionBanner({
         href={`/t/${tenantSlug}/billing`}
         className="shrink-0 rounded-md bg-amber-500/20 px-2 py-1 font-medium hover:bg-amber-500/30"
       >
-        {isSuspended ? "Renew now" : "Manage subscription"}
+        {isOverdue ? "Renew Subscription" : "Manage subscription"}
       </a>
       {!isSuspended && (
         <button
@@ -100,11 +107,11 @@ function getMessage(subscription: SubscriptionView): string | null {
   }
 
   if (subscription.status === "PAYMENT_DUE" || subscription.status === "GRACE_PERIOD") {
-    return "Your subscription is overdue.";
+    return "Subscription Payment Due — your subscription is due. You have a 3-hour grace period to renew and continue using all application features.";
   }
 
   if (subscription.status === "SUSPENDED") {
-    return "Your subscription has expired. Renew now to restore full access.";
+    return "Subscription Overdue — Read-Only Mode. Your 3-hour grace period has expired. Your data remains safely accessible, but changes and new transactions have been temporarily disabled. Renew your subscription to restore full access.";
   }
 
   return null;

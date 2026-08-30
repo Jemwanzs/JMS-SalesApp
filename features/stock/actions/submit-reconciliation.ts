@@ -38,7 +38,7 @@ export async function submitReconciliationAction(
   }
 
   try {
-    await assertInventoryEnabled(tenantId);
+    await assertInventoryEnabled(tenantId, "write");
 
     const supabase = await createClient();
     const {

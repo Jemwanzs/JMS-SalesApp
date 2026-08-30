@@ -13,6 +13,15 @@ import type { SubscriptionStatus } from "@/types/database.types";
  * out at SUSPENDED, not PAYMENT_DUE/GRACE_PERIOD), so a lapsed-but-not-
  * yet-suspended add-on still shows the module.
  *
+ * Product Enhancements (Overdue Read-Only Mode): SUSPENDED is entitled
+ * for `"read"` but not `"write"` -- a suspended tenant can still see
+ * everything they already have (stock balances, movement history,
+ * reports), matching has_permission()'s own is_read_only carve-out for
+ * every other module, but can't record a new movement or reconcile.
+ * Previously SUSPENDED was excluded from BOTH, which cut off read
+ * access to Stock entirely once suspended -- a real gap relative to
+ * "the tenant can see everything they already have."
+ *
  * `tenant_addon_subscriptions_select` RLS only grants the billing owner
  * or a settings.manage holder read access (same as the base
  * subscriptions table) -- an ordinary Sales User has neither, so this
@@ -27,9 +36,13 @@ import type { SubscriptionStatus } from "@/types/database.types";
  * from Phase 6 on calls assertInventoryEnabled() itself as the real
  * server-side guard, on top of the nav already hiding the entry point.
  */
-const ENTITLED_STATUSES: SubscriptionStatus[] = ["TRIAL", "ACTIVE", "PAYMENT_DUE", "GRACE_PERIOD"];
+const ENTITLED_STATUSES_READ: SubscriptionStatus[] = ["TRIAL", "ACTIVE", "PAYMENT_DUE", "GRACE_PERIOD", "SUSPENDED"];
+const ENTITLED_STATUSES_WRITE: SubscriptionStatus[] = ["TRIAL", "ACTIVE", "PAYMENT_DUE", "GRACE_PERIOD"];
 
-export async function getInventoryEntitlement(tenantId: string): Promise<{ enabled: boolean; status: SubscriptionStatus | null }> {
+export async function getInventoryEntitlement(
+  tenantId: string,
+  intent: "read" | "write" = "read"
+): Promise<{ enabled: boolean; status: SubscriptionStatus | null }> {
   const supabase = await createClient();
 
   const [settingEnabled, addon] = await Promise.all([
@@ -38,13 +51,14 @@ export async function getInventoryEntitlement(tenantId: string): Promise<{ enabl
   ]);
 
   const status = addon?.status ?? null;
-  const entitled = status !== null && ENTITLED_STATUSES.includes(status);
+  const entitledStatuses = intent === "write" ? ENTITLED_STATUSES_WRITE : ENTITLED_STATUSES_READ;
+  const entitled = status !== null && entitledStatuses.includes(status);
 
   return { enabled: Boolean(settingEnabled) && entitled, status };
 }
 
-export async function assertInventoryEnabled(tenantId: string): Promise<void> {
-  const { enabled } = await getInventoryEntitlement(tenantId);
+export async function assertInventoryEnabled(tenantId: string, intent: "read" | "write" = "read"): Promise<void> {
+  const { enabled } = await getInventoryEntitlement(tenantId, intent);
   if (!enabled) {
     throw new Error("Inventory module is not enabled for this tenant");
   }

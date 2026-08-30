@@ -32,7 +32,7 @@ export default async function ReconcileProductPage({
   }
 
   try {
-    await assertInventoryEnabled(tenantId);
+    await assertInventoryEnabled(tenantId, "write");
   } catch {
     redirect(`/t/${tenantSlug}/more`);
   }
