@@ -22,23 +22,30 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex min-h-screen flex-col bg-background">
       <header className="border-b">
-        <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
+        <div className="mx-auto flex max-w-3xl items-center px-6 py-4">
           <Link href="/">
             <Logo />
           </Link>
-          <nav className="flex gap-4 text-sm text-muted-foreground">
-            {LEGAL_LINKS.map((link) => (
-              <Link key={link.href} href={link.href} className="hover:text-foreground">
-                {link.label}
-              </Link>
-            ))}
-          </nav>
         </div>
       </header>
 
       <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-10">{children}</main>
 
       <footer className="border-t px-6 py-6 text-center text-xs text-muted-foreground">
+        {/* Moved down from the header (Help & Support redesign): a
+            three-word-link row next to the logo didn't fit a narrow
+            mobile viewport without wrapping and overlapping the logo,
+            and had become redundant with /support's own nav cards to
+            these same three destinations anyway. The footer is the
+            conventional place for this on a public content page, and a
+            single centered line has no width pressure to compete with. */}
+        <nav className="mb-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
+          {LEGAL_LINKS.map((link) => (
+            <Link key={link.href} href={link.href} className="hover:text-foreground">
+              {link.label}
+            </Link>
+          ))}
+        </nav>
         © {new Date().getFullYear()} SyncScore Ltd. JMS Sales App.
       </footer>
     </div>

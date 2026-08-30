@@ -4,13 +4,20 @@ import type { LucideIcon } from "lucide-react";
 
 /**
  * Help & Support redesign: a modern mobile-menu-style card (icon
- * circle, title, short description, chevron, comfortable tap target)
- * replacing the plain text links the marketing header's own nav already
- * offers for the same three destinations -- this is the in-content,
- * app-like version, not a duplicate of that header nav (which stays,
- * per "the application's normal navigation bar should remain
- * available"). Plain <a> (not next/link) when `href` starts with "#" --
- * an in-page anchor scroll, not a route change.
+ * circle, title, short description, chevron, comfortable tap target).
+ * Plain <a> (not next/link) when `href` starts with "#" -- an in-page
+ * anchor scroll, not a route change.
+ *
+ * `min-w-0` on the card itself (not just the inner flex-1 text
+ * wrapper) is load-bearing: the description's `truncate` sets
+ * `white-space: nowrap`, which gives that text a min-content width
+ * equal to its full, un-wrapped line -- and a CSS grid item's default
+ * `min-width: auto` lets that force the whole card (and the grid track
+ * it sits in) wider than the viewport, with the overflow silently
+ * clipped past the screen edge rather than actually truncating.
+ * min-w-0 overrides that default so the card instead respects its
+ * grid track's own width and the ellipsis renders where it's supposed
+ * to.
  */
 export function SupportNavCard({
   href,
@@ -37,7 +44,7 @@ export function SupportNavCard({
   );
 
   const className =
-    "flex items-center gap-3 rounded-xl border bg-card p-4 text-left transition-colors hover:bg-muted active:bg-muted";
+    "flex min-w-0 items-center gap-3 rounded-xl border bg-card p-4 text-left transition-colors hover:bg-muted active:bg-muted";
 
   if (href.startsWith("#")) {
     return (
