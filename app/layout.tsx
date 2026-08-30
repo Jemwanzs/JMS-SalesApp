@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist_Mono, Inter, Lato, Outfit, Poppins, Roboto } from "next/font/google";
 import "./globals.css";
 
+import { CookieConsentBanner } from "@/components/shared/cookie-consent-banner";
 import { DisableContextMenu } from "@/components/shared/disable-context-menu";
 import { ServiceWorkerRegistration } from "@/components/shared/service-worker-registration";
 import { Toaster } from "@/components/ui/sonner";
@@ -88,6 +89,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <Toaster />
         <ServiceWorkerRegistration />
         <DisableContextMenu />
+        <CookieConsentBanner />
       </body>
     </html>
   );

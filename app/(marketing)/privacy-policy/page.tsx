@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 
+import { CookiePreferencesTrigger } from "@/components/shared/cookie-preferences-trigger";
+
 export const metadata: Metadata = {
   title: "Privacy Policy | JMS Sales App",
 };
@@ -125,9 +127,11 @@ export default function PrivacyPolicyPage() {
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">7. Cookies</h2>
         <p>
-          We use only the cookies necessary to keep you signed in and to remember your session. We don&apos;t use
-          third-party advertising or tracking cookies.
+          We use essential cookies to keep you signed in, remember your session, and keep the app working. With your
+          permission, we may also use optional cookies to help us understand how the app is used and improve it. We
+          don&apos;t use third-party advertising cookies.
         </p>
+        <CookiePreferencesTrigger />
       </section>
 
       <section className="space-y-2">
