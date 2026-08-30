@@ -2,12 +2,25 @@
 
 import * as React from "react"
 import { Dialog as DialogPrimitive } from "@base-ui/react/dialog"
-import { useTranslations } from "next-intl"
 
 import { cn, getAppShellContainer } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { XIcon } from "lucide-react"
 
+// Deliberately no next-intl useTranslations() on the "Close" strings
+// below, even though the golden-path i18n pass briefly added it -- this
+// is a shared, foundational components/ui/* primitive with no way to
+// know whether its caller is rendered inside a NextIntlClientProvider
+// (the tenant/platform-admin layouts have one, the root layout and
+// every other tree do not, by design -- see app/layout.tsx and
+// i18n/request.ts's own header comments). CookieConsentBanner, mounted
+// directly in the root layout, proved this the hard way: useTranslations
+// throws unconditionally with no provider in scope, and since it ran on
+// every render regardless of `open`, it broke the app for effectively
+// every visitor the moment this file shipped. A shared primitive should
+// never assume a specific app-level context is always available
+// upstream -- translate a dialog's own title/description/buttons at the
+// CALLER, which knows its own render context, not here.
 function Dialog({ ...props }: DialogPrimitive.Root.Props) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />
 }
@@ -48,7 +61,6 @@ function DialogContent({
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean
 }) {
-  const t = useTranslations("Common")
   return (
     <DialogPortal container={getAppShellContainer()}>
       <DialogOverlay />
@@ -85,7 +97,7 @@ function DialogContent({
           >
             <XIcon
             />
-            <span className="sr-only">{t("close")}</span>
+            <span className="sr-only">Close</span>
           </DialogPrimitive.Close>
         )}
       </DialogPrimitive.Popup>
@@ -111,7 +123,6 @@ function DialogFooter({
 }: React.ComponentProps<"div"> & {
   showCloseButton?: boolean
 }) {
-  const t = useTranslations("Common")
   return (
     <div
       data-slot="dialog-footer"
@@ -124,7 +135,7 @@ function DialogFooter({
       {children}
       {showCloseButton && (
         <DialogPrimitive.Close render={<Button variant="outline" />}>
-          {t("close")}
+          Close
         </DialogPrimitive.Close>
       )}
     </div>
