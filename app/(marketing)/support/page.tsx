@@ -1,5 +1,10 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import { Suspense } from "react";
+import { Headset, ScrollText, Shield } from "lucide-react";
+
+import { BackLinkSmart } from "@/components/shared/back-link-smart";
+import { SupportNavCard } from "@/features/support/components/support-nav-card";
 
 export const metadata: Metadata = {
   title: "Support | JMS Sales App",
@@ -8,12 +13,37 @@ export const metadata: Metadata = {
 export default function SupportPage() {
   return (
     <article className="space-y-6 text-sm leading-relaxed text-foreground">
+      <Suspense fallback={null}>
+        <BackLinkSmart fallbackHref="/" fallbackLabel="home" />
+      </Suspense>
+
       <div>
-        <h1 className="text-2xl font-semibold">Support</h1>
+        <h1 className="text-2xl font-semibold">Help &amp; Support</h1>
         <p className="mt-1 text-muted-foreground">We&apos;re happy to help.</p>
       </div>
 
-      <section className="space-y-2">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <SupportNavCard
+          href="/privacy-policy"
+          icon={Shield}
+          title="Privacy Policy"
+          description="Learn how your information is handled."
+        />
+        <SupportNavCard
+          href="/terms-of-service"
+          icon={ScrollText}
+          title="Terms & Conditions"
+          description="Review the terms governing use of the application."
+        />
+        <SupportNavCard
+          href="#contact"
+          icon={Headset}
+          title="Get Help"
+          description="Get assistance with your account or application."
+        />
+      </div>
+
+      <section id="contact" className="space-y-2 scroll-mt-4">
         <h2 className="text-lg font-semibold">Contact us</h2>
         <p>
           For any question, issue, or feedback about JMS Sales App, email{" "}

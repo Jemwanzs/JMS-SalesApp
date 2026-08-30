@@ -51,13 +51,6 @@ import { getTenantBySlug } from "@/lib/tenant/resolve-tenant-by-slug";
  * everyone, since most users will never have anything to review or
  * manage there.
  */
-const EVERYDAY_ITEMS: { label: string; icon: LucideIcon; href?: string; absoluteHref?: string }[] = [
-  { label: "Products", icon: Package, href: "products" },
-  { label: "My Preferences", icon: Sliders, href: "preferences" },
-  { label: "Security", icon: Lock, href: "security" },
-  { label: "Help & Support", icon: HelpCircle, absoluteHref: "/support" },
-];
-
 export default async function MorePage({
   params,
 }: {
@@ -83,6 +76,16 @@ export default async function MorePage({
 
   const isBillingOwner = tenant?.billing_owner_profile_id === user?.id;
 
+  // Help & Support's ?from= lets /support's own Back button return here
+  // exactly, rather than guessing from browser history -- see
+  // components/shared/back-link-smart.tsx's own header comment.
+  const everydayItems: { label: string; icon: LucideIcon; href?: string; absoluteHref?: string }[] = [
+    { label: "Products", icon: Package, href: "products" },
+    { label: "My Preferences", icon: Sliders, href: "preferences" },
+    { label: "Security", icon: Lock, href: "security" },
+    { label: "Help & Support", icon: HelpCircle, absoluteHref: `/support?from=/t/${tenantSlug}/more` },
+  ];
+
   const adminItems: { label: string; icon: LucideIcon; href?: string; absoluteHref?: string }[] = [
     // First in the section (the user's explicit "surface it at the
     // top" ask) -- business name/type/website/anniversary/currency/
@@ -104,7 +107,7 @@ export default async function MorePage({
     <div className="flex flex-1 flex-col p-6">
       <h1 className="mb-4 text-xl font-semibold">More</h1>
 
-      <MenuSection items={EVERYDAY_ITEMS} tenantSlug={tenantSlug} />
+      <MenuSection items={everydayItems} tenantSlug={tenantSlug} />
 
       {adminItems.length > 0 && (
         <>
@@ -115,8 +118,11 @@ export default async function MorePage({
         </>
       )}
 
-      <form action={signOutAction} className="mt-6">
-        <Button type="submit" variant="outline" className="w-full">
+      <form action={signOutAction} className="mt-6 flex justify-center">
+        <Button
+          type="submit"
+          className="rounded-full bg-red-800 px-6 text-white hover:bg-red-900"
+        >
           <LogOut className="h-4 w-4" />
           Log out
         </Button>
