@@ -36,6 +36,20 @@ async function closePromoBannerIfPresent(page: Page): Promise<void> {
     .catch(() => {});
 }
 
+/**
+ * CookieConsentBanner (components/shared/cookie-consent-banner.tsx) is
+ * fixed to the bottom of the viewport on every page for a fresh visitor
+ * (same empty-localStorage-looks-like-first-visit reasoning as the promo
+ * banner above) -- it can cover/intercept a click on anything else
+ * anchored near the bottom of the page, same class of issue.
+ */
+async function closeCookieBannerIfPresent(page: Page): Promise<void> {
+  await page
+    .getByRole("button", { name: "Accept All" })
+    .click({ timeout: 5000 })
+    .catch(() => {});
+}
+
 test.describe("public marketing pages", () => {
   test("privacy policy renders", async ({ page }) => {
     await page.goto("/privacy-policy");
@@ -56,6 +70,7 @@ test.describe("public marketing pages", () => {
 
   test("marketing pages cross-link to each other", async ({ page }) => {
     await page.goto("/privacy-policy");
+    await closeCookieBannerIfPresent(page);
     await page.getByRole("link", { name: "Terms of Service" }).first().click();
     await expect(page).toHaveURL(/\/terms-of-service$/);
   });
