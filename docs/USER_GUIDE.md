@@ -195,14 +195,7 @@ Go to **More → Billing**.
 
 ### Inventory & Stock Management (optional add-on)
 
-Every business starts on plain sales tracking — nothing about Inventory is required to use the app. If your business also wants to track how much stock you have on hand, you can turn it on whenever you're ready:
-
-- **Go to More → Settings → Modules** and switch Inventory on. You'll get a short free trial automatically; no payment is needed to try it out.
-- **Its own subscription, separate from your base plan** — turning Inventory on (or off) never changes your regular sales subscription, and turning your base plan off never removes Inventory data. Pricing is affordable and offered in a few duration tiers (monthly through annual, with better value the longer you commit) — shown clearly before you subscribe, same as base billing.
-- **What it adds**, once on: a **Stock** tab next to Sales/Analytics/Reports — opening stock counts, recording stock received or sold out, daily reconciliation (comparing what you counted against what the numbers say you should have), low-stock alerts, and simple stock reports.
-- **Turning it off** just hides the Stock tab again — it doesn't cancel your subscription or delete anything, so switching back on later picks up right where you left off.
-
-If you only ever sell without tracking stock levels, you can safely ignore this section entirely — the rest of the app works exactly the same either way.
+A completely optional, separately-billed module for tracking stock levels — off by default, and turning it on or off never affects your base subscription above. See **section K** for the full guide.
 
 ---
 
@@ -218,6 +211,78 @@ If you only ever sell without tracking stock levels, you can safely ignore this 
 | **Notifications banner** | A short banner (e.g. a business anniversary wish) appears at the top of the app when relevant. | No action needed — it clears itself automatically after a few days. |
 
 *This table is reviewed against the live app and only lists features that actually exist — nothing here is planned or upcoming functionality.*
+
+---
+
+## K. Inventory & Stock — Full Guide (Optional Module)
+
+Everything about turning it on, setting it up, and using it — for businesses that want to track stock levels alongside their sales.
+
+### Is this for you?
+
+If your business sells countable, stockable goods — a shop, a kiosk, a pharmacy, a hardware store — and you want to know exactly how much of each product you have on hand, when it's running low, and where every unit went, this module is for you. If you sell services or made-to-order items with nothing to track, you can safely ignore it entirely — **the rest of the app works exactly the same either way.**
+
+### Turning it on
+
+1. Go to **More → Settings → Modules**.
+2. Switch on **Inventory**.
+3. A short **2-day (48-hour) free trial** starts automatically — no payment needed to try it.
+4. A new **Stock** tab appears in your bottom navigation right away.
+
+The Inventory module is billed as its own subscription, **completely separate** from your base JMS Sales App plan (section I). Turning either one on or off never affects the other.
+
+### Pricing
+
+Pick whichever duration fits your business — pricing is shown clearly before you confirm.
+
+| Plan | Duration | Price |
+|---|---|---|
+| **Monthly** | 30 days | KES 1,000 |
+| **Quarterly** | 90 days | KES 2,500 |
+| **6 Months** | 180 days | KES 4,800 |
+| **Annual** | 365 days | KES 8,000 |
+
+### Turning tracking on for a product
+
+Once the module is on, open any product from **More → Products** and switch on **Track inventory for this product**. You can then set:
+
+- **Unit of measure** — pieces, kg, litres, boxes, or a custom unit you define.
+- **Low-stock threshold** — the balance at which this product starts showing as low stock.
+- **SKU / barcode** (optional) — for your own reference.
+
+Only products with tracking switched on appear in Stock — everything else in your catalog is unaffected.
+
+### The Stock dashboard
+
+Bottom navigation → **Stock**, once the module is on. A card list of every tracked product with its current balance, and a clear low-stock badge for anything at or below its threshold. Tap any product for its full balance and movement history.
+
+### Recording stock movements
+
+From a product's detail screen, record any of the following. A reason is required for every adjustment, damage, expiry, and loss entry — so every change to a balance stays explained, not just logged as a number.
+
+| Action | What it does | Reason required? |
+|---|---|---|
+| **Set opening stock** | Record your starting balance when you first turn on tracking for a product. | No |
+| **Stock in** | New stock received — a delivery, a restock. | No |
+| **Stock out** | Stock leaving for a reason other than a sale — e.g. moved to another location. | No |
+| **Adjust stock up / down** | Correct a balance that's known to be wrong. | Yes |
+| **Mark damaged** | Stock that can no longer be sold due to damage. | Yes |
+| **Mark expired** | Stock past its usable date. | Yes |
+| **Mark lost/missing** | Stock unaccounted for. | Yes |
+
+Every recorded sale of a tracked product automatically reduces its balance too — you never have to double-enter a sale as a separate stock-out.
+
+### Daily reconciliation
+
+Go to **Stock → Reconcile** to compare your system balance against a real physical count for each tracked product, once a day. Enter the actual count; any difference (a variance) is recorded automatically with the product, date, and size of the gap — a simple, honest way to catch shrinkage or counting mistakes early.
+
+### Stock reports
+
+Go to **Stock → Reports** for a 30-day view: a stock-in-vs-out trend chart, a variance report from your reconciliations, and a low-stock list — everything you need to review at a glance, without digging through individual product histories.
+
+### Turning it off
+
+Switch Inventory back off any time from **More → Settings → Modules**. This only hides the Stock tab and its screens — **nothing is cancelled, deleted, or lost.** Turn it back on later and every balance and history picks up exactly where you left off.
 
 ---
 

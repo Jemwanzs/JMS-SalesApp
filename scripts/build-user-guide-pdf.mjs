@@ -231,6 +231,7 @@ const html = `<!doctype html>
     <li><span class="letter">H</span><span class="label">Reports &amp; Analytics</span></li>
     <li><span class="letter">I</span><span class="label">Billing &amp; Subscription (incl. optional Inventory add-on)</span></li>
     <li><span class="letter">J</span><span class="label">Other Features</span></li>
+    <li><span class="letter">K</span><span class="label">Inventory &amp; Stock — Full Guide (Optional Module)</span></li>
   </ul>
   <div class="journey-strip">
     <b>Your complete journey:</b> Sign up → Complete business setup → Add products → Invite employees →
@@ -454,12 +455,8 @@ const html = `<!doctype html>
   </ul>
 
   <h3 class="sub">Inventory &amp; Stock (optional add-on)</h3>
-  <p>Nothing about Inventory is required to use the app — every business starts on plain sales tracking. Switch it
-  on from <strong>More → Settings → Modules</strong> whenever you're ready; a short free trial starts automatically,
-  no payment needed to try it. It's billed as its own affordable subscription, completely separate from the base
-  plan above — turning either one on or off never affects the other. Once on, a <strong>Stock</strong> tab appears
-  for opening counts, recording stock in/out, daily reconciliation, low-stock alerts, and simple stock reports.
-  Turning it back off just hides that tab — nothing is cancelled or deleted.</p>
+  <p>A completely optional, separately-billed module for tracking stock levels — off by default, and turning it
+  on or off never affects your base subscription above. See <strong>section K</strong> for the full guide.</p>
 </div>
 
 <div class="section">
@@ -489,6 +486,94 @@ const html = `<!doctype html>
     record daily sales from their own accounts → Monitor sales → Access reports &amp; analytics → Manage billing
     and settings with confidence. Welcome aboard.
   </div>
+</div>
+
+<div class="section">
+  <span class="kicker">K · Inventory &amp; Stock</span>
+  <h2 class="section-title">The optional Inventory &amp; Stock module — full guide</h2>
+  <p class="section-lede">Everything about turning it on, setting it up, and using it — for businesses that want
+  to track stock levels alongside their sales.</p>
+
+  <h3 class="sub">Is this for you?</h3>
+  <p>If your business sells countable, stockable goods — a shop, a kiosk, a pharmacy, a hardware store — and you
+  want to know exactly how much of each product you have on hand, when it's running low, and where every unit
+  went, this module is for you. If you sell services or made-to-order items with nothing to track, you can safely
+  ignore it entirely — <strong>the rest of the app works exactly the same either way.</strong></p>
+
+  <h3 class="sub">Turning it on</h3>
+  <ol class="steps">
+    <li>Go to <strong>More → Settings → Modules</strong>.</li>
+    <li>Switch on <strong>Inventory</strong>.</li>
+    <li>A short <strong>2-day (48-hour) free trial</strong> starts automatically — no payment needed to try it.</li>
+    <li>A new <strong>Stock</strong> tab appears in your bottom navigation right away.</li>
+  </ol>
+  <p>The Inventory module is billed as its own subscription, <strong>completely separate</strong> from your base
+  JMS Sales App plan (section I). Turning either one on or off never affects the other.</p>
+
+  <h3 class="sub">Pricing</h3>
+  <p>Pick whichever duration fits your business — pricing is shown clearly before you confirm.</p>
+  <table class="feature-table">
+    <thead><tr><th>Plan</th><th>Duration</th><th>Price</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Monthly</strong></td><td>30 days</td><td>KES 1,000</td></tr>
+      <tr><td><strong>Quarterly</strong></td><td>90 days</td><td>KES 2,500</td></tr>
+      <tr><td><strong>6 Months</strong></td><td>180 days</td><td>KES 4,800</td></tr>
+      <tr><td><strong>Annual</strong></td><td>365 days</td><td>KES 8,000</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="sub">Turning tracking on for a product</h3>
+  <p>Once the module is on, open any product from <strong>More → Products</strong> and switch on
+  <strong>Track inventory for this product</strong>. You can then set:</p>
+  <ul class="bullets">
+    <li><strong>Unit of measure</strong> — pieces, kg, litres, boxes, or a custom unit you define.</li>
+    <li><strong>Low-stock threshold</strong> — the balance at which this product starts showing as low stock.</li>
+    <li><strong>SKU / barcode</strong> (optional) — for your own reference.</li>
+  </ul>
+  <p>Only products with tracking switched on appear in Stock — everything else in your catalog is unaffected.</p>
+</div>
+
+<div class="section">
+  <span class="kicker">K · Inventory &amp; Stock, continued</span>
+  <h2 class="section-title">Using Stock day to day</h2>
+  <p class="section-lede">Bottom navigation → <strong>Stock</strong>, once the module is on.</p>
+
+  <h3 class="sub">The Stock dashboard</h3>
+  <p>A card list of every tracked product with its current balance, and a clear low-stock badge for anything at or
+  below its threshold. Tap any product for its full balance and movement history.</p>
+
+  <h3 class="sub">Recording stock movements</h3>
+  <p>From a product's detail screen, record any of the following. A reason is required for every adjustment,
+  damage, expiry, and loss entry — so every change to a balance stays explained, not just logged as a number.</p>
+  <table class="feature-table">
+    <thead><tr><th>Action</th><th>What it does</th><th>Reason required?</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Set opening stock</strong></td><td>Record your starting balance when you first turn on tracking for a product.</td><td>No</td></tr>
+      <tr><td><strong>Stock in</strong></td><td>New stock received — a delivery, a restock.</td><td>No</td></tr>
+      <tr><td><strong>Stock out</strong></td><td>Stock leaving for a reason other than a sale — e.g. moved to another location.</td><td>No</td></tr>
+      <tr><td><strong>Adjust stock up / down</strong></td><td>Correct a balance that's known to be wrong.</td><td>Yes</td></tr>
+      <tr><td><strong>Mark damaged</strong></td><td>Stock that can no longer be sold due to damage.</td><td>Yes</td></tr>
+      <tr><td><strong>Mark expired</strong></td><td>Stock past its usable date.</td><td>Yes</td></tr>
+      <tr><td><strong>Mark lost/missing</strong></td><td>Stock unaccounted for.</td><td>Yes</td></tr>
+    </tbody>
+  </table>
+  <p>Every recorded sale of a tracked product automatically reduces its balance too — you never have to
+  double-enter a sale as a separate stock-out.</p>
+
+  <h3 class="sub">Daily reconciliation</h3>
+  <p>Go to <strong>Stock → Reconcile</strong> to compare your system balance against a real physical count for
+  each tracked product, once a day. Enter the actual count; any difference (a variance) is recorded automatically
+  with the product, date, and size of the gap — a simple, honest way to catch shrinkage or counting mistakes early.</p>
+
+  <h3 class="sub">Stock reports</h3>
+  <p>Go to <strong>Stock → Reports</strong> for a 30-day view: a stock-in-vs-out trend chart, a variance report
+  from your reconciliations, and a low-stock list — everything you need to review at a glance, without digging
+  through individual product histories.</p>
+
+  <h3 class="sub">Turning it off</h3>
+  <p>Switch Inventory back off any time from <strong>More → Settings → Modules</strong>. This only hides the Stock
+  tab and its screens — <strong>nothing is cancelled, deleted, or lost.</strong> Turn it back on later and every
+  balance and history picks up exactly where you left off.</p>
 </div>
 
 </body>
