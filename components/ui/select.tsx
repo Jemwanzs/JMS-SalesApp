@@ -3,7 +3,7 @@
 import * as React from "react"
 import { Select as SelectPrimitive } from "@base-ui/react/select"
 
-import { cn } from "@/lib/utils"
+import { cn, getAppShellContainer } from "@/lib/utils"
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react"
 
 const Select = SelectPrimitive.Root
@@ -63,7 +63,25 @@ function SelectContent({
   sideOffset = 4,
   align = "center",
   alignOffset = 0,
-  alignItemWithTrigger = true,
+  // Default false, unlike Base UI's own default of true. `container`
+  // below (matching Dialog/Sheet's #app-shell fix) confines the PORTAL
+  // DOM node to the shell, but alignItemWithTrigger=true positions the
+  // popup via its own hand-rolled getBoundingClientRect() math (to lay
+  // the currently-selected item exactly over the trigger, like a native
+  // <select>) instead of the normal Floating UI placement -- that math
+  // assumes `position: fixed` is relative to the true browser viewport,
+  // not #app-shell's `contain: layout` containing block. On a wide
+  // desktop viewport (where #app-shell sits offset from the viewport's
+  // left edge) this double-applies the offset: the browser correctly
+  // renders `left: <value>` relative to #app-shell per the CSS spec,
+  // but `<value>` was already computed as if relative to the viewport,
+  // so the popup lands far to the right of its trigger, fully
+  // disconnected. Verified via a live Playwright repro of both modes
+  // side by side -- true reproduces the bug exactly, false renders the
+  // dropdown correctly anchored below the trigger on every viewport
+  // width tried. No call site overrides this, so every Select in the
+  // app gets the fix uniformly.
+  alignItemWithTrigger = false,
   ...props
 }: SelectPrimitive.Popup.Props &
   Pick<
@@ -71,7 +89,14 @@ function SelectContent({
     "align" | "alignOffset" | "side" | "sideOffset" | "alignItemWithTrigger"
   >) {
   return (
-    <SelectPrimitive.Portal>
+    // container matches Dialog/Sheet's own established fix -- #app-shell
+    // has `contain: layout` specifically so anything portaled into it
+    // stays confined to the narrow mobile column instead of positioning
+    // against the full (much wider, on desktop) browser viewport. This
+    // was missing here -- a select dropdown could render far from its
+    // trigger on a wide screen. See components/ui/dialog.tsx's own
+    // header comment for the fuller explanation.
+    <SelectPrimitive.Portal container={getAppShellContainer()}>
       <SelectPrimitive.Positioner
         side={side}
         sideOffset={sideOffset}
