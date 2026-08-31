@@ -646,6 +646,24 @@ export class PlatformAdminService {
    * backstop if assertNotPlatformOwnerTenant is ever bypassed -- same
    * pairing as suspendTenant/deactivateTenant and migration 0044's own
    * BEFORE UPDATE trigger.
+   *
+   * Member LOGIN accounts (profiles/auth.users) are deleted too, but
+   * only when it's actually safe to: tenant_memberships has no
+   * uniqueness on profile_id alone (unique is on the (tenant_id,
+   * profile_id) PAIR), so the same login can genuinely belong to more
+   * than one tenant -- deleting it here would wrongly revoke access to
+   * a DIFFERENT, still-existing tenant. A profile is only deleted if,
+   * after this tenant is gone, it (a) isn't a platform_admins row
+   * (never touched, regardless of membership) and (b) has zero
+   * remaining tenant_memberships anywhere. Even then, sales/
+   * stock_movements/stock_reconciliations.recorded_by all reference
+   * profiles with a plain (RESTRICT) FK -- a profile that once recorded
+   * something in a DIFFERENT tenant it's since left can still have
+   * orphaned history there, so auth.admin.deleteUser() is attempted
+   * per-profile and a failure is swallowed: it just leaves that one
+   * login intact rather than failing the tenant deletion that already
+   * succeeded. profiles itself cascades from auth.users (migration
+   * 0001), so deleting the auth user is the one call needed.
    */
   async deleteTenant(platformAdminId: string, tenantId: string, reason: string): Promise<void> {
     await this.assertNotPlatformOwnerTenant(tenantId, "delete");
@@ -656,11 +674,80 @@ export class PlatformAdminService {
       .eq("id", tenantId)
       .single();
 
+    const { data: members } = await this.supabase
+      .from("tenant_memberships")
+      .select("profile_id")
+      .eq("tenant_id", tenantId);
+    const memberProfileIds = [...new Set((members ?? []).map((m) => m.profile_id))];
+
     await this.logAction(platformAdminId, "TENANT_DELETED", tenantId, null, before, null, reason);
 
     const { error } = await this.supabase.from("tenants").delete().eq("id", tenantId);
     if (error) {
       throw new Error(`PlatformAdminService.deleteTenant: ${error.message}`);
+    }
+
+    if (memberProfileIds.length > 0) {
+      await this.deleteOrphanedMemberLogins(platformAdminId, reason, memberProfileIds);
+    }
+  }
+
+  /**
+   * Second pass after a tenant is gone: delete login accounts that were
+   * only members of the tenant just deleted. See deleteTenant's own
+   * header comment for why this can't simply delete every former
+   * member's login outright. Runs AFTER the tenant row itself is gone,
+   * so any audit entry here can't reference the now-nonexistent tenant
+   * (target_tenant_id is left null; old_values carries the tenant name
+   * instead) -- one summary row per deletion, not per profile, to keep
+   * platform_audit_logs from filling up with one row per employee on
+   * every tenant deletion.
+   */
+  private async deleteOrphanedMemberLogins(
+    platformAdminId: string,
+    reason: string,
+    memberProfileIds: string[]
+  ): Promise<void> {
+    const { data: admins } = await this.supabase
+      .from("platform_admins")
+      .select("profile_id")
+      .in("profile_id", memberProfileIds);
+    const adminProfileIds = new Set((admins ?? []).map((a) => a.profile_id));
+
+    const { data: otherMemberships } = await this.supabase
+      .from("tenant_memberships")
+      .select("profile_id")
+      .in("profile_id", memberProfileIds);
+    const stillMemberElsewhere = new Set((otherMemberships ?? []).map((m) => m.profile_id));
+
+    const { data: profiles } = await this.supabase.from("profiles").select("id, email").in("id", memberProfileIds);
+    const emailByProfileId = new Map((profiles ?? []).map((p) => [p.id, p.email]));
+
+    const deleted: string[] = [];
+    const skipped: string[] = [];
+
+    for (const profileId of memberProfileIds) {
+      if (adminProfileIds.has(profileId) || stillMemberElsewhere.has(profileId)) {
+        continue;
+      }
+      const { error } = await this.supabase.auth.admin.deleteUser(profileId);
+      if (error) {
+        skipped.push(emailByProfileId.get(profileId) ?? profileId);
+      } else {
+        deleted.push(emailByProfileId.get(profileId) ?? profileId);
+      }
+    }
+
+    if (deleted.length > 0 || skipped.length > 0) {
+      await this.logAction(
+        platformAdminId,
+        "TENANT_MEMBER_LOGINS_DELETED",
+        null,
+        null,
+        null,
+        { deleted, skipped },
+        reason
+      );
     }
   }
 
