@@ -181,3 +181,145 @@ commit;
 - This does **not** touch `audit_logs` — the audit trail for what was
   recorded before the wipe stays intact (append-only by design, see
   `docs/05-authentication-security.md`).
+
+---
+
+## Wipe sales & stock history for ONE tenant only (keep products, keep everything else)
+
+**What this does:** the mirror image of the script above — instead of every
+tenant *except* the platform owner's, this clears sales/stock **history**
+for **only** the platform owner's own tenant, resolved the same
+`platform_admins`-membership way (never a hardcoded email). Deliberately
+narrower than the wipe-all script: `products` is **not** touched, so the
+existing catalog survives untouched — only what's been *recorded against*
+it goes.
+
+Cleared: `sale_corrections`, `approval_requests`, `insights_snapshots`,
+`report_jobs`, `reports`, `stock_reconciliations`, `stock_movements`,
+`sales`, `business_days`, and `sale_number_sequences` (so the next sale
+after this starts numbering at `SALE-<year>-000001` again, not wherever the
+counter was left). Left alone: `products`/`product_images` (the catalog),
+`imports` (the upload history is a job log, not a sales/stock record),
+accounts, roles, billing — same as the wipe-all script's untouched list.
+
+**When to use it:** the platform owner's own tenant was used to test/demo
+recording sales and stock, and it's time to hand it to real invited users
+with a clean slate — reports should read nil, but the product catalog they'll
+sell against should stay exactly as set up.
+
+**Origin:** written 2026-08-31, in response to a request to clear the
+platform owner's own recorded sales and stock history (products kept) ahead
+of inviting real users to start keying in daily sales/stock for feedback.
+
+### Step 1 — preview (read-only, changes nothing)
+
+```sql
+with owner_tenant as (
+  select t.id
+  from public.tenants t
+  join public.platform_admins pa on pa.profile_id = t.billing_owner_profile_id
+)
+select 'sales' as table_name, count(*) from public.sales where tenant_id in (select id from owner_tenant)
+union all select 'sale_corrections', count(*) from public.sale_corrections where tenant_id in (select id from owner_tenant)
+union all select 'business_days', count(*) from public.business_days where tenant_id in (select id from owner_tenant)
+union all select 'stock_movements', count(*) from public.stock_movements where tenant_id in (select id from owner_tenant)
+union all select 'stock_reconciliations', count(*) from public.stock_reconciliations where tenant_id in (select id from owner_tenant)
+union all select 'reports', count(*) from public.reports where tenant_id in (select id from owner_tenant)
+union all select 'report_jobs', count(*) from public.report_jobs where tenant_id in (select id from owner_tenant)
+union all select 'insights_snapshots', count(*) from public.insights_snapshots where tenant_id in (select id from owner_tenant)
+union all select 'approval_requests', count(*) from public.approval_requests where tenant_id in (select id from owner_tenant)
+union all select 'sale_number_sequences', count(*) from public.sale_number_sequences where tenant_id in (select id from owner_tenant)
+union all select '— owner tenant(s) resolved —', count(*) from owner_tenant;
+```
+
+The last row **must** read `1`. If it reads `0`, stop — no owner tenant
+resolved, so every other count above is meaningless (the `in (...)` filter
+matched nothing). If it reads `2` or more, also stop — more than one
+platform admin owns a tenant, and the script below would touch all of them,
+not just yours; resolve that ambiguity before running anything further.
+
+### Step 2 — the actual wipe
+
+Same FK ordering as the wipe-all script, just `in` instead of `not in`.
+
+```sql
+begin;
+
+with owner_tenant as (
+  select t.id from public.tenants t
+  join public.platform_admins pa on pa.profile_id = t.billing_owner_profile_id
+)
+delete from public.sale_corrections where tenant_id in (select id from owner_tenant);
+
+with owner_tenant as (
+  select t.id from public.tenants t
+  join public.platform_admins pa on pa.profile_id = t.billing_owner_profile_id
+)
+delete from public.approval_requests where tenant_id in (select id from owner_tenant);
+
+with owner_tenant as (
+  select t.id from public.tenants t
+  join public.platform_admins pa on pa.profile_id = t.billing_owner_profile_id
+)
+delete from public.insights_snapshots where tenant_id in (select id from owner_tenant);
+
+with owner_tenant as (
+  select t.id from public.tenants t
+  join public.platform_admins pa on pa.profile_id = t.billing_owner_profile_id
+)
+delete from public.report_jobs where tenant_id in (select id from owner_tenant);
+
+with owner_tenant as (
+  select t.id from public.tenants t
+  join public.platform_admins pa on pa.profile_id = t.billing_owner_profile_id
+)
+delete from public.reports where tenant_id in (select id from owner_tenant);
+
+with owner_tenant as (
+  select t.id from public.tenants t
+  join public.platform_admins pa on pa.profile_id = t.billing_owner_profile_id
+)
+delete from public.stock_reconciliations where tenant_id in (select id from owner_tenant);
+
+with owner_tenant as (
+  select t.id from public.tenants t
+  join public.platform_admins pa on pa.profile_id = t.billing_owner_profile_id
+)
+delete from public.stock_movements where tenant_id in (select id from owner_tenant);
+
+with owner_tenant as (
+  select t.id from public.tenants t
+  join public.platform_admins pa on pa.profile_id = t.billing_owner_profile_id
+)
+delete from public.sales where tenant_id in (select id from owner_tenant);
+
+with owner_tenant as (
+  select t.id from public.tenants t
+  join public.platform_admins pa on pa.profile_id = t.billing_owner_profile_id
+)
+delete from public.business_days where tenant_id in (select id from owner_tenant);
+
+with owner_tenant as (
+  select t.id from public.tenants t
+  join public.platform_admins pa on pa.profile_id = t.billing_owner_profile_id
+)
+delete from public.sale_number_sequences where tenant_id in (select id from owner_tenant);
+-- products/product_images and imports are deliberately NOT deleted here.
+
+-- Review the output above (each DELETE reports how many rows it removed).
+-- If everything looks right:
+commit;
+-- If anything looks wrong, run this instead of the commit above:
+-- rollback;
+```
+
+### Notes
+
+- **Products are untouched on purpose** — this script only clears what was
+  *recorded* (sales/stock/reports), not the catalog those records point at.
+  Run the wipe-all script above instead if the catalog itself needs
+  clearing too.
+- Re-run Step 1's preview afterward — every count except the owner-tenant
+  row should read `0`.
+- Doesn't touch `audit_logs`, accounts, roles, or billing — same reasoning
+  as the wipe-all script above.
