@@ -17,6 +17,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { signUpSchema, type SignUpInput } from "@/validations/auth";
 
 export function SignUpForm() {
@@ -158,8 +159,7 @@ export function SignUpForm() {
             <FormItem>
               <FormLabel>Password</FormLabel>
               <FormControl>
-                <Input
-                  type="password"
+                <PasswordInput
                   autoComplete="new-password"
                   className={AUTH_INPUT_CLASS}
                   {...field}
@@ -177,8 +177,7 @@ export function SignUpForm() {
             <FormItem>
               <FormLabel>Confirm password</FormLabel>
               <FormControl>
-                <Input
-                  type="password"
+                <PasswordInput
                   autoComplete="new-password"
                   className={AUTH_INPUT_CLASS}
                   {...field}
