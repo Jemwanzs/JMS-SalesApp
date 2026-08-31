@@ -22,11 +22,13 @@ export function TenantAddonPanel({
   addonKey,
   addon,
   currency,
+  isPlatformOwner = false,
 }: {
   tenantId: string;
   addonKey: AddonKey;
   addon: TenantAddonView | null;
   currency: string;
+  isPlatformOwner?: boolean;
 }) {
   const [open, setOpen] = useState<ActionKind>(null);
   const [isPending, startTransition] = useTransition();
@@ -85,12 +87,20 @@ export function TenantAddonPanel({
         ))}
       </div>
 
+      {isPlatformOwner && (
+        <p className="mb-3 text-xs text-emerald-300">
+          This is the platform owner&apos;s own tenant -- Activate/Deactivate are disabled here, same as the account&apos;s
+          billing status above.
+        </p>
+      )}
+
       <div className="mt-3 flex flex-wrap gap-2">
         {addon?.status !== "ACTIVE" && (
           <button
             type="button"
+            disabled={isPlatformOwner}
             onClick={() => setOpen(open === "activate" ? null : "activate")}
-            className="rounded bg-emerald-500/20 px-3 py-1.5 text-sm text-emerald-300 hover:bg-emerald-500/30"
+            className="rounded bg-emerald-500/20 px-3 py-1.5 text-sm text-emerald-300 hover:bg-emerald-500/30 disabled:cursor-not-allowed disabled:bg-white/5 disabled:text-white/30 disabled:hover:bg-white/5"
           >
             Activate
           </button>
@@ -98,8 +108,9 @@ export function TenantAddonPanel({
         {addon && addon.status !== "SUSPENDED" && addon.status !== "CANCELLED" && (
           <button
             type="button"
+            disabled={isPlatformOwner}
             onClick={() => setOpen(open === "deactivate" ? null : "deactivate")}
-            className="rounded bg-red-500/20 px-3 py-1.5 text-sm text-red-300 hover:bg-red-500/30"
+            className="rounded bg-red-500/20 px-3 py-1.5 text-sm text-red-300 hover:bg-red-500/30 disabled:cursor-not-allowed disabled:bg-white/5 disabled:text-white/30 disabled:hover:bg-white/5"
           >
             Deactivate
           </button>

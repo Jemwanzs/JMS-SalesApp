@@ -142,7 +142,13 @@ export default async function PlatformAdminTenantDetailPage({
         isPlatformOwner={detail.isPlatformOwner}
       />
 
-      <TenantAddonPanel tenantId={tenantId} addonKey="inventory" addon={inventoryAddon} currency={detail.currency} />
+      <TenantAddonPanel
+        tenantId={tenantId}
+        addonKey="inventory"
+        addon={inventoryAddon}
+        currency={detail.currency}
+        isPlatformOwner={detail.isPlatformOwner}
+      />
 
       <div>
         <h2 className="mb-2 text-sm font-semibold text-white/70">Send anniversary wish</h2>
