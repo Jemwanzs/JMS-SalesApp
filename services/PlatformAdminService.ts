@@ -592,7 +592,7 @@ export class PlatformAdminService {
    * run_addon_billing_sweep() entirely so it's never automatically pushed
    * toward suspension in the first place.
    */
-  private async assertNotPlatformOwnerTenant(tenantId: string, verb: "suspend" | "deactivate"): Promise<void> {
+  private async assertNotPlatformOwnerTenant(tenantId: string, verb: "suspend" | "deactivate" | "delete"): Promise<void> {
     const { data: tenant } = await this.supabase.from("tenants").select("billing_owner_profile_id").eq("id", tenantId).maybeSingle();
 
     if (!tenant?.billing_owner_profile_id) return;
@@ -619,6 +619,49 @@ export class PlatformAdminService {
     }
 
     await this.logAction(platformAdminId, "TENANT_SUSPENDED", tenantId, null, before, { status: "suspended" }, reason);
+  }
+
+  /**
+   * Permanent, irreversible -- unlike suspend/deactivate, there's no
+   * reactivateTenant equivalent for this. Every tenant-scoped table
+   * already has `tenant_id ... on delete cascade` (migration 0001
+   * onward), so deleting the tenants row cleanly removes its sales,
+   * products, subscriptions, memberships, stock data, everything --
+   * this method does nothing beyond that single delete. Employee/owner
+   * LOGIN accounts (profiles/auth.users) are deliberately NOT touched:
+   * they're never tenant-owned in this schema, tenant_memberships just
+   * cascades away (removing the link), and a membership-less signed-in
+   * user already lands on a real, handled state (/no-tenant) -- see
+   * app/(tenant)/t/[tenantSlug]/layout.tsx.
+   *
+   * The audit log entry is written BEFORE the delete, not after -- the
+   * tenants row must still exist for target_tenant_id's FK to resolve
+   * at insert time (migration 0047 makes that FK `on delete set null`
+   * for exactly this reason: the row survives the tenant's own deletion
+   * afterward, just with its tenant reference nulled out). old_values
+   * captures a snapshot so the audit entry stays meaningful once the
+   * tenant itself is gone.
+   *
+   * migration 0047's BEFORE DELETE trigger on tenants is the DB-level
+   * backstop if assertNotPlatformOwnerTenant is ever bypassed -- same
+   * pairing as suspendTenant/deactivateTenant and migration 0044's own
+   * BEFORE UPDATE trigger.
+   */
+  async deleteTenant(platformAdminId: string, tenantId: string, reason: string): Promise<void> {
+    await this.assertNotPlatformOwnerTenant(tenantId, "delete");
+
+    const { data: before } = await this.supabase
+      .from("tenants")
+      .select("name, slug, status, billing_owner_profile_id")
+      .eq("id", tenantId)
+      .single();
+
+    await this.logAction(platformAdminId, "TENANT_DELETED", tenantId, null, before, null, reason);
+
+    const { error } = await this.supabase.from("tenants").delete().eq("id", tenantId);
+    if (error) {
+      throw new Error(`PlatformAdminService.deleteTenant: ${error.message}`);
+    }
   }
 
   async reactivateTenant(platformAdminId: string, tenantId: string, reason: string): Promise<void> {

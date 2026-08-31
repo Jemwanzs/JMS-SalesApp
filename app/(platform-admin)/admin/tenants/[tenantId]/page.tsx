@@ -135,6 +135,7 @@ export default async function PlatformAdminTenantDetailPage({
 
       <TenantActionsPanel
         tenantId={tenantId}
+        tenantName={detail.name}
         status={detail.status}
         subscriptionStatus={detail.subscriptionStatus}
         currency={detail.currency}

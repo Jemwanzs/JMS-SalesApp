@@ -4,13 +4,14 @@ import { useState, useTransition } from "react";
 
 import { adjustGracePeriodAction } from "@/features/platform-admin/actions/adjust-grace-period";
 import { deactivateTenantAction } from "@/features/platform-admin/actions/deactivate-tenant";
+import { deleteTenantAction } from "@/features/platform-admin/actions/delete-tenant";
 import { extendTrialAction } from "@/features/platform-admin/actions/extend-trial";
 import { grantSubscriptionCreditAction } from "@/features/platform-admin/actions/grant-subscription-credit";
 import { reactivateTenantAction } from "@/features/platform-admin/actions/reactivate-tenant";
 import { suspendTenantAction } from "@/features/platform-admin/actions/suspend-tenant";
 import type { SubscriptionStatus, TenantStatus } from "@/types/database.types";
 
-type ActionKind = "suspend" | "deactivate" | "reactivate" | "extendTrial" | "adjustGrace" | "grantCredit" | null;
+type ActionKind = "suspend" | "deactivate" | "reactivate" | "extendTrial" | "adjustGrace" | "grantCredit" | "delete" | null;
 
 /**
  * Plain, minimally-styled forms (no shadcn primitives) -- matching the
@@ -21,16 +22,18 @@ type ActionKind = "suspend" | "deactivate" | "reactivate" | "extendTrial" | "adj
  */
 export function TenantActionsPanel({
   tenantId,
+  tenantName,
   status,
   subscriptionStatus,
   currency,
   isPlatformOwner,
 }: {
   tenantId: string;
+  tenantName: string;
   status: TenantStatus;
   subscriptionStatus: SubscriptionStatus | null;
   currency: string;
-  /** The platform owner's own tenant -- suspendTenant/deactivateTenant refuse these server-side regardless, but hiding the buttons avoids showing an action that will always error. */
+  /** The platform owner's own tenant -- suspendTenant/deactivateTenant/deleteTenant refuse these server-side regardless, but hiding the buttons avoids showing an action that will always error. */
   isPlatformOwner: boolean;
 }) {
   const [open, setOpen] = useState<ActionKind>(null);
@@ -152,6 +155,15 @@ export function TenantActionsPanel({
         >
           Grant Credit
         </button>
+        {!isPlatformOwner && (
+          <button
+            type="button"
+            onClick={() => setOpen(open === "delete" ? null : "delete")}
+            className="rounded bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700"
+          >
+            Delete Tenant
+          </button>
+        )}
       </div>
 
       {open === "suspend" && (
@@ -194,6 +206,13 @@ export function TenantActionsPanel({
           label={`Credit amount (${currency})`}
           isPending={isPending}
           onSubmit={(reason, amount) => runCreditAction(reason, amount)}
+        />
+      )}
+      {open === "delete" && (
+        <DeleteConfirmForm
+          tenantName={tenantName}
+          isPending={isPending}
+          onSubmit={(reason) => runSimpleAction(deleteTenantAction.bind(null, tenantId), reason)}
         />
       )}
 
@@ -278,6 +297,71 @@ function ReasonDaysForm({
       </div>
       <button type="submit" disabled={isPending} className="rounded bg-white/20 px-3 py-1.5 text-sm hover:bg-white/30">
         {isPending ? "Saving..." : "Confirm"}
+      </button>
+    </form>
+  );
+}
+
+/**
+ * Deliberately higher friction than every other form on this panel --
+ * permanent, no reactivate-equivalent to undo it with. A reason field
+ * (still required, still logged) isn't enough on its own; typing the
+ * tenant's exact name is what actually gates the submit button, the
+ * same "type to confirm" pattern used elsewhere for catastrophic,
+ * irreversible actions.
+ */
+function DeleteConfirmForm({
+  tenantName,
+  isPending,
+  onSubmit,
+}: {
+  tenantName: string;
+  isPending: boolean;
+  onSubmit: (reason: string) => void;
+}) {
+  const [reason, setReason] = useState("");
+  const [confirmName, setConfirmName] = useState("");
+  const matches = confirmName === tenantName;
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!matches) return;
+        onSubmit(reason);
+      }}
+      className="mt-3 space-y-2 rounded border border-red-500/30 bg-red-950/20 p-3"
+    >
+      <p className="text-sm text-red-200">
+        This permanently deletes <strong>{tenantName}</strong> and all of its sales, products, and stock data. This
+        cannot be undone.
+      </p>
+      <div>
+        <label className="text-xs text-white/50">Reason</label>
+        <input
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          required
+          className="mt-1 w-full rounded border border-white/10 bg-white/5 px-2 py-1.5 text-sm outline-none focus:border-white/30"
+        />
+      </div>
+      <div>
+        <label className="text-xs text-white/50">
+          Type <strong>{tenantName}</strong> to confirm
+        </label>
+        <input
+          value={confirmName}
+          onChange={(e) => setConfirmName(e.target.value)}
+          required
+          className="mt-1 w-full rounded border border-white/10 bg-white/5 px-2 py-1.5 text-sm outline-none focus:border-white/30"
+        />
+      </div>
+      <button
+        type="submit"
+        disabled={isPending || !matches}
+        className="rounded bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-40"
+      >
+        {isPending ? "Deleting..." : "Permanently Delete"}
       </button>
     </form>
   );
