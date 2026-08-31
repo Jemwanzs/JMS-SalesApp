@@ -81,7 +81,11 @@ test.describe("auth pages", () => {
     await page.goto("/login");
     await closePromoBannerIfPresent(page);
     await expect(page.getByLabel("Email")).toBeVisible();
-    await expect(page.getByLabel("Password")).toBeVisible();
+    // exact: true -- PasswordInput's show/hide toggle button carries its
+    // own aria-label ("Show password"), which getByLabel's default
+    // substring match would otherwise also resolve to alongside the
+    // actual Password field, tripping Playwright's strict-mode check.
+    await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: /log in|sign in/i })).toBeVisible();
   });
 
