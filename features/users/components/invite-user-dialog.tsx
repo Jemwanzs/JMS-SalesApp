@@ -107,7 +107,11 @@ export function InviteUserDialog({
           </div>
           <div className="space-y-2">
             <Label htmlFor="invite-role">Role</Label>
-            <Select value={roleId} onValueChange={(value) => setRoleId(value ?? "")}>
+            <Select
+              items={roles.map((role) => ({ value: role.id, label: role.name }))}
+              value={roleId}
+              onValueChange={(value) => setRoleId(value ?? "")}
+            >
               <SelectTrigger id="invite-role" className="w-full">
                 <SelectValue placeholder="Choose a role" />
               </SelectTrigger>

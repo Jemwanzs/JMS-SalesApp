@@ -140,6 +140,52 @@ export class UserService {
   }
 
   /**
+   * Re-sends the invite email for a membership that's still 'invited' --
+   * the person never received it, or never got around to setting up
+   * their account. MUST be called with a service-role client, same
+   * reason as inviteUser() itself: supabase.auth.admin.inviteUserByEmail
+   * is an Admin API call, unreachable from an RLS-respecting client
+   * regardless of permissions. Re-inviting an email that already has an
+   * unconfirmed auth.users row is the documented way to resend/rotate
+   * that invite -- it's a no-op on tenant_memberships (still 'invited',
+   * nothing to update there), just a fresh email + link.
+   */
+  async resendInvite(tenantId: string, membershipId: string, redirectTo: string): Promise<void> {
+    const { data: membership, error: membershipError } = await this.supabase
+      .from("tenant_memberships")
+      .select("id, status, profile_id")
+      .eq("id", membershipId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+
+    if (membershipError || !membership) {
+      throw new Error("UserService.resendInvite: membership not found");
+    }
+    if (membership.status !== "invited") {
+      throw new Error("Only a pending invite can be resent");
+    }
+
+    const { data: profile, error: profileError } = await this.supabase
+      .from("profiles")
+      .select("email, full_name")
+      .eq("id", membership.profile_id)
+      .single();
+
+    if (profileError || !profile) {
+      throw new Error("UserService.resendInvite: profile not found");
+    }
+
+    const { error: inviteError } = await this.supabase.auth.admin.inviteUserByEmail(profile.email, {
+      data: { full_name: profile.full_name },
+      redirectTo,
+    });
+
+    if (inviteError) {
+      throw new Error(`UserService.resendInvite: ${inviteError.message}`);
+    }
+  }
+
+  /**
    * There's no dedicated users.disable-gated RLS policy -- tenant_
    * memberships_update (migration 0001) checks users.edit for every
    * mutation on the table, so the users.disable catalog entry isn't

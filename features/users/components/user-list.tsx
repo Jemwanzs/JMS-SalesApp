@@ -5,6 +5,7 @@ import { Pencil } from "lucide-react";
 import { toast } from "sonner";
 
 import { InviteUserDialog } from "@/features/users/components/invite-user-dialog";
+import { resendInviteAction } from "@/features/users/actions/resend-invite";
 import { setUserActiveAction } from "@/features/users/actions/set-user-active";
 import { setUserRoleAction } from "@/features/users/actions/set-user-role";
 import { updateUserNameAction } from "@/features/users/actions/update-user-name";
@@ -70,6 +71,17 @@ export function UserList({
     setItems((prev) => [...prev, user]);
   }
 
+  function onResendInvite(user: TenantUserSummary) {
+    startTransition(async () => {
+      const result = await resendInviteAction(tenantId, tenantSlug, user.membershipId);
+      if (result.error) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(`Invite resent to ${user.email}`);
+    });
+  }
+
   function onToggleActive(user: TenantUserSummary) {
     const nextActive = user.status !== "active";
     startTransition(async () => {
@@ -112,8 +124,8 @@ export function UserList({
 
       <div className="divide-y rounded-lg border">
         {items.map((user) => (
-          <div key={user.membershipId} className="flex items-center gap-3 p-3">
-            <div className="min-w-0 flex-1">
+          <div key={user.membershipId} className="space-y-2 p-3">
+            <div className="min-w-0">
               {editingMembershipId === user.membershipId ? (
                 <div className="flex items-center gap-2">
                   <Input
@@ -139,11 +151,11 @@ export function UserList({
                   </Button>
                 </div>
               ) : (
-                <div className="flex items-center gap-2">
-                  <p className="truncate text-sm font-medium">{user.fullName ?? user.email}</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="truncate text-sm font-medium">{user.fullName?.trim() || user.email}</p>
                   {user.isCurrentUser && <Badge variant="secondary">You</Badge>}
                   <Badge variant={STATUS_VARIANT[user.status]}>{user.status}</Badge>
-                  {canEdit && !user.isCurrentUser && user.status === "active" && (
+                  {canEdit && !user.isCurrentUser && user.status !== "disabled" && (
                     <button
                       type="button"
                       aria-label="Edit name"
@@ -158,37 +170,51 @@ export function UserList({
               <p className="truncate text-xs text-muted-foreground">{user.email}</p>
             </div>
 
-            {canEdit ? (
-              <Select
-                value={roleIdByName.get(user.roleNames[0] ?? "") ?? ""}
-                onValueChange={(roleId) => roleId && onRoleChange(user, roleId)}
-                disabled={isPending}
-              >
-                <SelectTrigger className="w-36 shrink-0">
-                  <SelectValue placeholder="No role" />
-                </SelectTrigger>
-                <SelectContent>
-                  {roles.map((role) => (
-                    <SelectItem key={role.id} value={role.id}>
-                      {role.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <p className="shrink-0 text-xs text-muted-foreground">{user.roleNames.join(", ") || "No role"}</p>
-            )}
+            <div className="flex flex-wrap items-center gap-2">
+              {canEdit ? (
+                <Select
+                  items={roles.map((role) => ({ value: role.id, label: role.name }))}
+                  value={roleIdByName.get(user.roleNames[0] ?? "") ?? ""}
+                  onValueChange={(roleId) => roleId && onRoleChange(user, roleId)}
+                  disabled={isPending}
+                >
+                  <SelectTrigger className="w-36 shrink-0">
+                    <SelectValue placeholder="No role" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {roles.map((role) => (
+                      <SelectItem key={role.id} value={role.id}>
+                        {role.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <p className="shrink-0 text-xs text-muted-foreground">{user.roleNames.join(", ") || "No role"}</p>
+              )}
 
-            {canEdit && !user.isCurrentUser && (
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={isPending}
-                onClick={() => onToggleActive(user)}
-              >
-                {user.status === "active" ? "Disable" : "Activate"}
-              </Button>
-            )}
+              {canCreate && user.status === "invited" && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={isPending}
+                  onClick={() => onResendInvite(user)}
+                >
+                  Resend invite
+                </Button>
+              )}
+
+              {canEdit && !user.isCurrentUser && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={isPending}
+                  onClick={() => onToggleActive(user)}
+                >
+                  {user.status === "active" ? "Disable" : "Activate"}
+                </Button>
+              )}
+            </div>
           </div>
         ))}
       </div>
