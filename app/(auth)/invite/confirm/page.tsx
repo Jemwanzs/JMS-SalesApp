@@ -13,8 +13,9 @@ export const metadata: Metadata = {
 /**
  * Landing page after an invited user clicks their invite email link
  * (features/users/actions/invite-user.ts sets redirectTo to
- * /api/auth/callback?next=/invite/confirm, which exchanges the link for
- * a real session before redirecting here). Lives outside (tenant)/t/
+ * /auth/callback?next=/invite/confirm, which establishes a real session
+ * before redirecting here -- see that page's own header comment for why
+ * it has to be a client page). Lives outside (tenant)/t/
  * [tenantSlug] on purpose -- that layout redirects anyone without an
  * ACTIVE membership to /no-tenant, and this user's membership is still
  * 'invited' until they complete this form.

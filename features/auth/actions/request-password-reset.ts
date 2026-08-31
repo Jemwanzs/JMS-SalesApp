@@ -48,7 +48,7 @@ export async function requestPasswordResetAction(
   try {
     await authService.requestPasswordReset(
       parsed.data.email,
-      `${appUrl}/api/auth/callback?next=/reset-password/confirm`
+      `${appUrl}/auth/callback?next=/reset-password/confirm`
     );
   } catch {
     // Deliberately swallowed: always report success regardless of

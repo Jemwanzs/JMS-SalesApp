@@ -39,7 +39,7 @@ export async function resendInviteAction(
     await new UserService(serviceRole).resendInvite(
       tenantId,
       membershipId,
-      `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/api/auth/callback?next=/invite/confirm`
+      `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/auth/callback?next=/invite/confirm`
     );
 
     await new AuditService(serviceRole)

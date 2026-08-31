@@ -82,7 +82,7 @@ export class AuthService {
       email: input.email,
       password: input.password,
       options: {
-        emailRedirectTo: `${appUrl}/api/auth/callback?next=/login`,
+        emailRedirectTo: `${appUrl}/auth/callback?next=/login`,
         data: {
           full_name: `${input.firstName} ${input.lastName}`.trim(),
           first_name: input.firstName,

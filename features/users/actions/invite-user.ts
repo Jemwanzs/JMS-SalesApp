@@ -63,7 +63,7 @@ export async function inviteUserAction(
       fullName: parsed.data.fullName,
       roleId: parsed.data.roleId,
       invitedBy: user.id,
-      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/api/auth/callback?next=/invite/confirm`,
+      redirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/auth/callback?next=/invite/confirm`,
     });
 
     await new AuditService(serviceRole)
