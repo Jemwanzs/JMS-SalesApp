@@ -39,6 +39,18 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # `LayoutProps`/`PageProps` etc. are Next.js-generated global types
+      # that only exist once something has generated .next/types/ --
+      # `next build` does this itself internally (which is why it always
+      # succeeded here), but the standalone `tsc --noEmit` below has no
+      # such step and fails on a truly fresh checkout with "Cannot find
+      # name 'LayoutProps'" for app/layout.tsx's own LayoutProps<"/">
+      # usage. `next typegen` generates just the types, without a full
+      # build, so Type check can run standalone (and first, for fast
+      # feedback) instead of needing Build to happen before it.
+      - name: Generate Next.js types
+        run: npx next typegen
+
       - name: Type check
         run: npm run typecheck
 
