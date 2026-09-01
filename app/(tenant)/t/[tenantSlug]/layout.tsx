@@ -16,6 +16,7 @@ import { getMyPermissions } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { getCurrentUser } from "@/lib/supabase/current-user";
+import { resolveActiveLocationId } from "@/lib/tenant/resolve-active-location";
 import { getTenantBySlug } from "@/lib/tenant/resolve-tenant-by-slug";
 import { AnniversaryService } from "@/services/AnniversaryService";
 import { BillingService } from "@/services/BillingService";
@@ -142,7 +143,18 @@ export default async function TenantLayout({
   // in app/layout.tsx -- see that file's own header comment) since this
   // is the first per-request-dynamic layout a signed-in user's requests
   // actually reach.
-  const [permissions, activeWish, subscription, inventoryEntitlement, preferredFont, colorPalette, locale, messages] = await Promise.all([
+  const [
+    permissions,
+    activeWish,
+    subscription,
+    inventoryEntitlement,
+    preferredFont,
+    colorPalette,
+    locale,
+    messages,
+    activeLocationId,
+    hasAnyLocation,
+  ] = await Promise.all([
     getMyPermissions(tenant.id),
     new AnniversaryService(supabase).getActiveWish(tenant.id).catch(() => null),
     new BillingService(createServiceRoleClient()).getSubscription(tenant.id).catch(() => null),
@@ -157,8 +169,30 @@ export default async function TenantLayout({
     // deliberately unused here).
     getLocale(),
     getMessages(),
+    // Multi-Branch User Access Phase 5 follow-up: resolved here (not
+    // just sales/page.tsx) so the self-heal below protects every
+    // dashboard route -- analytics/sales-history/reports/stock, not
+    // only the golden path. Both run unconditionally alongside
+    // everything else above (cheap, indexed) rather than only after
+    // discovering they're needed, to keep this one Promise.all instead
+    // of a second sequential round trip.
+    resolveActiveLocationId(supabase, tenant.id),
+    supabase.from("locations").select("id", { count: "exact", head: true }).eq("tenant_id", tenant.id).then(({ count }) => !!count),
   ]);
   const isRtl = RTL_LOCALES.has(locale as SupportedLocale);
+
+  // A real member with no active_branch_sessions row for THIS session
+  // (a session that authenticated before Phase 4/5 shipped -- see
+  // migration 0051's own header comment) gets sent through
+  // /select-branch to self-heal, same redirect sales/page.tsx already
+  // does defensively for itself. Skipped while the tenant has no
+  // location at all yet (onboarding still pending -- nothing to
+  // resolve) and for impersonation (Support has no branch assignment
+  // to resolve here at all; migration 0051's RLS bypass is what keeps
+  // it working instead).
+  if (isRealMember && hasAnyLocation && !activeLocationId) {
+    redirect("/select-branch");
+  }
 
   // Product Enhancements (Subscription Due / Overdue Read-Only Mode):
   // "Invited employees and ordinary users should never see subscription,
