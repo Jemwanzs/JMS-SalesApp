@@ -87,15 +87,25 @@ export class UserService {
     if (existingProfile) {
       profileId = existingProfile.id;
 
-      const { data: existingMembership } = await this.supabase
+      // Multi-Branch User Access Phase 1: one profile belongs to at most
+      // ONE tenant at a time (migration 0049 enforces this at the DB
+      // level too -- this check exists so a real, specific error surfaces
+      // here instead of a raw unique-constraint violation on insert
+      // below). Checked across ALL tenants, not just this one, so
+      // inviting someone who's a member of a DIFFERENT business is
+      // rejected with its own clear message rather than silently
+      // attempting the insert and failing.
+      const { data: existingMemberships } = await this.supabase
         .from("tenant_memberships")
-        .select("id")
-        .eq("tenant_id", input.tenantId)
-        .eq("profile_id", profileId)
-        .maybeSingle();
+        .select("tenant_id")
+        .eq("profile_id", profileId);
 
-      if (existingMembership) {
+      const sameTenant = existingMemberships?.some((m) => m.tenant_id === input.tenantId);
+      if (sameTenant) {
         throw new Error("This person is already a member of this business");
+      }
+      if (existingMemberships && existingMemberships.length > 0) {
+        throw new Error("This email is already associated with another business account");
       }
     } else {
       const { data: created, error: inviteError } = await this.supabase.auth.admin.inviteUserByEmail(
