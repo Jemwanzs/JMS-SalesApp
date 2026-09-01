@@ -13,7 +13,7 @@ import { ProductService } from "@/services/ProductService";
 import { TenantService } from "@/services/TenantService";
 import { LOCALE_BCP47, type SupportedLocale } from "@/lib/i18n/config";
 import { can } from "@/lib/permissions/can";
-import { todayString, trailingDaysRange } from "@/lib/utils/date-ranges";
+import { resolvePreset, todayString, trailingDaysRange } from "@/lib/utils/date-ranges";
 import { rankProducts } from "@/lib/utils/product-ranking";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
@@ -212,20 +212,26 @@ async function SalesCaptureBody({
   let rankedProducts: ReturnType<typeof rankProducts> = products.map((p) => ({
     ...p,
     tier: null,
-    thirtyDayRevenue: 0,
+    rankingRevenue: 0,
   }));
   let todayRevenue = new Map<string, number>();
 
   if (rankingEnabled || showDailyVolume) {
     const today = todayString(timezone);
-    const { windowRevenue, todayRevenue: todayMap } = await new AnalyticsService(supabase).getProductRevenueTotals(
+    const yesterday = resolvePreset("yesterday", timezone).from;
+    const { todayRevenue: todayMap, yesterdayRevenue } = await new AnalyticsService(supabase).getProductRevenueTotals(
       tenantId,
       trailingDaysRange(30, timezone),
-      today
+      today,
+      yesterday
     );
     todayRevenue = todayMap;
     if (rankingEnabled) {
-      rankedProducts = rankProducts(products, windowRevenue);
+      // Today's tally so far; nothing recorded yet today falls back to
+      // yesterday's, so the leaderboard isn't empty the moment the first
+      // sale of the day hasn't happened yet -- see rankProducts' own
+      // header comment.
+      rankedProducts = rankProducts(products, todayMap.size > 0 ? todayMap : yesterdayRevenue);
     }
   }
 

@@ -384,14 +384,21 @@ export class AnalyticsService {
    * NOT permission-gated -- the Capture Sales landing page shows product-
    * performance ranking (Gold/Silver/Bronze) to every user who can record
    * a sale, regardless of whether they hold analytics.products. One query
-   * pass covers both windows since "today" is always a subset of the
-   * wider window passed in.
+   * pass covers all three windows since both "today" and "yesterday" are
+   * always subsets of the wider window passed in.
+   *
+   * windowRevenue itself is no longer what ranking is based on (see
+   * rankProducts' own header comment for why: today's tally, falling
+   * back to yesterday's when nothing's been recorded yet today) -- kept
+   * here anyway since it's still a real, useful trailing-window figure
+   * and costs nothing extra to compute from the same query.
    */
   async getProductRevenueTotals(
     tenantId: string,
     windowRange: DateRangeInput,
-    todayDate: string
-  ): Promise<{ windowRevenue: Map<string, number>; todayRevenue: Map<string, number> }> {
+    todayDate: string,
+    yesterdayDate: string
+  ): Promise<{ windowRevenue: Map<string, number>; todayRevenue: Map<string, number>; yesterdayRevenue: Map<string, number> }> {
     const systemProductId = await this.getSystemProductId(tenantId);
 
     let query = this.supabase
@@ -419,15 +426,18 @@ export class AnalyticsService {
 
     const windowRevenue = new Map<string, number>();
     const todayRevenue = new Map<string, number>();
+    const yesterdayRevenue = new Map<string, number>();
 
     for (const sale of data ?? []) {
       const amount = Number(sale.actual_amount);
       windowRevenue.set(sale.product_id, (windowRevenue.get(sale.product_id) ?? 0) + amount);
       if (sale.sale_date === todayDate) {
         todayRevenue.set(sale.product_id, (todayRevenue.get(sale.product_id) ?? 0) + amount);
+      } else if (sale.sale_date === yesterdayDate) {
+        yesterdayRevenue.set(sale.product_id, (yesterdayRevenue.get(sale.product_id) ?? 0) + amount);
       }
     }
 
-    return { windowRevenue, todayRevenue };
+    return { windowRevenue, todayRevenue, yesterdayRevenue };
   }
 }

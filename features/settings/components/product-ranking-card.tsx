@@ -12,8 +12,12 @@ import { Switch } from "@/components/ui/switch";
 
 /**
  * Three independent toggles for the Capture Sales landing page (spec
- * item 5, plus a later addition): Gold/Silver/Bronze ranking is
- * trailing-30-day revenue, tenant-wide; "today's sales amount" is a
+ * item 5, plus a later addition): Gold/Silver/Bronze ranking is today's
+ * revenue so far, tenant-wide, falling back to yesterday's whenever
+ * nothing's been recorded yet today (see lib/utils/product-ranking.ts's
+ * own header comment) -- was a flat trailing-30-day window until an
+ * explicit request to make it reflect "what's selling right now"
+ * instead of a month-long average. "today's sales amount" is a
  * separate, always-resets-daily figure, default OFF per the explicit
  * "don't show the day's sales amounts by default" requirement; "product
  * price" governs the expected-price tag under each product's name on
@@ -93,7 +97,8 @@ export function ProductRankingCard({
       <CardContent className="space-y-4">
         <div className="flex items-center justify-between gap-3">
           <Label htmlFor="ranking-toggle" className="font-normal text-muted-foreground">
-            Automatically rank products (Gold/Silver/Bronze) by sales over the last 30 days
+            Automatically rank products (Gold/Silver/Bronze) by today&rsquo;s sales so far, or yesterday&rsquo;s if
+            nothing&rsquo;s been recorded yet today
           </Label>
           <Switch
             id="ranking-toggle"
