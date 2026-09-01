@@ -25,7 +25,7 @@ export function OpenBusinessDayButton({
   }
 
   return (
-    <Button onClick={onOpen} disabled={isPending} className="w-full">
+    <Button data-tour-id="tour-open-day-button" onClick={onOpen} disabled={isPending} className="w-full">
       {isPending ? t("opening") : t("openBusinessDay")}
     </Button>
   );

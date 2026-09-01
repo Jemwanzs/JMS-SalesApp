@@ -199,5 +199,32 @@
     "correctionTypeCorrect": "Correction",
     "correctionTypeReverse": "Inversion",
     "quotedReason": "« {reason} »"
+  },
+
+  "Tour": {
+    "next": "Suivant",
+    "back": "Précédent",
+    "skip": "Passer",
+    "finish": "Terminer",
+    "takeMeThere": "M'y emmener",
+    "stepOf": "Étape {current} sur {total}",
+    "welcomeTitle": "Commençons",
+    "welcomeBody": "Un rapide tour de l'essentiel — environ deux minutes.",
+    "businessTitle": "Configurez votre entreprise",
+    "businessBody": "Mettez à jour le nom, la devise et le fuseau horaire de votre entreprise ici.",
+    "branchTitle": "Ajouter une succursale",
+    "branchBody": "Si votre entreprise opère depuis plusieurs sites, ajoutez vos autres succursales ici — passez cette étape si vous n'en avez qu'une seule.",
+    "productsTitle": "Ajouter un produit",
+    "productsBody": "Ajoutez votre premier produit pour que votre équipe puisse commencer à le vendre.",
+    "saleTitle": "Enregistrez votre première vente",
+    "saleBody": "Ouvrez la journée commerciale si ce n'est pas déjà fait, puis appuyez sur un produit pour enregistrer une vente.",
+    "stockTitle": "Suivez le stock",
+    "stockBody": "Surveillez les niveaux de stock et faites vos rapprochements ici.",
+    "analyticsTitle": "Consultez les Analyses",
+    "analyticsBody": "Découvrez la performance de l'entreprise — meilleurs produits, meilleurs vendeurs et tendances.",
+    "reportsTitle": "Consultez les Rapports",
+    "reportsBody": "Les résumés quotidiens et les rapports de correction se trouvent ici.",
+    "finishTitle": "Vous êtes prêt !",
+    "finishBody": "Relancez cette visite à tout moment depuis Plus → Aide & Support."
   }
 }

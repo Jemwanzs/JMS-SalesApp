@@ -199,5 +199,32 @@
     "correctionTypeCorrect": "Correction",
     "correctionTypeReverse": "Reversal",
     "quotedReason": "“{reason}”"
+  },
+
+  "Tour": {
+    "next": "Next",
+    "back": "Back",
+    "skip": "Skip",
+    "finish": "Finish",
+    "takeMeThere": "Take me there",
+    "stepOf": "Step {current} of {total}",
+    "welcomeTitle": "Let's get you started",
+    "welcomeBody": "A quick walkthrough of the essentials — this takes about two minutes.",
+    "businessTitle": "Configure your business",
+    "businessBody": "Update your business name, currency, and timezone here.",
+    "branchTitle": "Add a branch",
+    "branchBody": "If your business operates from more than one location, add your other branches here — skip this if you only have one.",
+    "productsTitle": "Add a product",
+    "productsBody": "Add your first product so your team can start selling it.",
+    "saleTitle": "Record your first sale",
+    "saleBody": "Open the business day if it isn't already, then tap a product to record a sale.",
+    "stockTitle": "Track stock",
+    "stockBody": "Keep an eye on stock levels and reconcile counts here.",
+    "analyticsTitle": "View Analytics",
+    "analyticsBody": "See how the business is performing — top products, top sellers, and trends.",
+    "reportsTitle": "View Reports",
+    "reportsBody": "Daily summaries and correction reports live here.",
+    "finishTitle": "You're all set!",
+    "finishBody": "Replay this tour anytime from More → Help & Support."
   }
 }

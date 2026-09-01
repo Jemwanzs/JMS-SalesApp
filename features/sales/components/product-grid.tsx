@@ -114,9 +114,10 @@ export function ProductGrid({
       )}
 
       <div className="divide-y">
-        {visibleProducts.map((product) => (
+        {visibleProducts.map((product, index) => (
           <div
             key={product.id}
+            data-tour-id={index === 0 ? "record-sale-target" : undefined}
             role="button"
             tabIndex={0}
             onClick={() => setSelected(product)}

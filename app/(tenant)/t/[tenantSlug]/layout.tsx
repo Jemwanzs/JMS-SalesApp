@@ -7,7 +7,9 @@ import { AdminBypassToast } from "@/components/shared/admin-bypass-toast";
 import { ImpersonationBanner } from "@/components/shared/impersonation-banner";
 import { Logo } from "@/components/shared/logo";
 import { SubscriptionBanner } from "@/components/shared/subscription-banner";
+import { TourOverlay } from "@/features/onboarding/components/tour-overlay";
 import { TenantProvider } from "@/hooks/tenant-context";
+import { TourProvider } from "@/hooks/tour-context";
 import { resolveColorPalette } from "@/lib/branding/color-palette";
 import { resolvePreferredFont } from "@/lib/branding/preferred-font";
 import { RTL_LOCALES, type SupportedLocale } from "@/lib/i18n/config";
@@ -17,6 +19,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import { resolveActiveLocationId } from "@/lib/tenant/resolve-active-location";
+import { resolveTourCompleted } from "@/lib/tenant/resolve-tour-state";
 import { getTenantBySlug } from "@/lib/tenant/resolve-tenant-by-slug";
 import { AnniversaryService } from "@/services/AnniversaryService";
 import { BillingService } from "@/services/BillingService";
@@ -154,6 +157,7 @@ export default async function TenantLayout({
     messages,
     activeLocationId,
     hasAnyLocation,
+    tourCompletedAt,
   ] = await Promise.all([
     getMyPermissions(tenant.id),
     new AnniversaryService(supabase).getActiveWish(tenant.id).catch(() => null),
@@ -178,7 +182,17 @@ export default async function TenantLayout({
     // of a second sequential round trip.
     resolveActiveLocationId(supabase, tenant.id),
     supabase.from("locations").select("id", { count: "exact", head: true }).eq("tenant_id", tenant.id).then(({ count }) => !!count),
+    // Guided Onboarding Tour: whether to auto-launch it. Resolved
+    // unconditionally alongside everything else above -- cheap, and
+    // keeps this one Promise.all instead of a second round trip.
+    resolveTourCompleted(supabase, user.id),
   ]);
+
+  // Never auto-launches for impersonation (Support isn't a new user)
+  // or while onboarding is still pending (nothing to tour yet) --
+  // reuses isRealMember/hasAnyLocation, already resolved above for the
+  // /select-branch self-heal check.
+  const tourCompleted = !isRealMember || !hasAnyLocation || tourCompletedAt;
   const isRtl = RTL_LOCALES.has(locale as SupportedLocale);
 
   // A real member with no active_branch_sessions row for THIS session
@@ -288,7 +302,12 @@ export default async function TenantLayout({
                 {activeWish.message}
               </div>
             )}
-            {children}
+            <Suspense fallback={children}>
+              <TourProvider tenantSlug={tenant.slug} tourCompleted={tourCompleted}>
+                {children}
+                <TourOverlay />
+              </TourProvider>
+            </Suspense>
           </NextIntlClientProvider>
         </div>
       </div>

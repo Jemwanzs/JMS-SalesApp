@@ -87,7 +87,7 @@ export function BusinessProfileForm({
   }
 
   return (
-    <Card>
+    <Card data-tour-id="workspace-business-profile">
       <CardHeader>
         <CardTitle>Business profile</CardTitle>
       </CardHeader>

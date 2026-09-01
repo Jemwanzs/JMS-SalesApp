@@ -199,5 +199,32 @@
     "correctionTypeCorrect": "Marekebisho",
     "correctionTypeReverse": "Kurudisha Nyuma",
     "quotedReason": "“{reason}”"
+  },
+
+  "Tour": {
+    "next": "Ifuatayo",
+    "back": "Rudi",
+    "skip": "Ruka",
+    "finish": "Maliza",
+    "takeMeThere": "Nipeleke huko",
+    "stepOf": "Hatua {current} kati ya {total}",
+    "welcomeTitle": "Hebu tuanze",
+    "welcomeBody": "Ziara fupi ya mambo muhimu — hii inachukua kama dakika mbili.",
+    "businessTitle": "Sanidi biashara yako",
+    "businessBody": "Sasisha jina la biashara yako, sarafu, na saa za eneo hapa.",
+    "branchTitle": "Ongeza tawi",
+    "branchBody": "Ikiwa biashara yako inafanya kazi kutoka maeneo zaidi ya moja, ongeza matawi yako mengine hapa — ruka hatua hii kama una tawi moja tu.",
+    "productsTitle": "Ongeza bidhaa",
+    "productsBody": "Ongeza bidhaa yako ya kwanza ili timu yako ianze kuiuza.",
+    "saleTitle": "Rekodi mauzo yako ya kwanza",
+    "saleBody": "Fungua siku ya biashara kama bado haijafunguliwa, kisha gusa bidhaa kurekodi mauzo.",
+    "stockTitle": "Fuatilia hisa",
+    "stockBody": "Fuatilia viwango vya hisa na fanya upatanisho hapa.",
+    "analyticsTitle": "Angalia Uchambuzi",
+    "analyticsBody": "Ona jinsi biashara inavyofanya kazi — bidhaa bora, wauzaji bora, na mienendo.",
+    "reportsTitle": "Angalia Ripoti",
+    "reportsBody": "Muhtasari wa kila siku na ripoti za marekebisho ziko hapa.",
+    "finishTitle": "Uko tayari!",
+    "finishBody": "Rudia ziara hii wakati wowote kutoka Zaidi → Msaada na Usaidizi."
   }
 }

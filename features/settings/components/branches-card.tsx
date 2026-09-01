@@ -104,7 +104,7 @@ export function BranchesCard({
           tenantId={tenantId}
           tenantSlug={tenantSlug}
           trigger={
-            <Button variant="outline" className="w-full">
+            <Button variant="outline" className="w-full" data-tour-id="add-branch-button">
               <Plus className="h-4 w-4" />
               Add branch
             </Button>

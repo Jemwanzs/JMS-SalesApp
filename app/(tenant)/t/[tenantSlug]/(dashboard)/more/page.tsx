@@ -10,6 +10,7 @@ import {
   Settings,
   ShieldCheck,
   Sliders,
+  Sparkles,
   Store,
   Upload,
   UserCog,
@@ -84,6 +85,7 @@ export default async function MorePage({
     { label: "My Preferences", icon: Sliders, href: "preferences" },
     { label: "Security", icon: Lock, href: "security" },
     { label: "Help & Support", icon: HelpCircle, absoluteHref: `/support?from=/t/${tenantSlug}/more` },
+    { label: "Restart Product Tour", icon: Sparkles, absoluteHref: `/t/${tenantSlug}/sales?restartTour=1` },
   ];
 
   const adminItems: { label: string; icon: LucideIcon; href?: string; absoluteHref?: string }[] = [

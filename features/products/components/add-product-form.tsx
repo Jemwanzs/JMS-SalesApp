@@ -79,7 +79,7 @@ export function AddProductForm({
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
+      <form data-tour-id="add-product-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
         <ProductImageUpload
           tenantId={tenantId}
           productId={productId}

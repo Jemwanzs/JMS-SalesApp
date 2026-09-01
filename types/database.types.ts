@@ -101,6 +101,7 @@ export interface Database {
           default_locale: string;
           preferred_font: string | null;
           color_palette: string | null;
+          tour_completed_at: string | null;
           created_at: string;
           updated_at: string;
         };

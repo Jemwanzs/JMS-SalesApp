@@ -4,13 +4,20 @@ import { Suspense } from "react";
 import { Headset, ScrollText, Shield } from "lucide-react";
 
 import { BackLinkSmart } from "@/components/shared/back-link-smart";
+import { RestartTourButton } from "@/features/support/components/restart-tour-button";
 import { SupportNavCard } from "@/features/support/components/support-nav-card";
 
 export const metadata: Metadata = {
   title: "Support | JMS Sales App",
 };
 
-export default function SupportPage() {
+export default async function SupportPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ from?: string }>;
+}) {
+  const { from } = await searchParams;
+
   return (
     <article className="space-y-6 text-sm leading-relaxed text-foreground">
       <Suspense fallback={null}>
@@ -61,14 +68,17 @@ export default function SupportPage() {
           The full User Guide covers every part of the app — signing up, recording sales, inviting your team, reports and
           analytics, billing, and the optional Inventory module — in one downloadable PDF.
         </p>
-        <a
-          href="/docs/User-Guide.pdf"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-block rounded-lg border px-4 py-2 text-sm font-medium hover:bg-muted"
-        >
-          Download the User Guide (PDF)
-        </a>
+        <div className="flex flex-wrap gap-2">
+          <a
+            href="/docs/User-Guide.pdf"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block rounded-lg border px-4 py-2 text-sm font-medium hover:bg-muted"
+          >
+            Download the User Guide (PDF)
+          </a>
+          <RestartTourButton from={from} />
+        </div>
       </section>
 
       <section className="space-y-2">
