@@ -3,12 +3,14 @@ import { BackLink } from "@/components/shared/back-link";
 import { redirect } from "next/navigation";
 
 import { AnniversaryWishCard } from "@/features/settings/components/anniversary-wish-card";
+import { BranchesCard } from "@/features/settings/components/branches-card";
 import { InventoryModuleCard } from "@/features/settings/components/inventory-module-card";
 import { ProductRankingCard } from "@/features/settings/components/product-ranking-card";
 import { QuantityFieldCard } from "@/features/settings/components/quantity-field-card";
 import { SaleNumberTemplateCard } from "@/features/settings/components/sale-number-template-card";
 import { AnniversaryService } from "@/services/AnniversaryService";
 import { BillingService } from "@/services/BillingService";
+import { LocationService } from "@/services/LocationService";
 import { TenantService } from "@/services/TenantService";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
@@ -57,6 +59,7 @@ export default async function SettingsPage({
     currentMode,
     saleNumberTemplate,
     primaryLocation,
+    locations,
     productRankingEnabled,
     showDailySalesVolume,
     showProductPrice,
@@ -69,6 +72,7 @@ export default async function SettingsPage({
     new AnniversaryService(supabase).getWishMode(tenantId),
     tenantService.getSetting<string>(tenantId, "sale_number_template"),
     supabase.from("locations").select("code").eq("tenant_id", tenantId).order("created_at", { ascending: true }).limit(1).maybeSingle(),
+    new LocationService(supabase).listLocations(tenantId),
     tenantService.getSetting<boolean>(tenantId, "product_ranking_enabled"),
     tenantService.getSetting<boolean>(tenantId, "show_daily_sales_volume"),
     tenantService.getSetting<boolean>(tenantId, "show_product_price_on_landing"),
@@ -103,6 +107,7 @@ export default async function SettingsPage({
     <div className="flex flex-1 flex-col gap-4 p-6">
       <BackLink href={`/t/${tenantSlug}/more`} label="More" />
       <h1 className="text-xl font-semibold">Settings</h1>
+      <BranchesCard tenantId={tenantId} tenantSlug={tenantSlug} initialLocations={locations} />
       <SaleNumberTemplateCard
         tenantId={tenantId}
         tenantSlug={tenantSlug}
