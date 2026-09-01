@@ -5,6 +5,7 @@ import { UserPlus } from "lucide-react";
 import { toast } from "sonner";
 
 import { inviteUserAction } from "@/features/users/actions/invite-user";
+import { BranchAssignmentField } from "@/features/users/components/branch-assignment-field";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -17,23 +18,27 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import type { LocationSummary } from "@/services/LocationService";
 import type { TenantUserSummary } from "@/services/UserService";
 
 export function InviteUserDialog({
   tenantId,
   tenantSlug,
   roles,
+  locations,
   onInvited,
 }: {
   tenantId: string;
   tenantSlug: string;
   roles: { id: string; name: string }[];
+  locations: LocationSummary[];
   onInvited: (user: TenantUserSummary) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
   const [roleId, setRoleId] = useState("");
+  const [locationIds, setLocationIds] = useState<string[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -45,6 +50,9 @@ export function InviteUserDialog({
     formData.set("email", email);
     formData.set("fullName", fullName);
     formData.set("roleId", roleId);
+    for (const id of locationIds ?? []) {
+      formData.append("locationIds", id);
+    }
 
     startTransition(async () => {
       const result = await inviteUserAction(tenantId, tenantSlug, {}, formData);
@@ -68,10 +76,12 @@ export function InviteUserDialog({
           status: "invited",
           isCurrentUser: false,
           roleNames: [roles.find((r) => r.id === roleId)?.name ?? ""],
+          locationIds,
         });
         setEmail("");
         setFullName("");
         setRoleId("");
+        setLocationIds(null);
       }
     });
   }
@@ -124,6 +134,9 @@ export function InviteUserDialog({
               </SelectContent>
             </Select>
           </div>
+          {locations.length > 1 && (
+            <BranchAssignmentField locations={locations} value={locationIds} onChange={setLocationIds} />
+          )}
           {error && <p className="text-sm text-destructive">{error}</p>}
           <DialogFooter>
             <Button type="submit" disabled={isPending || !roleId}>

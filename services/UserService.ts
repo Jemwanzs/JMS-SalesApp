@@ -42,6 +42,15 @@ export interface TenantUserSummary {
   status: MembershipStatus;
   isCurrentUser: boolean;
   roleNames: string[];
+  /**
+   * Multi-Branch User Access Phase 3. `null` = tenant-wide (the
+   * user_role_assignments row(s) have location_id = null), interpreted
+   * as "every branch the tenant currently has" -- what every existing
+   * user already is, so a single-branch tenant sees no change. A
+   * non-null array is the specific branch ids this person is assigned
+   * to.
+   */
+  locationIds: string[] | null;
 }
 
 export interface InviteUserInput {
@@ -51,6 +60,8 @@ export interface InviteUserInput {
   roleId: string;
   invitedBy: string;
   redirectTo: string;
+  /** Omit (or leave empty) for tenant-wide (every current branch). */
+  locationIds?: string[];
 }
 
 export interface InviteUserResult {
@@ -135,12 +146,22 @@ export class UserService {
       throw new Error(`UserService.inviteUser: ${membershipError?.message}`);
     }
 
-    const { error: assignError } = await this.supabase.from("user_role_assignments").insert({
-      tenant_id: input.tenantId,
-      tenant_membership_id: membership.id,
-      role_id: input.roleId,
-      assigned_by: input.invitedBy,
-    });
+    // Multi-Branch User Access Phase 3: one row per assigned branch
+    // (user_role_assignments.location_id -- designed for exactly this
+    // in migration 0001, never previously set by any code path). No
+    // locationIds given -> the one, tenant-wide row every user has
+    // always gotten, interpreted as "every current branch."
+    const assignmentRows = (input.locationIds && input.locationIds.length > 0 ? input.locationIds : [null]).map(
+      (locationId) => ({
+        tenant_id: input.tenantId,
+        tenant_membership_id: membership.id,
+        role_id: input.roleId,
+        assigned_by: input.invitedBy,
+        location_id: locationId,
+      })
+    );
+
+    const { error: assignError } = await this.supabase.from("user_role_assignments").insert(assignmentRows);
 
     if (assignError) {
       throw new Error(`UserService.inviteUser: failed to assign role: ${assignError.message}`);
@@ -343,15 +364,18 @@ export class UserService {
   /**
    * Full replace of this membership's role assignments, same "whole
    * desired state, not a diff" convention as RoleService.
-   * setRolePermissions -- a member holds exactly one role in this UI
-   * for now (the schema supports multiple/location-scoped assignments,
-   * not exposed here, same deliberate v1 scoping as RoleService).
+   * setRolePermissions -- a member holds exactly one role in this UI,
+   * optionally scoped to one or more branches (Multi-Branch User
+   * Access Phase 3 -- one row per branch, same role_id each time; no
+   * locationIds given, or an empty array, means tenant-wide, every
+   * current branch, same as omitting it in inviteUser above).
    */
   async setUserRole(
     tenantId: string,
     membershipId: string,
     roleId: string,
-    assignedBy: string
+    assignedBy: string,
+    locationIds?: string[]
   ): Promise<void> {
     const { error: deleteError } = await this.supabase
       .from("user_role_assignments")
@@ -363,12 +387,15 @@ export class UserService {
       throw new Error(`UserService.setUserRole: ${deleteError.message}`);
     }
 
-    const { error: insertError } = await this.supabase.from("user_role_assignments").insert({
+    const assignmentRows = (locationIds && locationIds.length > 0 ? locationIds : [null]).map((locationId) => ({
       tenant_id: tenantId,
       tenant_membership_id: membershipId,
       role_id: roleId,
       assigned_by: assignedBy,
-    });
+      location_id: locationId,
+    }));
+
+    const { error: insertError } = await this.supabase.from("user_role_assignments").insert(assignmentRows);
 
     if (insertError) {
       throw new Error(`UserService.setUserRole: ${insertError.message}`);
@@ -396,7 +423,7 @@ export class UserService {
       this.supabase.from("profiles").select("id, full_name, email").in("id", profileIds),
       this.supabase
         .from("user_role_assignments")
-        .select("tenant_membership_id, role_id")
+        .select("tenant_membership_id, role_id, location_id")
         .in("tenant_membership_id", membershipIds),
     ]);
 
@@ -409,13 +436,32 @@ export class UserService {
     const roleNameById = new Map((roles ?? []).map((r) => [r.id, r.name]));
     const profileById = new Map((profiles ?? []).map((p) => [p.id, p]));
     const roleNamesByMembership = new Map<string, string[]>();
+    // Multi-Branch User Access Phase 3: a membership can now have
+    // several assignment rows (one per assigned branch, same role_id
+    // each) -- dedupe role names so a person assigned to 3 branches as
+    // Sales User shows "Sales User" once, not three times. Any row with
+    // location_id = null means tenant-wide (every current branch);
+    // setUserRole/inviteUser always write an all-null or all-specific
+    // set, never a mix, so finding one null row is enough to treat the
+    // whole membership as tenant-wide.
+    const locationIdsByMembership = new Map<string, string[] | null>();
     for (const a of assignments ?? []) {
       const name = roleNameById.get(a.role_id);
-      if (!name) continue;
-      roleNamesByMembership.set(a.tenant_membership_id, [
-        ...(roleNamesByMembership.get(a.tenant_membership_id) ?? []),
-        name,
-      ]);
+      if (name) {
+        const existingNames = roleNamesByMembership.get(a.tenant_membership_id) ?? [];
+        if (!existingNames.includes(name)) {
+          roleNamesByMembership.set(a.tenant_membership_id, [...existingNames, name]);
+        }
+      }
+
+      const existingLocations = locationIdsByMembership.get(a.tenant_membership_id);
+      if (existingLocations === null) {
+        // already tenant-wide, nothing to add
+      } else if (a.location_id === null) {
+        locationIdsByMembership.set(a.tenant_membership_id, null);
+      } else {
+        locationIdsByMembership.set(a.tenant_membership_id, [...(existingLocations ?? []), a.location_id]);
+      }
     }
 
     return memberships.map((m) => {
@@ -428,6 +474,7 @@ export class UserService {
         status: m.status,
         isCurrentUser: m.profile_id === currentUserId,
         roleNames: roleNamesByMembership.get(m.id) ?? [],
+        locationIds: locationIdsByMembership.get(m.id) ?? null,
       };
     });
   }

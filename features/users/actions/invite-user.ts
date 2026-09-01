@@ -24,10 +24,12 @@ export async function inviteUserAction(
   _prevState: InviteUserState,
   formData: FormData
 ): Promise<InviteUserState> {
+  const rawLocationIds = formData.getAll("locationIds").map(String);
   const parsed = inviteUserSchema.safeParse({
     email: formData.get("email"),
     fullName: formData.get("fullName"),
     roleId: formData.get("roleId"),
+    locationIds: rawLocationIds.length > 0 ? rawLocationIds : undefined,
   });
 
   if (!parsed.success) {
@@ -62,6 +64,7 @@ export async function inviteUserAction(
       email: parsed.data.email,
       fullName: parsed.data.fullName,
       roleId: parsed.data.roleId,
+      locationIds: parsed.data.locationIds,
       invitedBy: user.id,
       redirectTo: `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/auth/callback?next=/invite/confirm`,
     });

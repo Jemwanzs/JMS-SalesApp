@@ -3,6 +3,7 @@ import { BackLink } from "@/components/shared/back-link";
 import { redirect } from "next/navigation";
 
 import { UserList } from "@/features/users/components/user-list";
+import { LocationService } from "@/services/LocationService";
 import { RoleService } from "@/services/RoleService";
 import { UserService } from "@/services/UserService";
 import { can } from "@/lib/permissions/can";
@@ -43,10 +44,16 @@ export default async function UsersPage({
     redirect(`/t/${tenantSlug}/more`);
   }
 
-  const [users, roles] = await Promise.all([
+  const [users, roles, locations] = await Promise.all([
     new UserService(supabase).listUsers(tenantId, user!.id),
     new RoleService(supabase).listRoles(tenantId),
+    new LocationService(supabase).listLocations(tenantId),
   ]);
+  // Multi-Branch User Access Phase 3: only ACTIVE branches are
+  // assignable, and the whole branch-picking UI stays hidden for a
+  // single-branch tenant -- no reason to show a "which branch" choice
+  // when there's only ever been one answer.
+  const activeLocations = locations.filter((l) => l.status === "active");
 
   return (
     <div className="flex flex-1 flex-col p-6">
@@ -55,6 +62,7 @@ export default async function UsersPage({
       <UserList
         users={users}
         roles={roles.map((r) => ({ id: r.id, name: r.name }))}
+        locations={activeLocations}
         tenantId={tenantId}
         tenantSlug={tenantSlug}
         canCreate={canCreate}

@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { Pencil } from "lucide-react";
 import { toast } from "sonner";
 
+import { EditUserBranchesDialog } from "@/features/users/components/edit-user-branches-dialog";
 import { InviteUserDialog } from "@/features/users/components/invite-user-dialog";
 import { resendInviteAction } from "@/features/users/actions/resend-invite";
 import { setUserActiveAction } from "@/features/users/actions/set-user-active";
@@ -13,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import type { LocationSummary } from "@/services/LocationService";
 import type { TenantUserSummary } from "@/services/UserService";
 
 const STATUS_VARIANT: Record<TenantUserSummary["status"], "default" | "secondary" | "destructive"> = {
@@ -24,6 +26,7 @@ const STATUS_VARIANT: Record<TenantUserSummary["status"], "default" | "secondary
 export function UserList({
   users,
   roles,
+  locations,
   tenantId,
   tenantSlug,
   canCreate,
@@ -31,6 +34,7 @@ export function UserList({
 }: {
   users: TenantUserSummary[];
   roles: { id: string; name: string }[];
+  locations: LocationSummary[];
   tenantId: string;
   tenantSlug: string;
   canCreate: boolean;
@@ -105,7 +109,10 @@ export function UserList({
 
     startTransition(async () => {
       try {
-        await setUserRoleAction(tenantId, tenantSlug, user.membershipId, roleId);
+        // setUserRoleAction replaces the WHOLE assignment set -- pass
+        // this person's current branch assignment through unchanged, or
+        // a role-only edit would silently reset them to "all branches".
+        await setUserRoleAction(tenantId, tenantSlug, user.membershipId, roleId, user.locationIds ?? undefined);
         setItems((prev) =>
           prev.map((u) => (u.membershipId === user.membershipId ? { ...u, roleNames: [roleName] } : u))
         );
@@ -116,10 +123,20 @@ export function UserList({
     });
   }
 
+  function onBranchesSaved(user: TenantUserSummary, locationIds: string[] | null) {
+    setItems((prev) => prev.map((u) => (u.membershipId === user.membershipId ? { ...u, locationIds } : u)));
+  }
+
   return (
     <div className="space-y-4">
       {canCreate && (
-        <InviteUserDialog tenantId={tenantId} tenantSlug={tenantSlug} roles={roles} onInvited={onInvited} />
+        <InviteUserDialog
+          tenantId={tenantId}
+          tenantSlug={tenantSlug}
+          roles={roles}
+          locations={locations}
+          onInvited={onInvited}
+        />
       )}
 
       <div className="divide-y rounded-lg border">
@@ -191,6 +208,20 @@ export function UserList({
                 </Select>
               ) : (
                 <p className="shrink-0 text-xs text-muted-foreground">{user.roleNames.join(", ") || "No role"}</p>
+              )}
+
+              {canEdit && locations.length > 1 && (
+                <div className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+                  <span>{user.locationIds === null ? "All branches" : `${user.locationIds.length} branch(es)`}</span>
+                  <EditUserBranchesDialog
+                    tenantId={tenantId}
+                    tenantSlug={tenantSlug}
+                    user={user}
+                    currentRoleId={roleIdByName.get(user.roleNames[0] ?? "") ?? ""}
+                    locations={locations}
+                    onSaved={(locationIds) => onBranchesSaved(user, locationIds)}
+                  />
+                </div>
               )}
 
               {canCreate && user.status === "invited" && (

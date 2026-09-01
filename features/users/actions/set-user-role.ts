@@ -13,7 +13,8 @@ export async function setUserRoleAction(
   tenantId: string,
   tenantSlug: string,
   membershipId: string,
-  roleId: string
+  roleId: string,
+  locationIds?: string[]
 ): Promise<void> {
   const supabase = await createClient();
   const {
@@ -34,7 +35,7 @@ export async function setUserRoleAction(
   // other. No change in who can actually reassign a role -- Tenant
   // Administrator holds both.
   await assertCan("roles.manage", { tenantId });
-  await userService.setUserRole(tenantId, membershipId, roleId, user.id);
+  await userService.setUserRole(tenantId, membershipId, roleId, user.id, locationIds);
 
   await new AuditService(createServiceRoleClient())
     .log({
@@ -43,7 +44,7 @@ export async function setUserRoleAction(
       action: AUDIT_ACTION.ROLE_CHANGED,
       entityType: "tenant_membership",
       entityId: membershipId,
-      newValues: { roleId },
+      newValues: { roleId, locationIds: locationIds ?? null },
     })
     .catch(() => {});
 
