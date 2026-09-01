@@ -11,6 +11,7 @@ import { AUDIT_ACTION } from "@/lib/audit/actions";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { resolveActiveTenant } from "@/lib/tenant/resolve-active-tenant";
+import { resolveUserBranches } from "@/lib/tenant/resolve-user-branches";
 import { firstIssuePerField } from "@/lib/utils/form-errors";
 import { loginSchema, type LoginInput } from "@/validations/auth";
 
@@ -275,6 +276,39 @@ export async function signInAction(
   }
 
   const bypassQuery = bypassNotice ? `?adminBypass=${bypassNotice}` : "";
+
+  // Multi-Branch User Access Phase 4. Skipped entirely while onboarding
+  // is still pending -- a tenant with no location yet has nothing to
+  // resolve, and needsOnboarding already routes to the wizard below.
+  // Deliberately NOT inside the best-effort try/catch above: a failed
+  // write here would silently land the user on /sales with every
+  // branch-scoped RLS policy failing closed (fails to "match nothing"
+  // -- Phase 5), which reads as a confusingly empty app, not an error.
+  // Better to surface a real failure than that.
+  if (!tenant.needsOnboarding) {
+    const branches = await resolveUserBranches(supabase, tenant.tenantId, userId);
+
+    if (branches.length > 1) {
+      redirect(`/select-branch${bypassQuery}`);
+    }
+
+    if (branches.length === 1) {
+      const { data: claims } = await supabase.auth.getClaims();
+      const sessionId = claims?.claims.session_id;
+      if (sessionId) {
+        await createServiceRoleClient()
+          .from("active_branch_sessions")
+          .upsert({ session_id: sessionId, profile_id: userId, tenant_id: tenant.tenantId, location_id: branches[0].id });
+      }
+    }
+    // branches.length === 0 -- no branch assignment at all (shouldn't
+    // happen in practice, see resolveUserBranches' own header comment)
+    // falls through to the ordinary redirect below rather than blocking
+    // sign-in outright; every branch-scoped policy will just fail
+    // closed until an admin fixes the assignment, same as any other
+    // missing-permission state elsewhere in this app.
+  }
+
   redirect(
     tenant.needsOnboarding
       ? `/t/${tenant.slug}/onboarding${bypassQuery}`

@@ -661,6 +661,23 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["sessions"]["Row"]>;
         Relationships: [];
       };
+      active_branch_sessions: {
+        Row: {
+          session_id: string;
+          profile_id: string;
+          tenant_id: string;
+          location_id: string;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["active_branch_sessions"]["Row"]> & {
+          session_id: string;
+          profile_id: string;
+          tenant_id: string;
+          location_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["active_branch_sessions"]["Row"]>;
+        Relationships: [];
+      };
       audit_logs: {
         Row: {
           id: string;

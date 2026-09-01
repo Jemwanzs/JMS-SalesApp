@@ -76,6 +76,14 @@ import type { Database } from "@/types/database.types";
  *     products import writes import_rows + products directly for the
  *     same "one bulk actor, not a per-row authenticated write" reason —
  *     see ImportService's own header comment and migration 0020
+ *   - features/auth/actions/sign-in.ts / select-branch.ts / sign-out.ts —
+ *     writing and deleting active_branch_sessions rows (Multi-Branch
+ *     User Access Phase 4). active_branch_sessions has RLS enabled with
+ *     a SELECT-only policy (migration 0050, same reasoning as sessions/
+ *     login_events above) — the row itself is what tells every other
+ *     table's location-scoped RLS policy which branch this session is
+ *     in, so it can't be gated behind that same lookup without a
+ *     circular dependency
  *
  * Every other read/write MUST go through lib/supabase/server.ts so RLS
  * stays the enforced boundary. Reaching for this file because "it's

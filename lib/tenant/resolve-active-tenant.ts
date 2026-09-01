@@ -19,12 +19,13 @@ export interface ActiveTenant {
 }
 
 /**
- * A user belongs to at most one tenant today (invitations/multi-tenant
- * membership switching is Phase 4b) -- resolve the first active
- * membership they have. Separate queries rather than embedded
- * PostgREST relationship selects, since the hand-written provisional
- * database types don't carry relationship metadata for that syntax to
- * type-check cleanly (see docs/20-development-progress.md).
+ * A user belongs to at most ONE tenant, enforced at the DB level since
+ * migration 0049 (tenant_memberships.profile_id is unique) -- `.limit(1)`
+ * here is a defensive habit, not a "just pick one of several" fallback
+ * anymore. Separate queries rather than embedded PostgREST relationship
+ * selects, since the hand-written provisional database types don't
+ * carry relationship metadata for that syntax to type-check cleanly
+ * (see docs/20-development-progress.md).
  */
 export async function resolveActiveTenant(
   supabase: SupabaseClient<Database>,
