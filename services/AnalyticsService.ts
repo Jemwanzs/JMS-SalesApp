@@ -384,21 +384,21 @@ export class AnalyticsService {
    * NOT permission-gated -- the Capture Sales landing page shows product-
    * performance ranking (Gold/Silver/Bronze) to every user who can record
    * a sale, regardless of whether they hold analytics.products. One query
-   * pass covers all three windows since both "today" and "yesterday" are
-   * always subsets of the wider window passed in.
+   * pass covers both windows since "today" is always a subset of the
+   * wider window passed in.
    *
    * windowRevenue itself is no longer what ranking is based on (see
-   * rankProducts' own header comment for why: today's tally, falling
-   * back to yesterday's when nothing's been recorded yet today) -- kept
-   * here anyway since it's still a real, useful trailing-window figure
-   * and costs nothing extra to compute from the same query.
+   * rankProducts' own header comment for why: today's tally, falling back
+   * to the most recent PRIOR day that actually has any recorded sales --
+   * see getMostRecentActiveSalesDate below) -- kept here anyway since
+   * it's still a real, useful trailing-window figure and costs nothing
+   * extra to compute from the same query.
    */
   async getProductRevenueTotals(
     tenantId: string,
     windowRange: DateRangeInput,
-    todayDate: string,
-    yesterdayDate: string
-  ): Promise<{ windowRevenue: Map<string, number>; todayRevenue: Map<string, number>; yesterdayRevenue: Map<string, number> }> {
+    todayDate: string
+  ): Promise<{ windowRevenue: Map<string, number>; todayRevenue: Map<string, number> }> {
     const systemProductId = await this.getSystemProductId(tenantId);
 
     let query = this.supabase
@@ -426,18 +426,46 @@ export class AnalyticsService {
 
     const windowRevenue = new Map<string, number>();
     const todayRevenue = new Map<string, number>();
-    const yesterdayRevenue = new Map<string, number>();
 
     for (const sale of data ?? []) {
       const amount = Number(sale.actual_amount);
       windowRevenue.set(sale.product_id, (windowRevenue.get(sale.product_id) ?? 0) + amount);
       if (sale.sale_date === todayDate) {
         todayRevenue.set(sale.product_id, (todayRevenue.get(sale.product_id) ?? 0) + amount);
-      } else if (sale.sale_date === yesterdayDate) {
-        yesterdayRevenue.set(sale.product_id, (yesterdayRevenue.get(sale.product_id) ?? 0) + amount);
       }
     }
 
-    return { windowRevenue, todayRevenue, yesterdayRevenue };
+    return { windowRevenue, todayRevenue };
+  }
+
+  /**
+   * The single most recent sale_date, strictly before `beforeDate`, that
+   * has at least one real (non-voided/corrected) sale -- tenant-wide,
+   * same not-permission-gated reasoning as getProductRevenueTotals above.
+   *
+   * Deliberately unbounded, not "yesterday, or give up": a business
+   * closed for several days (a public holiday run, a slow week) should
+   * still show its last REAL trading day's ranking today, not an empty
+   * leaderboard just because that day happens to be more than one day
+   * back. idx_sales_tenant_date (migration 0005) makes this a cheap,
+   * indexed lookup regardless of how far back it has to go.
+   */
+  async getMostRecentActiveSalesDate(tenantId: string, beforeDate: string): Promise<string | null> {
+    const { data, error } = await this.supabase
+      .from("sales")
+      .select("sale_date")
+      .eq("tenant_id", tenantId)
+      .lt("sale_date", beforeDate)
+      .neq("status", "voided")
+      .neq("status", "corrected")
+      .order("sale_date", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`AnalyticsService.getMostRecentActiveSalesDate: ${error.message}`);
+    }
+
+    return data?.sale_date ?? null;
   }
 }

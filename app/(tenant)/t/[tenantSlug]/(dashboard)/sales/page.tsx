@@ -13,7 +13,7 @@ import { ProductService } from "@/services/ProductService";
 import { TenantService } from "@/services/TenantService";
 import { LOCALE_BCP47, type SupportedLocale } from "@/lib/i18n/config";
 import { can } from "@/lib/permissions/can";
-import { resolvePreset, todayString, trailingDaysRange } from "@/lib/utils/date-ranges";
+import { todayString, trailingDaysRange } from "@/lib/utils/date-ranges";
 import { rankProducts } from "@/lib/utils/product-ranking";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
@@ -218,20 +218,36 @@ async function SalesCaptureBody({
 
   if (rankingEnabled || showDailyVolume) {
     const today = todayString(timezone);
-    const yesterday = resolvePreset("yesterday", timezone).from;
-    const { todayRevenue: todayMap, yesterdayRevenue } = await new AnalyticsService(supabase).getProductRevenueTotals(
+    const analyticsService = new AnalyticsService(supabase);
+    const { todayRevenue: todayMap } = await analyticsService.getProductRevenueTotals(
       tenantId,
       trailingDaysRange(30, timezone),
-      today,
-      yesterday
+      today
     );
     todayRevenue = todayMap;
     if (rankingEnabled) {
-      // Today's tally so far; nothing recorded yet today falls back to
-      // yesterday's, so the leaderboard isn't empty the moment the first
-      // sale of the day hasn't happened yet -- see rankProducts' own
-      // header comment.
-      rankedProducts = rankProducts(products, todayMap.size > 0 ? todayMap : yesterdayRevenue);
+      if (todayMap.size > 0) {
+        // Today's tally so far.
+        rankedProducts = rankProducts(products, todayMap);
+      } else {
+        // Nothing recorded yet today -- fall back to whichever PAST day
+        // most recently had any real sales, however long ago that was
+        // (could be yesterday, could be a week back after a closure).
+        // Not the 30-day window above: that's a fixed lookback, this
+        // needs to search back as far as it takes. See rankProducts' own
+        // header comment and getMostRecentActiveSalesDate's.
+        const lastActiveDate = await analyticsService.getMostRecentActiveSalesDate(tenantId, today);
+        if (lastActiveDate) {
+          const { todayRevenue: lastActiveDayRevenue } = await analyticsService.getProductRevenueTotals(
+            tenantId,
+            { from: lastActiveDate, to: lastActiveDate },
+            lastActiveDate
+          );
+          rankedProducts = rankProducts(products, lastActiveDayRevenue);
+        }
+        // else: this tenant has never recorded a sale -- rankedProducts
+        // stays at its no-tiers default, correctly.
+      }
     }
   }
 

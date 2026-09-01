@@ -11,8 +11,11 @@ const TIER_ORDER: ProductTier[] = ["gold", "silver", "bronze"];
  * revenue at all.
  *
  * `revenueTotals` is today's revenue so far, or -- when nothing's been
- * recorded yet today -- yesterday's, so the landing page never opens to
- * an empty leaderboard for the first sale of the day (the caller,
+ * recorded yet today -- whichever PAST day most recently had any real
+ * sales (however long ago that was; see AnalyticsService.
+ * getMostRecentActiveSalesDate), so the landing page never opens to an
+ * empty leaderboard, or one frozen on a stale ranking from before a
+ * multi-day gap, for the first sale of the day (the caller,
  * app/(tenant)/t/[tenantSlug]/(dashboard)/sales/page.tsx, decides which
  * one to pass in). Only called when a tenant has product_ranking_enabled
  * on; otherwise the sales page passes products through in their existing

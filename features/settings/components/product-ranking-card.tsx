@@ -13,11 +13,14 @@ import { Switch } from "@/components/ui/switch";
 /**
  * Three independent toggles for the Capture Sales landing page (spec
  * item 5, plus a later addition): Gold/Silver/Bronze ranking is today's
- * revenue so far, tenant-wide, falling back to yesterday's whenever
- * nothing's been recorded yet today (see lib/utils/product-ranking.ts's
- * own header comment) -- was a flat trailing-30-day window until an
- * explicit request to make it reflect "what's selling right now"
- * instead of a month-long average. "today's sales amount" is a
+ * revenue so far, tenant-wide, falling back to whichever past day most
+ * recently had any real sales when nothing's been recorded yet today --
+ * not always literally yesterday; a multi-day gap (closure, slow week)
+ * still shows the last real trading day's ranking rather than an empty
+ * or stale one (see lib/utils/product-ranking.ts's own header comment).
+ * Was a flat trailing-30-day window until an explicit request to make
+ * it reflect "what's selling right now" instead of a month-long
+ * average. "today's sales amount" is a
  * separate, always-resets-daily figure, default OFF per the explicit
  * "don't show the day's sales amounts by default" requirement; "product
  * price" governs the expected-price tag under each product's name on
@@ -97,8 +100,8 @@ export function ProductRankingCard({
       <CardContent className="space-y-4">
         <div className="flex items-center justify-between gap-3">
           <Label htmlFor="ranking-toggle" className="font-normal text-muted-foreground">
-            Automatically rank products (Gold/Silver/Bronze) by today&rsquo;s sales so far, or yesterday&rsquo;s if
-            nothing&rsquo;s been recorded yet today
+            Automatically rank products (Gold/Silver/Bronze) by today&rsquo;s sales so far, falling back to the most
+            recent day with any recorded sales if nothing&rsquo;s been recorded yet today
           </Label>
           <Switch
             id="ranking-toggle"
