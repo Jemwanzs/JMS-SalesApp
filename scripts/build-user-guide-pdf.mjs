@@ -288,6 +288,10 @@ const html = `<!doctype html>
   <h3 class="sub">Steps 3 &amp; 4 — Login and Dashboard</h3>
   <p>Return any time at the Login page. You land on <strong>Capture Sales</strong>, with a bottom navigation bar
   giving access to Sales, History, Analytics, Reports, and More (everything else).</p>
+  <p>If your account is assigned to more than one branch, you'll see a <strong>Select a Branch</strong> screen after
+  logging in — choose which branch you're working from for this session. Everything you see and record is scoped
+  to that branch until you log out; to switch branches, log out and log back in and pick the other one. Accounts
+  assigned to only one branch go straight to the dashboard as usual.</p>
 
   <div class="shots-row">
     ${shot("01-login", "Login")}
@@ -309,6 +313,9 @@ const html = `<!doctype html>
       visibility on the Sales screen, the <strong>sale number format</strong>, and automatic
       <strong>business-anniversary wishes</strong> for your team.</li>
     <li><strong>Products</strong> — go to <strong>More → Products</strong> to build your catalog (see section F).</li>
+    <li><strong>Branches</strong> — if your business operates from more than one location, go to
+      <strong>More → Settings → Branches</strong> to add branches beyond the one created during onboarding, and to
+      edit or deactivate existing ones. Every sale, business day, and report is kept separate per branch.</li>
     <li><strong>Sales-related security</strong> — under <strong>More → Security</strong>, optionally restrict login
       to business hours and/or your business's physical location.</li>
   </ul>
@@ -323,9 +330,13 @@ const html = `<!doctype html>
     <li>Go to <strong>More → Users</strong>.</li>
     <li>Tap <strong>Invite user</strong>.</li>
     <li>Enter their <strong>full name</strong>, <strong>email</strong>, and choose a <strong>role</strong>.</li>
+    <li>If your business has more than one branch, choose whether they work across <strong>all branches</strong> or
+      only <strong>specific branches</strong> — this decides what they see after logging in. Single-branch
+      businesses never see this step.</li>
     <li>Tap <strong>Invite</strong> — they receive an email invitation.</li>
     <li>Once they accept and set a password, they're added — active immediately, no further action needed.</li>
   </ol>
+  <p>A person's branch assignment can be changed later from the Users page at any time.</p>
 
   <h3 class="sub">What invited users can access</h3>
   <p>Access is controlled entirely by role: <strong>Sales User</strong> (record sales, see their own history/

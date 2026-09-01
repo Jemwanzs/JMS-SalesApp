@@ -51,6 +51,8 @@ This only happens once. After it's complete, every future login goes straight to
 
 Return any time at the **Login** page with your email and password.
 
+If your account is assigned to more than one branch, you'll see a **Select a Branch** screen after logging in — choose which branch you're working from for this session. Everything you see and record (sales, business day, reports, analytics) is scoped to that branch until you log out. To work from a different branch, log out and log back in, then pick the other one — there's no in-app switcher. If you're only assigned to one branch, you're taken straight to your dashboard as usual.
+
 ### Step 4 — Dashboard
 
 You land on **Capture Sales** — the main daily screen every user sees first. From here, a bottom navigation bar gives access to **Sales, History, Analytics, Reports,** and **More** (everything else).
@@ -78,6 +80,10 @@ Also under **More → Settings**, you can turn on/off:
 
 Go to **More → Products** — see section **F** below for the full walkthrough.
 
+### Add and manage branches
+
+If your business operates from more than one location, go to **More → Settings → Branches** to add additional branches beyond the one created during onboarding — give each a name and address. Existing branches can be edited or deactivated (never permanently deleted) from the same screen. Every sale, business day, and report is kept separate per branch — see section **D** below for assigning your team to specific branches, and **Step 3 — Login** for what a multi-branch team member sees when they sign in.
+
 ### Configure relevant sales settings
 
 Under **More → Security**, you can additionally restrict login to business hours and/or your business's physical location (geofencing) — useful if you only want staff signing in while actually at work.
@@ -91,8 +97,11 @@ A Tenant Administrator can bring their team onto the platform in a few steps.
 1. Go to **More → Users**.
 2. Tap **Invite user**.
 3. Enter their **full name**, **email**, and choose a **role** (see roles below).
-4. Tap **Invite**. The person receives an email invitation.
-5. When they accept it, they set their own password and are added to your business — no further action needed from you.
+4. If your business has more than one branch, choose whether this person works across **all branches** or only **specific branches** — this decides what they see after logging in (see **Step 3 — Login** above). Businesses with only one branch never see this step.
+5. Tap **Invite**. The person receives an email invitation.
+6. When they accept it, they set their own password and are added to your business — no further action needed from you.
+
+A person's branch assignment can be changed later from the **Users** page at any time — the same "all branches" or "specific branches" choice applies.
 
 ### What invited users can access
 
