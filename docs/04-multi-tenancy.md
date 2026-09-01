@@ -6,7 +6,9 @@
 auth.users --1:1--> profiles --M:N--> tenant_memberships --M:1--> tenants
 ```
 
-A `profile` is a person, independent of any business. A `tenant_membership` row is what makes them a member of a specific tenant, with a `status` (active/invited/disabled). This is deliberately many-to-many: one person can belong to several tenant businesses (spec §104), e.g. an accountant working across two shops, or a Platform Super Admin who is *also* a tenant owner of their own demo business.
+A `profile` is a person, independent of any business. A `tenant_membership` row is what makes them a member of a specific tenant, with a `status` (active/invited/disabled).
+
+**One tenant at a time, enforced at the database level.** `tenant_memberships` carries `unique (profile_id)` (migration `0049`, Multi-Branch User Access Phase 1, `24-multi-branch-access.md`) — a profile can hold at most one membership row (any status) at once. This superseded an earlier many-to-many design (spec §104's "an accountant working across two shops"); removing a membership frees the email to join elsewhere later, but two *simultaneous* active memberships are no longer possible. A Platform Super Admin who is *also* a tenant owner of their own demo business is unaffected — platform admin status is a separate table (`platform_admins`), not a membership.
 
 ## Row Level Security strategy
 
@@ -43,7 +45,7 @@ PLATFORM
                       -> PERMISSIONS
 ```
 
-Multi-location support exists in the data model from day one (`locations`, `location_hours`, `special_hours`, and `location_id` on `products`, `business_days`, `sales`, `user_role_assignments`), even though Phase 1–2 usage is effectively single-location per tenant. This avoids a costly later migration once a tenant asks for a second branch.
+Multi-location support exists in the data model from day one (`locations`, `location_hours`, `special_hours`, and `location_id` on `products`, `business_days`, `sales`, `user_role_assignments`) and, as of Multi-Branch User Access (`24-multi-branch-access.md`), is fully wired up: a tenant can operate several branches, assign users to specific ones, and every login session is pinned to exactly one branch at the RLS level, not just the UI. A tenant that never adds a second branch sees no behavioral change — the original single-location-per-tenant experience still holds for it.
 
 ## Tenant status & suspension
 

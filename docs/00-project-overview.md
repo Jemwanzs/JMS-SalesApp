@@ -75,3 +75,6 @@ Next.js (App Router) + React + TypeScript, Tailwind CSS + shadcn/ui, React Hook 
 | `19-security-checklist.md` | Security baseline + open-decision log |
 | `20-development-progress.md` | Living progress tracker |
 | `21-inventory-management.md` | Optional Inventory add-on: schema, entitlement, reconciliation, permissions |
+| `22-hardening-roadmap.md` | Living platform-health hardening tracker (security/performance/completeness) |
+| `23-data-maintenance-scripts.md` | One-off operational SQL scripts (Studio SQL Editor, not migrations) |
+| `24-multi-branch-access.md` | Multi-Branch User Access: one tenant per profile, branch assignment, session-pinned active branch, RLS enforcement |

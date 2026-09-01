@@ -52,6 +52,8 @@ Because each tenant owns its own role rows, a tenant can freely edit "Supervisor
 
 `user_role_assignments.location_id` is nullable — a role assignment can be scoped to one location or left tenant-wide. This is what "View Team Sales" means for a Supervisor at one branch of a multi-location tenant.
 
+As of Multi-Branch User Access (`24-multi-branch-access.md`), this is fully implemented, not just schema-ready: `null` means "every branch the tenant currently has" (auto-expanding as branches are added), a real value means "only this branch," and a user with 2+ resolved branches picks one per login session (`active_branch_sessions`) — every location-scoped query, including this permission check, resolves against that session's active branch via `current_active_location()`.
+
 ## The billing-owner exception
 
 `tenants.billing_owner_profile_id` is a dedicated FK column, deliberately **not** modeled as a permission grant. Billing/legal accountability for a tenant is a 1:1 organizational fact, not a role — trying to express "the owner" purely through RBAC would conflict with the "fully custom roles" design. This resolves the apparent tension between "no hardcoded roles" and the spec's references to a fixed accountable owner.
