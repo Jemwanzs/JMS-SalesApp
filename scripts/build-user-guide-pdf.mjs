@@ -288,6 +288,9 @@ const html = `<!doctype html>
   <h3 class="sub">Steps 3 &amp; 4 — Login and Dashboard</h3>
   <p>Return any time at the Login page. You land on <strong>Capture Sales</strong>, with a bottom navigation bar
   giving access to Sales, History, Analytics, Reports, and More (everything else).</p>
+  <p>The first time you reach your dashboard, a short guided tour points out where to configure your business, add
+  branches and products, record your first sale, and find Reports/Analytics — Next, Back, or Skip to move through
+  it. It only shows once; replay it anytime from More → Restart Product Tour or More → Help &amp; Support.</p>
   <p>If your account is assigned to more than one branch, you'll see a <strong>Select a Branch</strong> screen after
   logging in — choose which branch you're working from for this session. Everything you see and record is scoped
   to that branch until you log out; to switch branches, log out and log back in and pick the other one. Accounts

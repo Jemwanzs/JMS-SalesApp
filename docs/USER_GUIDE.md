@@ -57,6 +57,8 @@ If your account is assigned to more than one branch, you'll see a **Select a Bra
 
 You land on **Capture Sales** — the main daily screen every user sees first. From here, a bottom navigation bar gives access to **Sales, History, Analytics, Reports,** and **More** (everything else).
 
+The first time you reach your dashboard, a short guided tour points out where to configure your business, add branches and products, record your first sale, and find Reports/Analytics — tap **Next**, **Back**, or **Skip** to move through it, and **Finish** at the end. It only shows once; replay it anytime from **More → Restart Product Tour** or **More → Help & Support**.
+
 ---
 
 ## C. Setting Up the Business
