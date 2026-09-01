@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { getLocale, getTranslations } from "next-intl/server";
+import { redirect } from "next/navigation";
 
 import { AnniversaryCelebrationDialog } from "@/features/sales/components/anniversary-celebration-dialog";
 import { OpenBusinessDayButton } from "@/features/sales/components/open-business-day-button";
@@ -9,6 +10,7 @@ import { SalesVisibilityBadge } from "@/features/sales/components/sales-visibili
 import { AnalyticsService } from "@/services/AnalyticsService";
 import { AnniversaryService } from "@/services/AnniversaryService";
 import { BusinessDayService } from "@/services/BusinessDayService";
+import { PlatformAdminService } from "@/services/PlatformAdminService";
 import { ProductService } from "@/services/ProductService";
 import { TenantService } from "@/services/TenantService";
 import { LOCALE_BCP47, type SupportedLocale } from "@/lib/i18n/config";
@@ -16,7 +18,9 @@ import { can } from "@/lib/permissions/can";
 import { todayString, trailingDaysRange } from "@/lib/utils/date-ranges";
 import { rankProducts } from "@/lib/utils/product-ranking";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { getCurrentUser } from "@/lib/supabase/current-user";
+import { resolveActiveLocationId } from "@/lib/tenant/resolve-active-location";
 import { getTenantBySlug } from "@/lib/tenant/resolve-tenant-by-slug";
 
 export const metadata: Metadata = {
@@ -51,22 +55,48 @@ export default async function SalesPage({
   // page rendered after every login.
   const [user, tenant] = await Promise.all([getCurrentUser(), getTenantBySlug(supabase, tenantSlug)]);
 
-  // profile and locationRow are likewise independent of each other --
-  // one needs user.id, the other tenant.id, neither needs the other's
-  // result.
-  const [{ data: profile }, { data: locationRow }] = await Promise.all([
+  // profile and activeLocationId are likewise independent of each other
+  // -- one needs user.id, the other tenant.id, neither needs the
+  // other's result.
+  const [{ data: profile }, activeLocationId] = await Promise.all([
     user
       ? supabase.from("profiles").select("full_name").eq("id", user.id).maybeSingle()
       : Promise.resolve({ data: null }),
-    supabase
+    resolveActiveLocationId(supabase, tenant!.id),
+  ]);
+
+  // Multi-Branch User Access Phase 5. No active_branch_sessions row for
+  // this session -- normally impossible (sign-in always writes one
+  // before landing here), but two real cases land here:
+  //
+  // 1. A session that authenticated before Phase 4/5 shipped. Re-running
+  //    the same resolution /select-branch itself does self-heals it.
+  // 2. A platform admin impersonating this tenant (Access Workspace) --
+  //    they hold no real tenant_membership/branch assignment here at
+  //    all, so resolveUserBranches (and therefore /select-branch) can
+  //    never resolve anything for them either. Support needs to see the
+  //    workspace as it actually is, not be forced through a branch
+  //    picker they have no assignment to answer -- same "must still be
+  //    able to open a deactivated tenant to investigate it" carve-out
+  //    this app already makes elsewhere (app/(tenant)/t/[tenantSlug]/
+  //    layout.tsx). Falls back to the tenant's first location, same
+  //    resolution this page used before Phase 5, tenant-wide RLS bypass
+  //    for impersonation handled in migration 0051.
+  let location: { id: string };
+  if (activeLocationId) {
+    location = { id: activeLocationId };
+  } else if (user && (await new PlatformAdminService(createServiceRoleClient()).getActiveImpersonation(user.id, tenant!.id))) {
+    const { data: firstLocation } = await supabase
       .from("locations")
       .select("id")
       .eq("tenant_id", tenant!.id)
       .order("created_at", { ascending: true })
       .limit(1)
-      .single(),
-  ]);
-  const location = locationRow!;
+      .single();
+    location = { id: firstLocation!.id };
+  } else {
+    redirect(`/select-branch`);
+  }
 
   const businessDayService = new BusinessDayService(supabase);
   const t = await getTranslations("Sales");
