@@ -78,7 +78,21 @@ function DialogContent({
           // scroll internally is what actually keeps every dialog
           // centered with equal margins on a small screen, regardless of
           // how much content it holds.
-          "fixed top-1/2 left-1/2 z-50 grid max-h-[85vh] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          //
+          // grid-cols-1, not bare grid -- Tailwind's grid-cols-N
+          // utilities set grid-template-columns: repeat(N, minmax(0,
+          // 1fr)); bare `grid` leaves the implicit column sized `auto`,
+          // which (like a flex item's default min-width) lets a grid
+          // item's own min-content width force the WHOLE dialog wider
+          // than max-w-[calc(100%-2rem)] the moment any descendant has
+          // long enough unwrapped text (truncate alone doesn't help --
+          // it needs a shrinkable container to truncate WITHIN). Found
+          // via RoleFormDialog's permission list on a real device: every
+          // row's toggle switch bled off the right edge because the
+          // dialog's own grid column had grown to fit the longest
+          // permission description in the full catalog, not just
+          // whichever fit during a narrower manual test.
+          "fixed top-1/2 left-1/2 z-50 grid grid-cols-1 max-h-[85vh] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
           className
         )}
         {...props}
