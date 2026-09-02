@@ -418,6 +418,57 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["stock_reconciliations"]["Row"]>;
         Relationships: [];
       };
+      expense_items: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          name: string;
+          expense_type: "recurring" | "one_time";
+          estimated_amount: number | null;
+          status: "active" | "archived";
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["expense_items"]["Row"]> & {
+          tenant_id: string;
+          name: string;
+          expense_type: Database["public"]["Tables"]["expense_items"]["Row"]["expense_type"];
+        };
+        Update: Partial<Database["public"]["Tables"]["expense_items"]["Row"]>;
+        Relationships: [];
+      };
+      expenses: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          location_id: string;
+          expense_item_id: string;
+          expense_item_name_snapshot: string;
+          actual_amount: number;
+          expense_date: string;
+          notes: string | null;
+          status: "active" | "voided";
+          recorded_by: string;
+          voided_by: string | null;
+          voided_at: string | null;
+          void_reason: string | null;
+          edited_by: string | null;
+          edited_at: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["expenses"]["Row"]> & {
+          tenant_id: string;
+          location_id: string;
+          expense_item_id: string;
+          expense_item_name_snapshot: string;
+          actual_amount: number;
+          expense_date: string;
+          recorded_by: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["expenses"]["Row"]>;
+        Relationships: [];
+      };
       business_days: {
         Row: {
           id: string;
@@ -1130,6 +1181,19 @@ export interface Database {
       update_teammate_name: {
         Args: { p_target_profile_id: string; p_full_name: string };
         Returns: void;
+      };
+      edit_expense: {
+        Args: {
+          p_expense_id: string;
+          p_actual_amount: number;
+          p_expense_date: string;
+          p_notes: string | null;
+        };
+        Returns: Database["public"]["Tables"]["expenses"]["Row"];
+      };
+      void_expense: {
+        Args: { p_expense_id: string; p_reason: string };
+        Returns: Database["public"]["Tables"]["expenses"]["Row"];
       };
     };
   };

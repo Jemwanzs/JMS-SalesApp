@@ -79,3 +79,4 @@ Next.js (App Router) + React + TypeScript, Tailwind CSS + shadcn/ui, React Hook 
 | `23-data-maintenance-scripts.md` | One-off operational SQL scripts (Studio SQL Editor, not migrations) |
 | `24-multi-branch-access.md` | Multi-Branch User Access: one tenant per profile, branch assignment, session-pinned active branch, RLS enforcement |
 | `25-demo-video-generation.md` | Repeatable Playwright + ffmpeg pipeline generating the Login page's downloadable Sales Agent demo video |
+| `26-daily-expenses.md` | Daily Expenses: optional, no-billing feature toggle, Expense Items catalog, expense ledger, permissions, and Expense Summary/Analytics |

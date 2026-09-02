@@ -7,6 +7,7 @@ import {
   Lock,
   LogOut,
   Package,
+  Receipt,
   Settings,
   ShieldCheck,
   Sliders,
@@ -15,12 +16,14 @@ import {
   Upload,
   UserCog,
   Users,
+  Wallet,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { signOutAction } from "@/features/auth/actions/sign-out";
 import { Button } from "@/components/ui/button";
 import { PlatformAdminService } from "@/services/PlatformAdminService";
+import { TenantService } from "@/services/TenantService";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
@@ -62,7 +65,18 @@ export default async function MorePage({
 
   const [user, tenant] = await Promise.all([getCurrentUser(), getTenantBySlug(supabase, tenantSlug)]);
 
-  const [canManageApprovals, canManageRoles, canCreateUsers, canEditUsers, canManageImports, canManageSettings, isPlatformAdmin] =
+  const [
+    canManageApprovals,
+    canManageRoles,
+    canCreateUsers,
+    canEditUsers,
+    canManageImports,
+    canManageSettings,
+    isPlatformAdmin,
+    canConfigureExpenseItems,
+    canViewExpenses,
+    expensesEnabled,
+  ] =
     tenant && user
       ? await Promise.all([
           can("approvals.manage", { tenantId: tenant.id }),
@@ -72,8 +86,11 @@ export default async function MorePage({
           can("imports.manage", { tenantId: tenant.id }),
           can("settings.manage", { tenantId: tenant.id }),
           new PlatformAdminService(createServiceRoleClient()).isPlatformAdmin(user.id),
+          can("expenses.configure_items", { tenantId: tenant.id }),
+          can("expenses.view", { tenantId: tenant.id }),
+          new TenantService(supabase).getSetting<boolean>(tenant.id, "expenses_enabled"),
         ])
-      : [false, false, false, false, false, false, false];
+      : [false, false, false, false, false, false, false, false, false, false];
 
   const isBillingOwner = tenant?.billing_owner_profile_id === user?.id;
 
@@ -102,6 +119,12 @@ export default async function MorePage({
     ...(isPlatformAdmin ? [{ label: "Tenants", icon: Building2, absoluteHref: "/admin/tenants" }] : []),
     ...(canManageImports ? [{ label: "Imports", icon: Upload, href: "imports" }] : []),
     ...(isBillingOwner || canManageSettings ? [{ label: "Billing", icon: CreditCard, href: "billing" }] : []),
+    // Daily Expenses: both gated on the feature being on AND the
+    // relevant permission -- hidden, not shown-disabled, same
+    // convention every other conditional row here already follows.
+    // Placed immediately before Settings per spec.
+    ...(expensesEnabled && canConfigureExpenseItems ? [{ label: "Expense Items", icon: Receipt, href: "expense-items" }] : []),
+    ...(expensesEnabled && canViewExpenses ? [{ label: "Expenses", icon: Wallet, href: "expenses" }] : []),
     ...(canManageSettings ? [{ label: "Settings", icon: Settings, href: "settings" }] : []),
   ];
 
