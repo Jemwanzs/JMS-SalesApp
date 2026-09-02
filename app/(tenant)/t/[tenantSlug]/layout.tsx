@@ -7,6 +7,7 @@ import { AdminBypassToast } from "@/components/shared/admin-bypass-toast";
 import { ImpersonationBanner } from "@/components/shared/impersonation-banner";
 import { Logo } from "@/components/shared/logo";
 import { SubscriptionBanner } from "@/components/shared/subscription-banner";
+import { TenantLogoViewer } from "@/components/shared/tenant-logo-viewer";
 import { TourOverlay } from "@/features/onboarding/components/tour-overlay";
 import { TenantProvider } from "@/hooks/tenant-context";
 import { TourProvider } from "@/hooks/tour-context";
@@ -287,18 +288,11 @@ export default async function TenantLayout({
                   business name next to it, per the explicit requirement --
                   stays completely absent (not an empty placeholder) when
                   the tenant hasn't uploaded one, exactly as this area
-                  looked before this feature existed. Plain <img>, not
-                  next/image -- the upload accepts SVG (features/workspace/
-                  components/logo-upload.tsx), and next/image's optimizer
-                  refuses SVGs without extra dangerouslyAllowSVG config; a
-                  small fixed-size header icon gets no real benefit from
-                  Next's responsive-image machinery anyway. object-contain
-                  (never object-cover) so a logo's own aspect ratio is
-                  always preserved, never stretched or cropped. */}
-              {tenant.logo_url && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={tenant.logo_url} alt="" className="h-8 max-w-[120px] object-contain" />
-              )}
+                  looked before this feature existed. Rounded framing +
+                  tap-to-view-full-size (TenantLogoViewer) -- see that
+                  component's own header comment for why it's still a
+                  plain <img>, not next/image. */}
+              {tenant.logo_url && <TenantLogoViewer logoUrl={tenant.logo_url} />}
             </div>
             {activeWish && (
               <div className="border-b bg-amber-50 px-6 py-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-200">
