@@ -129,21 +129,22 @@ export default async function SalesPage({
     day: "numeric",
   });
 
-  // None of these six depend on each other -- businessDay/activeLocation
+  // None of these five depend on each other -- businessDay/activeLocation
   // only need location.id, the rest only need tenant.id -- so they can
   // all run in one round trip instead of blocking each other.
-  const [businessDay, canOpenDay, canReopenDay, activeWish, activeLocation, { count: branchCount }] = await Promise.all([
+  const [businessDay, canOpenDay, canReopenDay, activeWish, activeLocation] = await Promise.all([
     businessDayService.getTodayBusinessDay(tenant.id, location.id),
     can("business_day.open", { tenantId: tenant.id }),
     can("business_day.reopen", { tenantId: tenant.id }),
     new AnniversaryService(supabase).getActiveWish(tenant.id).catch(() => null),
     supabase.from("locations").select("name").eq("id", location.id).maybeSingle(),
-    // Only ever shown for genuinely multi-branch tenants (docs/24-multi-
-    // branch-access.md) -- a single-branch tenant already knows which
-    // branch it is, so this badge would just be clutter there.
-    supabase.from("locations").select("id", { count: "exact", head: true }).eq("tenant_id", tenant.id).eq("status", "active"),
   ]);
-  const activeBranchName = (branchCount ?? 0) > 1 ? (activeLocation.data?.name ?? null) : null;
+  // Business + branch identity always shows here now, single-branch
+  // tenants included -- this is the golden-path landing screen (spec
+  // S13) where sales get captured, and being certain which business/
+  // branch a session is in matters just as much for a single-branch
+  // tenant as a multi-branch one.
+  const activeBranchName = activeLocation.data?.name ?? null;
 
   const canCapture = businessDay?.status === "open" || businessDay?.status === "reopened";
 
@@ -165,17 +166,26 @@ export default async function SalesPage({
       {wishSentToday && activeWish && (
         <AnniversaryCelebrationDialog wishId={`${activeWish.id}-${todayDateKey}`} message={activeWish.message} />
       )}
-      <p className="text-sm text-muted-foreground">{today}</p>
-      <h1 className="mt-1 text-xl font-semibold">{t("greeting", { name: firstName })}</h1>
-
-      <div className="mt-6 flex flex-wrap items-center gap-2">
-        <SalesVisibilityBadge />
+      {/* Business + branch identity: the first thing on the golden-path
+          screen where sales actually get captured, so it's never
+          ambiguous which business/branch a session is working in --
+          deliberately more prominent than a small badge, and shown for
+          every tenant (not just multi-branch ones). */}
+      <div className="flex items-center justify-between gap-2">
+        <p className="min-w-0 truncate text-base font-semibold">{tenant.name}</p>
         {activeBranchName && (
-          <Badge variant="outline" className="gap-1">
+          <Badge variant="outline" className="shrink-0 gap-1">
             <MapPin className="h-3 w-3" />
             {activeBranchName}
           </Badge>
         )}
+      </div>
+
+      <p className="mt-3 text-sm text-muted-foreground">{today}</p>
+      <h1 className="mt-1 text-xl font-semibold">{t("greeting", { name: firstName })}</h1>
+
+      <div className="mt-6">
+        <SalesVisibilityBadge />
       </div>
 
       {businessDay?.status === "reopened" && businessDay.reopenExpiresAt && (
