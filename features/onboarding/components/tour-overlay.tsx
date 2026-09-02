@@ -29,6 +29,7 @@ export function TourOverlay() {
   const t = useTranslations("Tour");
 
   const [anchorEl, setAnchorEl] = useState<Element | null>(null);
+  const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
 
   const targetRoute = currentStep?.route(tenantSlug) ?? null;
   const needsNavigation = targetRoute !== null && pathname !== targetRoute;
@@ -62,6 +63,29 @@ export function TourOverlay() {
       cancelled = true;
     };
   }, [currentStep, needsNavigation]);
+
+  // Tracks the anchor's live position so the spotlight highlight below
+  // stays glued to it -- a bottom-nav tab is fixed and never moves, but
+  // an in-page anchor (e.g. the "record your first sale" product row)
+  // can shift under scroll or a resize while the step is showing.
+  useEffect(() => {
+    if (!anchorEl) {
+      setAnchorRect(null);
+      return;
+    }
+
+    function recompute() {
+      setAnchorRect(anchorEl!.getBoundingClientRect());
+    }
+
+    recompute();
+    window.addEventListener("scroll", recompute, true);
+    window.addEventListener("resize", recompute);
+    return () => {
+      window.removeEventListener("scroll", recompute, true);
+      window.removeEventListener("resize", recompute);
+    };
+  }, [anchorEl]);
 
   if (!isActive || !currentStep) {
     return null;
@@ -143,13 +167,31 @@ export function TourOverlay() {
   }
 
   return (
-    <Popover open modal={false} onOpenChange={(open) => !open && skip()}>
-      <PopoverContent anchor={anchorEl} className="relative">
-        {closeButton}
-        <p className="pr-6 font-medium">{title}</p>
-        <p className="mt-1 text-muted-foreground">{body}</p>
-        {footer}
-      </PopoverContent>
-    </Popover>
+    <>
+      {/* Spotlight: dims the whole screen except a ring cut out around
+          the actual target element, so it's unmistakable which button
+          the popover is talking about even before reading the arrow. */}
+      {anchorRect && (
+        <div
+          aria-hidden
+          className="pointer-events-none fixed z-40 rounded-lg ring-2 ring-primary transition-[top,left,width,height] duration-150"
+          style={{
+            top: anchorRect.top - 6,
+            left: anchorRect.left - 6,
+            width: anchorRect.width + 12,
+            height: anchorRect.height + 12,
+            boxShadow: "0 0 0 9999px rgba(0,0,0,0.45)",
+          }}
+        />
+      )}
+      <Popover open modal={false} onOpenChange={(open) => !open && skip()}>
+        <PopoverContent anchor={anchorEl} className="relative">
+          {closeButton}
+          <p className="pr-6 font-medium">{title}</p>
+          <p className="mt-1 text-muted-foreground">{body}</p>
+          {footer}
+        </PopoverContent>
+      </Popover>
+    </>
   );
 }
