@@ -11,13 +11,20 @@ import { Label } from "@/components/ui/label";
  * Today / Yesterday / a specific past date only -- no date-range
  * selector, per spec. Reuses the same URL-param-driven navigation idiom
  * every other filter component in this app already uses.
+ *
+ * Two distinct dates (Business Day Rollover, mirrors expense-filters.tsx):
+ * `effectiveToday` is what the "Today" button jumps to and what counts as
+ * "today" for the highlight -- the effective BUSINESS date. `maxDate` is
+ * the real calendar date, only used to cap the specific-date picker.
  */
 export function ExpenseAnalyticsFilters({
-  todayDate,
+  effectiveToday,
+  maxDate,
   yesterdayDate,
   activeDate,
 }: {
-  todayDate: string;
+  effectiveToday: string;
+  maxDate: string;
   yesterdayDate: string;
   activeDate: string;
 }) {
@@ -38,9 +45,9 @@ export function ExpenseAnalyticsFilters({
         <Button
           type="button"
           size="sm"
-          variant={activeDate === todayDate ? "default" : "outline"}
+          variant={activeDate === effectiveToday ? "default" : "outline"}
           disabled={isPending}
-          onClick={() => goTo(todayDate)}
+          onClick={() => goTo(effectiveToday)}
         >
           Today
         </Button>
@@ -65,7 +72,7 @@ export function ExpenseAnalyticsFilters({
           <Label htmlFor="analytics-date" className="text-xs">
             Specific date
           </Label>
-          <Input id="analytics-date" type="date" max={todayDate} value={customDate} onChange={(e) => setCustomDate(e.target.value)} />
+          <Input id="analytics-date" type="date" max={maxDate} value={customDate} onChange={(e) => setCustomDate(e.target.value)} />
         </div>
         <Button type="submit" size="sm" disabled={isPending}>
           Go

@@ -3,12 +3,15 @@
 import { revalidatePath } from "next/cache";
 
 import { AuditService } from "@/services/AuditService";
+import { BusinessDayService } from "@/services/BusinessDayService";
 import { StockService, type RecordableMovementType } from "@/services/StockService";
 import { AUDIT_ACTION } from "@/lib/audit/actions";
 import { assertInventoryEnabled } from "@/lib/inventory/entitlement";
 import { assertCan } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
+import { resolveActiveLocationId } from "@/lib/tenant/resolve-active-location";
+import { todayString } from "@/lib/utils/date-ranges";
 
 export interface RecordMovementState {
   error?: string;
@@ -53,12 +56,24 @@ export async function recordMovementAction(
       return { error: "Not signed in" };
     }
 
+    // Business Day Rollover: attribute this movement to the branch's
+    // currently effective business date, not the database server's raw
+    // `current_date` -- same reasoning sale_date already follows. Falls
+    // back to a plain calendar-today lookup only if no active branch
+    // session can be resolved (shouldn't happen in practice for a real
+    // signed-in user, but stock recording shouldn't hard-fail on it).
+    const locationId = await resolveActiveLocationId(supabase, tenantId);
+    const occurredOn = locationId
+      ? (await new BusinessDayService(supabase).getEffectiveBusinessDate(tenantId, locationId)).date
+      : todayString("UTC");
+
     await new StockService(supabase).recordMovement(tenantId, {
       productId,
       movementType,
       quantity,
       reason: reason || null,
       recordedBy: user.id,
+      occurredOn,
     });
 
     await new AuditService(createServiceRoleClient())

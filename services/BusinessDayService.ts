@@ -67,18 +67,60 @@ export class BusinessDayService {
     return new Intl.DateTimeFormat("en-CA", { timeZone: timezone }).format(new Date());
   }
 
+  /**
+   * Business Day Rollover & After-Midnight Sales: resolves which
+   * business day is actually in effect right now, via the
+   * resolve_effective_business_date() SQL function (migration 0055) --
+   * the one place cross-midnight math (opening/closing hours that cross
+   * into the next calendar day) is computed, mirrored from
+   * run_business_day_sweep()'s own math so the two can't drift apart.
+   * Always returns exactly one row (never null/empty) -- see that
+   * function's own header comment for its three cases (still within
+   * yesterday's extended window / within today's window / the gap,
+   * defaulting to the most recently closed day).
+   */
+  private async resolveEffectiveBusinessDate(
+    tenantId: string,
+    locationId: string
+  ): Promise<{ businessDate: string; isLive: boolean; businessDayId: string | null }> {
+    const { data, error } = await this.supabase.rpc("resolve_effective_business_date", {
+      p_tenant_id: tenantId,
+      p_location_id: locationId,
+    });
+
+    const row = (data ?? [])[0];
+    if (error || !row) {
+      throw new Error(`BusinessDayService.resolveEffectiveBusinessDate: ${error?.message ?? "no row returned"}`);
+    }
+
+    return { businessDate: row.business_date, isLive: row.is_live, businessDayId: row.business_day_id };
+  }
+
+  /**
+   * The currently OPEN business day, if any -- what sales/page.tsx gates
+   * `canCapture` on, and what reports/page.tsx's live-vs-final label
+   * depends on. Deliberately returns null during the gap between one
+   * business day closing and the next opening (e.g. 03:00-07:00 for a
+   * 07:00-03:00 tenant) -- you can't capture a sale outside configured
+   * hours, so there is genuinely no "open today" to return then, matching
+   * resolve_effective_business_date()'s `is_live` signal exactly. For a
+   * DISPLAY/reporting default that should keep showing the most recently
+   * completed day during that same gap instead of going blank, use
+   * getEffectiveBusinessDate() below instead.
+   */
   async getTodayBusinessDay(
     tenantId: string,
     locationId: string
   ): Promise<BusinessDay | null> {
-    const businessDate = await this.todayInTimezone(locationId);
+    const resolved = await this.resolveEffectiveBusinessDate(tenantId, locationId);
+    if (!resolved.isLive || !resolved.businessDayId) {
+      return null;
+    }
 
     const { data, error } = await this.supabase
       .from("business_days")
       .select(BUSINESS_DAY_SELECT)
-      .eq("tenant_id", tenantId)
-      .eq("location_id", locationId)
-      .eq("business_date", businessDate)
+      .eq("id", resolved.businessDayId)
       .maybeSingle();
 
     if (error) {
@@ -124,6 +166,25 @@ export class BusinessDayService {
     }
 
     return toBusinessDay(data);
+  }
+
+  /**
+   * The business date READ/DISPLAY defaults (Sales History, Analytics,
+   * Reports, Leaderboards/product ranking, Expenses, Stock) should show
+   * "today" as -- unlike getTodayBusinessDay() above, this does NOT go
+   * blank during the gap between one business day closing and the next
+   * opening: it keeps returning the most recently completed day
+   * (`isLive: false`) so those screens keep showing real data instead of
+   * an empty state just because the calendar rolled over or hours
+   * haven't opened yet. See resolve_effective_business_date()'s own
+   * header comment (migration 0055) for the exact resolution order.
+   */
+  async getEffectiveBusinessDate(
+    tenantId: string,
+    locationId: string
+  ): Promise<{ date: string; isLive: boolean }> {
+    const resolved = await this.resolveEffectiveBusinessDate(tenantId, locationId);
+    return { date: resolved.businessDate, isLive: resolved.isLive };
   }
 
   async openDay(

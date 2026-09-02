@@ -4,10 +4,12 @@ import { redirect } from "next/navigation";
 
 import { BackLink } from "@/components/shared/back-link";
 import { ProductPhotoThumbnail } from "@/features/products/components/product-photo-viewer";
+import { BusinessDayService } from "@/services/BusinessDayService";
 import { StockService } from "@/services/StockService";
 import { assertInventoryEnabled } from "@/lib/inventory/entitlement";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
+import { resolveActiveLocationId } from "@/lib/tenant/resolve-active-location";
 import { getTenantBySlug } from "@/lib/tenant/resolve-tenant-by-slug";
 import { todayString } from "@/lib/utils/date-ranges";
 
@@ -17,9 +19,13 @@ export const metadata: Metadata = {
 
 /**
  * Today's reconciliation queue (Product Enhancements #4) -- every
- * tracked product with no stock_reconciliations row yet for today,
- * per the tenant's own timezone (todayString, same helper Analytics/
- * business-day already use for "today," never raw UTC).
+ * tracked product with no stock_reconciliations row yet for today.
+ * "Today" is the effective BUSINESS date (Business Day Rollover), not
+ * the raw calendar date -- for a cross-midnight tenant a 01:00 count
+ * still belongs to yesterday's still-open business day (see
+ * BusinessDayService's own header comments, migration 0055), and this
+ * queue -- and whatever date a submitted count is recorded under, see
+ * submit-reconciliation.ts -- must agree with that, not the clock.
  */
 export default async function StockReconcilePage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = await params;
@@ -39,7 +45,10 @@ export default async function StockReconcilePage({ params }: { params: Promise<{
     redirect(`/t/${tenantSlug}/more`);
   }
 
-  const today = todayString(tenant!.timezone);
+  const activeLocationId = await resolveActiveLocationId(supabase, tenantId);
+  const today = activeLocationId
+    ? (await new BusinessDayService(supabase).getEffectiveBusinessDate(tenantId, activeLocationId)).date
+    : todayString(tenant!.timezone);
   const pending = await new StockService(supabase).listPendingReconciliation(tenantId, today);
 
   return (

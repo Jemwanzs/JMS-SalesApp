@@ -1182,6 +1182,10 @@ export interface Database {
         Args: { p_target_profile_id: string; p_full_name: string };
         Returns: void;
       };
+      resolve_effective_business_date: {
+        Args: { p_tenant_id: string; p_location_id: string };
+        Returns: { business_date: string; is_live: boolean; business_day_id: string | null }[];
+      };
       edit_expense: {
         Args: {
           p_expense_id: string;

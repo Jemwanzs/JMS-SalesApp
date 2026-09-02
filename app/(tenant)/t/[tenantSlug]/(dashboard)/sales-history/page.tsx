@@ -4,12 +4,14 @@ import { notFound, redirect } from "next/navigation";
 
 import { SaleHistoryFilters } from "@/features/sales/components/sale-history-filters";
 import { SaleHistoryList } from "@/features/sales/components/sale-history-list";
+import { BusinessDayService } from "@/services/BusinessDayService";
 import { SalesService } from "@/services/SalesService";
 import { TenantService } from "@/services/TenantService";
 import { can } from "@/lib/permissions/can";
 import { todayString } from "@/lib/utils/date-ranges";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
+import { resolveActiveLocationId } from "@/lib/tenant/resolve-active-location";
 import { getTenantBySlug } from "@/lib/tenant/resolve-tenant-by-slug";
 
 export const metadata: Metadata = {
@@ -66,7 +68,17 @@ export default async function SalesHistoryPage({
   }
 
   const tenantId = tenant.id;
-  const today = todayString(tenant.timezone);
+
+  // Business Day Rollover: "today" here means the effective BUSINESS
+  // date, not the raw calendar date -- for a cross-midnight tenant, a
+  // sale recorded at 01:00 still belongs to yesterday's still-open
+  // business day (see BusinessDayService's own header comments,
+  // migration 0055), and the default view/the "Today" button must keep
+  // showing it rather than an empty "today" that hasn't opened yet.
+  const activeLocationId = await resolveActiveLocationId(supabase, tenantId);
+  const today = activeLocationId
+    ? (await new BusinessDayService(supabase).getEffectiveBusinessDate(tenantId, activeLocationId)).date
+    : todayString(tenant.timezone);
   const hasFilters = Boolean(from || to || q);
   const hasDateFilter = Boolean(from || to);
 

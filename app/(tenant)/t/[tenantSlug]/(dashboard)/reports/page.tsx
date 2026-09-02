@@ -55,15 +55,18 @@ export default async function ReportsPage({
 
   const activeLocationId = await resolveActiveLocationId(supabase, tenant.id);
 
-  const [storedReports, todayBusinessDay, todayDate] = await Promise.all([
+  // Business Day Rollover: `todayDate` is the EFFECTIVE business date
+  // (getEffectiveBusinessDate), not a raw calendar computation -- for a
+  // cross-midnight tenant, an independent `new Date()`-based "today"
+  // here would resolve to tomorrow's (not-yet-open) date the moment the
+  // calendar rolls over, computing a blank live report for a business
+  // day that's still very much open. See BusinessDayService's own
+  // header comments (migration 0055) for the full resolution order.
+  const [storedReports, effectiveDate] = await Promise.all([
     reportService.listReports(tenant.id),
-    activeLocationId ? businessDayService.getTodayBusinessDay(tenant.id, activeLocationId) : Promise.resolve(null),
-    activeLocationId
-      ? businessDayService.getEffectiveTimezone(activeLocationId).then(
-          (tz) => new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date())
-        )
-      : Promise.resolve(null),
+    activeLocationId ? businessDayService.getEffectiveBusinessDate(tenant.id, activeLocationId) : Promise.resolve(null),
   ]);
+  const todayDate = effectiveDate?.date ?? null;
 
   let reports: Array<(typeof storedReports)[number] & { status: "live" | "final" }> = storedReports.map((r) => ({
     ...r,
@@ -86,7 +89,12 @@ export default async function ReportsPage({
         periodEnd: todayDate,
         payload: todayPayload,
         createdAt: new Date().toISOString(),
-        status: todayBusinessDay?.status === "closed" ? "final" : "live",
+        // effectiveDate.isLive is the direct signal (true only while a
+        // business day is genuinely open/reopened right now) -- more
+        // reliable than re-deriving it from todayBusinessDay?.status,
+        // which is null (not "open") during the gap between closing and
+        // the next opening, same as a genuinely closed day would be.
+        status: effectiveDate?.isLive ? "live" : "final",
       },
       ...reports,
     ];

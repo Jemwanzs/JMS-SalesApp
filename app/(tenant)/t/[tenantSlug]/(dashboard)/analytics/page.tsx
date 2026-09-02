@@ -10,11 +10,13 @@ import { ProductPerformanceList } from "@/features/analytics/components/product-
 import { SalesTrendChartLazy } from "@/features/analytics/components/sales-trend-chart-lazy";
 import { UserPerformanceList } from "@/features/analytics/components/user-performance-list";
 import { AnalyticsService, type AnalyticsPermissions } from "@/services/AnalyticsService";
+import { BusinessDayService } from "@/services/BusinessDayService";
 import { InsightsService } from "@/services/InsightsService";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
+import { resolveActiveLocationId } from "@/lib/tenant/resolve-active-location";
 import { getTenantBySlug } from "@/lib/tenant/resolve-tenant-by-slug";
 import { resolvePreset, todayString, type DatePreset } from "@/lib/utils/date-ranges";
 
@@ -70,9 +72,17 @@ export default async function AnalyticsPage({
 
   const tenantId = tenant.id;
   const timezone = tenant.timezone;
-  const today = todayString(timezone);
 
-  const [viewAll, pastDates, dateRange, products, allUsers] = await Promise.all([
+  // Business Day Rollover: "today" is the effective BUSINESS date, not
+  // the raw calendar date -- both the default/`?preset=today` range AND
+  // the past-dates permission boundary below need to agree on what
+  // "today" currently means for a cross-midnight tenant (see
+  // BusinessDayService's own header comments, migration 0055), or a
+  // still-open business day from yesterday's calendar date would either
+  // show blank or get incorrectly treated as a "past date" requiring
+  // analytics.past_dates.
+  const [activeLocationId, viewAll, pastDates, dateRange, products, allUsers] = await Promise.all([
+    resolveActiveLocationId(supabase, tenantId),
     can("analytics.view_all", { tenantId }),
     can("analytics.past_dates", { tenantId }),
     can("analytics.date_range", { tenantId }),
@@ -81,10 +91,17 @@ export default async function AnalyticsPage({
   ]);
   const perms: AnalyticsPermissions = { viewAll, pastDates, dateRange, products, allUsers };
 
+  const today = activeLocationId
+    ? (await new BusinessDayService(supabase).getEffectiveBusinessDate(tenantId, activeLocationId)).date
+    : todayString(timezone);
+
+  const selectedPreset = VALID_PRESETS.includes(preset as DatePreset) ? (preset as DatePreset) : "today";
   const range =
     from != null
       ? { from, to: to ?? from }
-      : resolvePreset(VALID_PRESETS.includes(preset as DatePreset) ? (preset as DatePreset) : "today", timezone);
+      : selectedPreset === "today"
+        ? { from: today, to: today }
+        : resolvePreset(selectedPreset, timezone);
 
   const analyticsService = new AnalyticsService(supabase);
 

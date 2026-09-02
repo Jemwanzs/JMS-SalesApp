@@ -290,7 +290,13 @@ async function SalesCaptureBody({
   let todayRevenue = new Map<string, number>();
 
   if (rankingEnabled || showDailyVolume) {
-    const today = todayString(timezone);
+    // Business Day Rollover: the leaderboard's "today" is the effective
+    // BUSINESS date, not the raw calendar date -- otherwise Gold/Silver/
+    // Bronze tiering (and "today's sales" volume) would blank out the
+    // moment the calendar rolls over mid-extension, even though the
+    // business day is still open and accumulating. See BusinessDayService's
+    // own header comments (migration 0055).
+    const today = (await new BusinessDayService(supabase).getEffectiveBusinessDate(tenantId, locationId)).date;
     const analyticsService = new AnalyticsService(supabase);
     const { todayRevenue: todayMap } = await analyticsService.getProductRevenueTotals(
       tenantId,

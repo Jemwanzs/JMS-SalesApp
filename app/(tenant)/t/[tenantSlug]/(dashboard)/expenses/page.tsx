@@ -6,12 +6,14 @@ import { BarChart3 } from "lucide-react";
 
 import { ExpenseFilters } from "@/features/expenses/components/expense-filters";
 import { ExpenseList } from "@/features/expenses/components/expense-list";
+import { BusinessDayService } from "@/services/BusinessDayService";
 import { ExpenseItemService } from "@/services/ExpenseItemService";
 import { ExpenseService } from "@/services/ExpenseService";
 import { TenantService } from "@/services/TenantService";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
+import { resolveActiveLocationId } from "@/lib/tenant/resolve-active-location";
 import { getTenantBySlug } from "@/lib/tenant/resolve-tenant-by-slug";
 import { todayString } from "@/lib/utils/date-ranges";
 
@@ -52,8 +54,20 @@ export default async function ExpensesPage({
     redirect(`/t/${tenantSlug}/more`);
   }
 
+  // Two distinct "today"s: `today` is the real calendar date (still the
+  // right boundary for "no future-dated expenses" -- expenses have no
+  // business_day_id at all, by design, so that validation stays
+  // calendar-based). `effectiveDate` is the BUSINESS date the default
+  // VIEW should show -- for a cross-midnight tenant, during the closing-
+  // to-next-opening gap this correctly keeps showing the most recently
+  // completed business day instead of going blank. See
+  // BusinessDayService's own header comments (migration 0055).
   const today = todayString(tenant.timezone);
-  const viewedDate = date || today;
+  const activeLocationId = await resolveActiveLocationId(supabase, tenant.id);
+  const effectiveDate = activeLocationId
+    ? (await new BusinessDayService(supabase).getEffectiveBusinessDate(tenant.id, activeLocationId)).date
+    : today;
+  const viewedDate = date || effectiveDate;
 
   const [canCreate, canEdit, canVoid, canViewAnalytics, expenses, activeItems] = await Promise.all([
     can("expenses.create", { tenantId: tenant.id }),
@@ -80,7 +94,7 @@ export default async function ExpensesPage({
         )}
       </div>
 
-      <ExpenseFilters todayDate={today} />
+      <ExpenseFilters effectiveToday={effectiveDate} maxDate={today} />
 
       <ExpenseList
         tenantId={tenant.id}

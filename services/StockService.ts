@@ -35,6 +35,17 @@ export interface RecordMovementInput {
   quantity: number;
   reason?: string | null;
   recordedBy: string;
+  /**
+   * Business Day Rollover: the caller resolves this via
+   * BusinessDayService.getEffectiveBusinessDate() (features/stock/actions/
+   * record-movement.ts) rather than leaving it to `occurred_on`'s own
+   * `default current_date` -- that default is the DATABASE SERVER's
+   * calendar date, neither tenant-timezone- nor business-day-aware,
+   * exactly the same class of bug sale_date used to avoid by always
+   * being set explicitly from the resolved business day. Required, not
+   * optional, so this can never silently fall back to that DB default.
+   */
+  occurredOn: string;
 }
 
 export interface StockMovementRow {
@@ -139,6 +150,7 @@ export class StockService {
       reason: input.reason ?? null,
       reference_type: "manual",
       recorded_by: input.recordedBy,
+      occurred_on: input.occurredOn,
     });
 
     if (error) {

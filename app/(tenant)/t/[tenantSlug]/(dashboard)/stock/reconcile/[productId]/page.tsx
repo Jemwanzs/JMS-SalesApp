@@ -3,11 +3,13 @@ import { notFound, redirect } from "next/navigation";
 
 import { BackLink } from "@/components/shared/back-link";
 import { ReconciliationForm } from "@/features/stock/components/reconciliation-form";
+import { BusinessDayService } from "@/services/BusinessDayService";
 import { ProductService } from "@/services/ProductService";
 import { StockService } from "@/services/StockService";
 import { assertInventoryEnabled } from "@/lib/inventory/entitlement";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
+import { resolveActiveLocationId } from "@/lib/tenant/resolve-active-location";
 import { getTenantBySlug } from "@/lib/tenant/resolve-tenant-by-slug";
 import { todayString } from "@/lib/utils/date-ranges";
 
@@ -42,7 +44,14 @@ export default async function ReconcileProductPage({
     notFound();
   }
 
-  const today = todayString(tenant!.timezone);
+  // Effective BUSINESS date, not raw calendar date -- see stock/reconcile/
+  // page.tsx's header comment (Business Day Rollover, migration 0055).
+  // This is also the date a submitted count gets recorded under (the
+  // hidden `date` field ReconciliationForm posts).
+  const activeLocationId = await resolveActiveLocationId(supabase, tenantId);
+  const today = activeLocationId
+    ? (await new BusinessDayService(supabase).getEffectiveBusinessDate(tenantId, activeLocationId)).date
+    : todayString(tenant!.timezone);
   const preview = await new StockService(supabase).getReconciliationPreview(tenantId, productId, today);
 
   return (

@@ -5,11 +5,13 @@ import { BackLink } from "@/components/shared/back-link";
 import { ExpenseAnalyticsFilters } from "@/features/expenses/components/expense-analytics-filters";
 import { ExpenseBreakdownList } from "@/features/expenses/components/expense-breakdown-list";
 import { ExpenseSummaryCards } from "@/features/expenses/components/expense-summary-cards";
+import { BusinessDayService } from "@/services/BusinessDayService";
 import { ExpenseService } from "@/services/ExpenseService";
 import { TenantService } from "@/services/TenantService";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
+import { resolveActiveLocationId } from "@/lib/tenant/resolve-active-location";
 import { getTenantBySlug } from "@/lib/tenant/resolve-tenant-by-slug";
 import { resolvePreset, todayString } from "@/lib/utils/date-ranges";
 
@@ -56,15 +58,26 @@ export default async function ExpenseAnalyticsPage({
     redirect(`/t/${tenantSlug}/more`);
   }
 
+  // Two distinct "today"s, same split as expenses/page.tsx (Business Day
+  // Rollover): `today` is the real calendar date, kept as the future-date
+  // clamp boundary (`date <= today`) since a URL-supplied date genuinely
+  // ahead of the clock is never valid. `effectiveDate` is the BUSINESS
+  // date the default view should target -- during the closing-to-next-
+  // opening gap this keeps showing the most recently completed business
+  // day instead of a blank "today" that hasn't opened yet.
   const today = todayString(tenant.timezone);
   const yesterday = resolvePreset("yesterday", tenant.timezone).from;
-  const activeDate = date && date <= today ? date : today;
+  const activeLocationId = await resolveActiveLocationId(supabase, tenant.id);
+  const effectiveDate = activeLocationId
+    ? (await new BusinessDayService(supabase).getEffectiveBusinessDate(tenant.id, activeLocationId)).date
+    : today;
+  const activeDate = date && date <= today ? date : effectiveDate;
 
   const summary = await new ExpenseService(supabase).getSummary(tenant.id, activeDate);
 
   const highestSentence =
     summary.highestItem && summary.highestItemShare != null
-      ? `${summary.highestItem.expenseItemName} is ${activeDate === today ? "today's" : "the selected date's"} highest expense, accounting for ${Math.round(summary.highestItemShare * 100)}% of total expenses.`
+      ? `${summary.highestItem.expenseItemName} is ${activeDate === effectiveDate ? "today's" : "the selected date's"} highest expense, accounting for ${Math.round(summary.highestItemShare * 100)}% of total expenses.`
       : null;
 
   return (
@@ -72,7 +85,7 @@ export default async function ExpenseAnalyticsPage({
       <BackLink href={`/t/${tenantSlug}/expenses`} label="Expenses" />
       <h1 className="mb-4 text-xl font-semibold">Expense Summary</h1>
 
-      <ExpenseAnalyticsFilters todayDate={today} yesterdayDate={yesterday} activeDate={activeDate} />
+      <ExpenseAnalyticsFilters effectiveToday={effectiveDate} maxDate={today} yesterdayDate={yesterday} activeDate={activeDate} />
 
       <div className="flex flex-col gap-4">
         <ExpenseSummaryCards summary={summary} />
