@@ -154,7 +154,7 @@ async function wipeTransactions(tenantId) {
   console.log("Wipe complete.");
 }
 
-let tenantId, tenantSlug, ownerProfileId, locationDonholm, locationKayole, staffFaithId, staffKevinId;
+let tenantId, tenantSlug, ownerProfileId, locationDonholm, locationKayole, staffDonholmId, staffKayoleId;
 
 if (existing && RESET) {
   tenantId = existing.tenant.id;
@@ -166,13 +166,27 @@ if (existing && RESET) {
   locationDonholm = locs.find((l) => l.name.includes("Donholm")).id;
   locationKayole = locs.find((l) => l.name.includes("Kayole")).id;
 
-  const { data: profs } = await supabase.from("tenant_memberships").select("profile_id").eq("tenant_id", tenantId);
-  const { data: allProfiles } = await supabase.from("profiles").select("id, email");
-  const emailById = new Map(allProfiles.map((p) => [p.id, p.email]));
-  for (const p of profs) {
-    const email = emailById.get(p.profile_id);
-    if (email?.startsWith("faith.")) staffFaithId = p.profile_id;
-    if (email?.startsWith("kevin.")) staffKevinId = p.profile_id;
+  // Branch-based, not name-based -- robust regardless of whatever a
+  // staff member has since been renamed to (names/emails are meant to
+  // be editable via the ordinary Users page without breaking --reset).
+  // Plain manual join (membership_id -> profile_id), not a PostgREST
+  // embedded relationship select -- matches this codebase's own
+  // established preference for that over embeds (see lib/tenant/
+  // resolve-active-tenant.ts's header comment).
+  const { data: memberships } = await supabase.from("tenant_memberships").select("id, profile_id").eq("tenant_id", tenantId);
+  const profileIdByMembershipId = new Map((memberships ?? []).map((m) => [m.id, m.profile_id]));
+  const { data: assignments } = await supabase
+    .from("user_role_assignments")
+    .select("location_id, tenant_membership_id")
+    .eq("tenant_id", tenantId)
+    .not("location_id", "is", null);
+  for (const a of assignments ?? []) {
+    const profileId = profileIdByMembershipId.get(a.tenant_membership_id);
+    if (a.location_id === locationDonholm) staffDonholmId = profileId;
+    if (a.location_id === locationKayole) staffKayoleId = profileId;
+  }
+  if (!staffDonholmId || !staffKayoleId) {
+    throw new Error("Could not resolve existing branch staff via user_role_assignments.");
   }
 } else {
   // ==========================================================================
@@ -304,8 +318,8 @@ if (existing && RESET) {
   // Two branch staff so Top Sales Person / staff performance reports
   // have real variety instead of always being the owner. One primarily
   // anchored per branch (assigned via user_role_assignments.location_id,
-  // the Multi-Branch mechanism), both Sales User.
-  async function createStaff(email, fullName, locationId) {
+  // the Multi-Branch mechanism).
+  async function createStaff(email, fullName, locationId, roleId) {
     const { data: user, error } = await supabase.auth.admin.createUser({
       email,
       password: DEMO_PASSWORD,
@@ -321,12 +335,15 @@ if (existing && RESET) {
     if (mErr || !membership) throw new Error(`membership ${email}: ${mErr?.message}`);
     const { error: aErr } = await supabase
       .from("user_role_assignments")
-      .insert({ tenant_id: tenantId, tenant_membership_id: membership.id, role_id: roleIdByName["Sales User"], location_id: locationId });
+      .insert({ tenant_id: tenantId, tenant_membership_id: membership.id, role_id: roleId, location_id: locationId });
     if (aErr) throw new Error(`assignment ${email}: ${aErr.message}`);
     return user.user.id;
   }
-  staffFaithId = await createStaff("faith.wanjiru@malisafi.app", "Faith Wanjiru", locationDonholm);
-  staffKevinId = await createStaff("kevin.otieno@malisafi.app", "Kevin Otieno", locationKayole);
+  // Donholm -> Libbie Sonia (Supervisor); Kayole -> Shanniz K (Sales User) --
+  // named to match real people already familiar from the platform
+  // owner's actual tenant, per an explicit rename request.
+  staffDonholmId = await createStaff("libbie@malisafi.app", "Libbie Sonia", locationDonholm, roleIdByName["Supervisor"]);
+  staffKayoleId = await createStaff("shanniz@malisafi.app", "Shanniz K", locationKayole, roleIdByName["Sales User"]);
 
   // ==========================================================================
   // Step 3: copy the product catalogue (definitions only -- fresh ids,
@@ -461,18 +478,27 @@ function nairobiTimestamp(dateStr, hour, minute) {
 for (const dateStr of dates) {
   const isToday = dateStr === TODAY;
   const dayOfWeek = new Date(`${dateStr}T00:00:00Z`).getUTCDay();
-  const weekendBoost = dayOfWeek === 0 || dayOfWeek === 6 ? rand(1.05, 1.25) : 1;
+  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
 
-  const dailyTotalTarget = randInt(3500, 5500) * weekendBoost;
+  // Every COMPLETE (non-today) day's COMBINED branch total must land
+  // strictly within KES 3,500-5,500 -- a hard requirement, not "on
+  // average." Weekends skew toward the top of the SAME band for
+  // natural variety, never past it (the old weekendBoost multiplier
+  // used to push some weekend days over 5,500). The stock-availability
+  // top-up and the post-generation nudge pass below are what actually
+  // guarantee the band -- this random draw just seeds a starting point.
+  const dailyTotalTarget = isWeekend ? randInt(4300, 5500) : randInt(3500, 4700);
   const donholmShare = rand(BRANCHES[0].shareMin, BRANCHES[0].shareMax);
   const branchTargets = {
     [locationDonholm]: dailyTotalTarget * donholmShare,
     [locationKayole]: dailyTotalTarget * (1 - donholmShare),
   };
 
+  const branchDay = {}; // locationId -> { daySales, accumulated, staffForBranch, openHour, closeHour }
+
   for (const branch of BRANCHES) {
     const target = branchTargets[branch.id];
-    const staffForBranch = branch.id === locationDonholm ? staffFaithId : staffKevinId;
+    const staffForBranch = branch.id === locationDonholm ? staffDonholmId : staffKayoleId;
     const openHour = 8;
     const closeHour = 23; // trade winds down before literal midnight for realistic timestamps
 
@@ -514,6 +540,35 @@ for (const dateStr of dates) {
       }
     }
 
+    // Guarantee stock is never the reason a complete day falls short of
+    // its target -- this (not the target math) was the actual cause of
+    // days landing under KES 3,500 previously. Tops up whichever
+    // popular products are running low, on top of the ordinary ~45%
+    // restock above, only when needed.
+    if (!isToday) {
+      const stockValue = products.reduce((sum, p) => sum + (runningStock.get(`${branch.id}|${p.id}`) ?? 0) * p.expected_price, 0);
+      if (stockValue < target * 1.8) {
+        const topUpProducts = [...products].sort((a, b) => weightOf(b) - weightOf(a)).slice(0, 12);
+        for (const product of topUpProducts) {
+          const key = `${branch.id}|${product.id}`;
+          const qty = randInt(25, 70);
+          runningStock.set(key, (runningStock.get(key) ?? 0) + qty);
+          stockMovementRows.push({
+            tenant_id: tenantId,
+            location_id: branch.id,
+            product_id: product.id,
+            product_name_snapshot: product.name,
+            unit_of_measure_snapshot: product.unit_of_measure ?? "pcs",
+            movement_type: "stock_in",
+            quantity: qty,
+            reason: null,
+            recorded_by: ownerProfileId,
+            occurred_on: dateStr,
+          });
+        }
+      }
+    }
+
     // For "today," if it's the live/open day, only generate a PARTIAL
     // morning's worth of trade (not the full day) -- section 9 wants
     // today to demonstrate real in-progress figures, not a day's worth
@@ -528,8 +583,10 @@ for (const dateStr of dates) {
     // the running balance go negative; if the whole catalogue is
     // genuinely out at this branch, trade for the day just ends early
     // (a real, if unlikely, "sold out" state, still mathematically
-    // consistent).
-    while (accumulated < effectiveTarget * 0.92 && daySales.length < 60 && attempts < 400) {
+    // consistent). Runs until the target is met (not a loose
+    // 0.92-1.15x tolerance window) -- the stock top-up above is what
+    // makes that safe to do without risking a runaway loop.
+    while (accumulated < effectiveTarget && daySales.length < 80 && attempts < 800) {
       attempts += 1;
       const product = pickWeighted(products, weightOf);
       const key = `${branch.id}|${product.id}`;
@@ -541,8 +598,98 @@ for (const dateStr of dates) {
       daySales.push({ product, qty, amount });
       accumulated += amount;
       runningStock.set(key, available - qty);
-      if (accumulated > effectiveTarget * 1.15) break;
     }
+
+    branchDay[branch.id] = { daySales, accumulated, staffForBranch, openHour, closeHour };
+
+    // Occasional shrinkage (damaged/expired produce) -- small, rare,
+    // realistic for a grocery business, capped at what's actually on
+    // hand so it can never push the running balance negative. Doesn't
+    // affect the sales total, so it runs before the band-enforcement
+    // nudge below without interfering with it.
+    if (Math.random() < 0.08) {
+      const product = pick(products);
+      const key = `${branch.id}|${product.id}`;
+      const current = runningStock.get(key) ?? 0;
+      const qty = Math.min(randInt(1, 6), Math.floor(current * 0.1));
+      if (qty > 0) {
+        runningStock.set(key, current - qty);
+        stockMovementRows.push({
+          tenant_id: tenantId,
+          location_id: branch.id,
+          product_id: product.id,
+          product_name_snapshot: product.name,
+          unit_of_measure_snapshot: product.unit_of_measure ?? "pcs",
+          movement_type: pick(["damaged", "expired"]),
+          quantity: -qty,
+          reason: "Spoilage during routine stock check",
+          recorded_by: ownerProfileId,
+          occurred_on: dateStr,
+        });
+      }
+    }
+  }
+
+  // Hard band enforcement across the day's COMBINED branch total: nudge
+  // up (add small stock-aware filler sales) or down (drop the smallest
+  // sale rows, restoring their stock) until strictly within
+  // [3500, 5500]. "Today" is exempt -- an intentional, smaller,
+  // partial/in-progress figure by design.
+  if (!isToday) {
+    const donholmDay = branchDay[locationDonholm];
+    const kayoleDay = branchDay[locationKayole];
+    let combined = donholmDay.accumulated + kayoleDay.accumulated;
+
+    function cheapestSaleable(locationId) {
+      const candidates = products.filter((p) => (runningStock.get(`${locationId}|${p.id}`) ?? 0) >= 1);
+      if (candidates.length === 0) return null;
+      return [...candidates].sort((a, b) => a.expected_price - b.expected_price)[0];
+    }
+
+    let guard = 0;
+    while (combined < 3500 && guard < 200) {
+      guard += 1;
+      const branch = pick(BRANCHES);
+      const day = branchDay[branch.id];
+      const product = cheapestSaleable(branch.id);
+      if (!product) continue;
+      const key = `${branch.id}|${product.id}`;
+      const available = runningStock.get(key) ?? 0;
+      const qty = Math.min(randInt(1, 3), available);
+      const amount = Math.round(product.expected_price * qty);
+      if (combined + amount > 5500) continue;
+      day.daySales.push({ product, qty, amount });
+      day.accumulated += amount;
+      runningStock.set(key, available - qty);
+      combined += amount;
+    }
+
+    guard = 0;
+    while (combined > 5500 && guard < 200) {
+      guard += 1;
+      const branch = donholmDay.daySales.length >= kayoleDay.daySales.length ? BRANCHES[0] : BRANCHES[1];
+      const day = branchDay[branch.id];
+      if (day.daySales.length === 0) continue;
+      let smallestIdx = 0;
+      for (let i = 1; i < day.daySales.length; i++) {
+        if (day.daySales[i].amount < day.daySales[smallestIdx].amount) smallestIdx = i;
+      }
+      const [removed] = day.daySales.splice(smallestIdx, 1);
+      if (combined - removed.amount < 3500) {
+        day.daySales.splice(smallestIdx, 0, removed);
+        break;
+      }
+      const key = `${branch.id}|${removed.product.id}`;
+      runningStock.set(key, (runningStock.get(key) ?? 0) + removed.qty);
+      day.accumulated -= removed.amount;
+      combined -= removed.amount;
+    }
+  }
+
+  // Commit both branches now that each day's total is finalized:
+  // business_days upsert, then the sale/stock_movement rows.
+  for (const branch of BRANCHES) {
+    const { daySales, accumulated, staffForBranch, openHour, closeHour } = branchDay[branch.id];
 
     // upsert, not insert: the live pg_cron sweep (run_business_day_sweep,
     // migration 0011) auto-creates a 'scheduled' placeholder row for
@@ -607,31 +754,6 @@ for (const dateStr of dates) {
         recorded_by: recordedBy,
         occurred_on: dateStr,
       });
-    }
-
-    // Occasional shrinkage (damaged/expired produce) -- small, rare,
-    // realistic for a grocery business, capped at what's actually on
-    // hand so it can never push the running balance negative.
-    if (Math.random() < 0.08) {
-      const product = pick(products);
-      const key = `${branch.id}|${product.id}`;
-      const current = runningStock.get(key) ?? 0;
-      const qty = Math.min(randInt(1, 6), Math.floor(current * 0.1));
-      if (qty > 0) {
-        runningStock.set(key, current - qty);
-        stockMovementRows.push({
-          tenant_id: tenantId,
-          location_id: branch.id,
-          product_id: product.id,
-          product_name_snapshot: product.name,
-          unit_of_measure_snapshot: product.unit_of_measure ?? "pcs",
-          movement_type: pick(["damaged", "expired"]),
-          quantity: -qty,
-          reason: "Spoilage during routine stock check",
-          recorded_by: ownerProfileId,
-          occurred_on: dateStr,
-        });
-      }
     }
   }
 
