@@ -323,3 +323,109 @@ commit;
   row should read `0`.
 - Doesn't touch `audit_logs`, accounts, roles, or billing — same reasoning
   as the wipe-all script above.
+
+---
+
+## Clear ONE tenant's sales for a SINGLE date only (keep the business day open, keep everything else)
+
+**What this does:** the narrowest of the three — clears only `sales` (plus
+any `sale_corrections`/`insights_snapshots` tied to that exact day) for one
+specific `sale_date`, for one specific tenant (resolved via real
+`platform_admins` → `billing_owner_profile_id` membership, never a
+hardcoded email). Everything else about that day survives: the
+`business_days` row itself is **kept** (still `open`, so real sales can
+still be recorded that same day afterward), historical sales from every
+other date are untouched, and `sale_number_sequences` is **deliberately
+not reset** — other dates already hold earlier numbers, so resetting the
+counter would collide with them the moment a new sale tries to reuse one.
+A visible gap in sale numbers where the deleted ones used to be is the
+expected, harmless result.
+
+Cleared: `sales` for the target date, plus any `sale_corrections`/
+`insights_snapshots` referencing that day's records (rare in practice,
+since test sales are usually never voided/corrected first — the script
+still checks). Left alone: `business_days` (kept open), every other
+date's `sales`/`reports`/etc., `products`, `stock_movements` (sales don't
+drive stock movements in this app — there's no relationship between
+them), accounts, roles, billing.
+
+**When to use it:** a specific day's transactions were recorded purely as
+a test/training run (not real sales) and need to disappear from
+dashboards/leaderboard/reports, without touching any other date or
+resetting anything that would affect real sales recorded before or after.
+
+**Origin:** written 2026-09-02, in response to a request to clear the
+platform owner's own tenant's sales recorded that same day as test/
+training data, while confirming no other date or tenant was affected and
+the day itself stayed usable for real sales going forward.
+
+### Step 1 — preview (read-only, changes nothing)
+
+```sql
+with owner_tenant as (
+  select t.id from public.tenants t
+  join public.platform_admins pa on pa.profile_id = t.billing_owner_profile_id
+)
+select 'sales' as table_name, count(*) from public.sales
+  where tenant_id in (select id from owner_tenant) and sale_date = '2026-09-02'
+union all select 'sale_corrections', count(*) from public.sale_corrections sc
+  where sc.sale_id in (select id from public.sales where tenant_id in (select id from owner_tenant) and sale_date = '2026-09-02')
+union all select 'insights_snapshots', count(*) from public.insights_snapshots
+  where business_day_id in (select id from public.business_days where tenant_id in (select id from owner_tenant) and business_date = '2026-09-02')
+union all select '— owner tenant(s) resolved —', count(*) from owner_tenant;
+```
+
+The last row **must** read `1` — same stop conditions as the script above
+(`0` = no owner tenant resolved, `2`+ = ambiguous, resolve before
+continuing).
+
+### Step 2 — the actual deletion
+
+```sql
+begin;
+
+with owner_tenant as (
+  select t.id from public.tenants t
+  join public.platform_admins pa on pa.profile_id = t.billing_owner_profile_id
+), target_sales as (
+  select id from public.sales
+  where tenant_id in (select id from owner_tenant) and sale_date = '2026-09-02'
+)
+delete from public.sale_corrections where sale_id in (select id from target_sales);
+
+with owner_tenant as (
+  select t.id from public.tenants t
+  join public.platform_admins pa on pa.profile_id = t.billing_owner_profile_id
+)
+delete from public.insights_snapshots
+where business_day_id in (
+  select id from public.business_days
+  where tenant_id in (select id from owner_tenant) and business_date = '2026-09-02'
+);
+
+with owner_tenant as (
+  select t.id from public.tenants t
+  join public.platform_admins pa on pa.profile_id = t.billing_owner_profile_id
+)
+delete from public.sales
+where tenant_id in (select id from owner_tenant) and sale_date = '2026-09-02';
+-- business_days is intentionally NOT deleted -- the day stays open.
+
+-- Review the output above (each DELETE reports how many rows it removed).
+-- If everything looks right:
+commit;
+-- If anything looks wrong, run this instead of the commit above:
+-- rollback;
+```
+
+### Notes
+
+- Change the two literal `'2026-09-02'` dates in Step 1 and the one in
+  Step 2 together before running for a different date — nothing else
+  needs editing.
+- Analytics/reports/leaderboard read `sales` live on every request (no
+  cache/snapshot table in front of them) — the moment the rows are gone,
+  every dashboard immediately reflects zero sales for that date, with no
+  separate "refresh" step needed.
+- Re-run Step 1's preview afterward — the `sales` count should read `0`;
+  the other two are usually already `0` even before deleting.
