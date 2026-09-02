@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
+import { notFound, redirect } from "next/navigation";
 
 import { SaleHistoryFilters } from "@/features/sales/components/sale-history-filters";
 import { SaleHistoryList } from "@/features/sales/components/sale-history-list";
@@ -51,8 +52,21 @@ export default async function SalesHistoryPage({
 
   const [user, tenant] = await Promise.all([getCurrentUser(), getTenantBySlug(supabase, tenantSlug)]);
 
-  const tenantId = tenant!.id;
-  const today = todayString(tenant!.timezone);
+  // The tenant layout above already redirects/notFounds on these same
+  // conditions, but its redirect() isn't guaranteed to short-circuit
+  // this page's own async body first -- Server Components layouts and
+  // their nested pages can execute concurrently, so an unauthenticated
+  // request could otherwise reach `tenant!.id` below with `tenant` still
+  // null (RLS-filtered) and throw instead of cleanly redirecting.
+  if (!user) {
+    redirect("/login");
+  }
+  if (!tenant) {
+    notFound();
+  }
+
+  const tenantId = tenant.id;
+  const today = todayString(tenant.timezone);
   const hasFilters = Boolean(from || to || q);
   const hasDateFilter = Boolean(from || to);
 

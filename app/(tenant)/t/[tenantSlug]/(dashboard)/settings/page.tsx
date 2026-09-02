@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { AnniversaryWishCard } from "@/features/settings/components/anniversary-wish-card";
 import { BranchesCard } from "@/features/settings/components/branches-card";
 import { InventoryModuleCard } from "@/features/settings/components/inventory-module-card";
+import { NotesFieldCard } from "@/features/settings/components/notes-field-card";
 import { ProductRankingCard } from "@/features/settings/components/product-ranking-card";
 import { QuantityFieldCard } from "@/features/settings/components/quantity-field-card";
 import { SaleNumberTemplateCard } from "@/features/settings/components/sale-number-template-card";
@@ -64,6 +65,7 @@ export default async function SettingsPage({
     showDailySalesVolume,
     showProductPrice,
     quantityEnabled,
+    notesFieldEnabled,
     inventoryEnabledSetting,
     inventoryAddon,
     inventoryPlans,
@@ -77,6 +79,7 @@ export default async function SettingsPage({
     tenantService.getSetting<boolean>(tenantId, "show_daily_sales_volume"),
     tenantService.getSetting<boolean>(tenantId, "show_product_price_on_landing"),
     tenantService.getSetting<boolean>(tenantId, "quantity_enabled"),
+    tenantService.getSetting<boolean>(tenantId, "notes_field_enabled"),
     tenantService.getSetting<boolean>(tenantId, "inventory_enabled"),
     addonBillingService.getAddonSubscription(tenantId, "inventory"),
     addonBillingService.listAddonPlans("inventory"),
@@ -123,6 +126,7 @@ export default async function SettingsPage({
         initialShowProductPrice={showProductPrice ?? true}
       />
       <QuantityFieldCard tenantId={tenantId} tenantSlug={tenantSlug} initialEnabled={quantityEnabled ?? true} />
+      <NotesFieldCard tenantId={tenantId} tenantSlug={tenantSlug} initialEnabled={notesFieldEnabled ?? true} />
       {inventoryPlans.length > 0 && (
         <InventoryModuleCard
           tenantId={tenantId}

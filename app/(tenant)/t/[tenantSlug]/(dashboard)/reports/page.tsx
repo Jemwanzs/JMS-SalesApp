@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
+import { notFound, redirect } from "next/navigation";
 
 import { ReportList } from "@/features/reports/components/report-list";
 import { BusinessDayService } from "@/services/BusinessDayService";
 import { ReportService } from "@/services/ReportService";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/current-user";
 import { resolveActiveLocationId } from "@/lib/tenant/resolve-active-location";
 import { getTenantBySlug } from "@/lib/tenant/resolve-tenant-by-slug";
 
@@ -37,15 +39,25 @@ export default async function ReportsPage({
   const supabase = await createClient();
   const t = await getTranslations("Reports");
 
-  const tenant = await getTenantBySlug(supabase, tenantSlug);
+  const [user, tenant] = await Promise.all([getCurrentUser(), getTenantBySlug(supabase, tenantSlug)]);
+
+  // See sales-history/page.tsx's identical guard for why this can't just
+  // rely on the tenant layout's own redirect/notFound.
+  if (!user) {
+    redirect("/login");
+  }
+  if (!tenant) {
+    notFound();
+  }
+
   const reportService = new ReportService(supabase);
   const businessDayService = new BusinessDayService(supabase);
 
-  const activeLocationId = await resolveActiveLocationId(supabase, tenant!.id);
+  const activeLocationId = await resolveActiveLocationId(supabase, tenant.id);
 
   const [storedReports, todayBusinessDay, todayDate] = await Promise.all([
-    reportService.listReports(tenant!.id),
-    activeLocationId ? businessDayService.getTodayBusinessDay(tenant!.id, activeLocationId) : Promise.resolve(null),
+    reportService.listReports(tenant.id),
+    activeLocationId ? businessDayService.getTodayBusinessDay(tenant.id, activeLocationId) : Promise.resolve(null),
     activeLocationId
       ? businessDayService.getEffectiveTimezone(activeLocationId).then(
           (tz) => new Intl.DateTimeFormat("en-CA", { timeZone: tz }).format(new Date())
@@ -59,7 +71,7 @@ export default async function ReportsPage({
   }));
 
   if (activeLocationId && todayDate) {
-    const todayPayload = await reportService.computeDailyReportPayload(tenant!.id, activeLocationId, todayDate);
+    const todayPayload = await reportService.computeDailyReportPayload(tenant.id, activeLocationId, todayDate);
 
     // Excludes any stored "daily" row already covering today -- the
     // live-computed entry above always supersedes it (same computation,

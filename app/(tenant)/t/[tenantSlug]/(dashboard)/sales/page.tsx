@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { getLocale, getTranslations } from "next-intl/server";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { Suspense } from "react";
+import { MapPin } from "lucide-react";
 
 import { AnniversaryCelebrationDialog } from "@/features/sales/components/anniversary-celebration-dialog";
 import { OpenBusinessDayButton } from "@/features/sales/components/open-business-day-button";
@@ -9,6 +10,7 @@ import { ProductGrid } from "@/features/sales/components/product-grid";
 import { ProductGridSkeleton } from "@/features/sales/components/product-grid-skeleton";
 import { ReopenBusinessDayDialog } from "@/features/sales/components/reopen-business-day-dialog";
 import { SalesVisibilityBadge } from "@/features/sales/components/sales-visibility-badge";
+import { Badge } from "@/components/ui/badge";
 import { AnalyticsService } from "@/services/AnalyticsService";
 import { AnniversaryService } from "@/services/AnniversaryService";
 import { BusinessDayService } from "@/services/BusinessDayService";
@@ -57,14 +59,25 @@ export default async function SalesPage({
   // page rendered after every login.
   const [user, tenant] = await Promise.all([getCurrentUser(), getTenantBySlug(supabase, tenantSlug)]);
 
+  // The tenant layout above already redirects/notFounds on these same
+  // conditions, but its redirect() isn't guaranteed to short-circuit
+  // this page's own async body first -- Server Components layouts and
+  // their nested pages can execute concurrently, so an unauthenticated
+  // request could otherwise reach `tenant.id` below with `tenant` still
+  // null (RLS-filtered) and throw instead of cleanly redirecting.
+  if (!user) {
+    redirect("/login");
+  }
+  if (!tenant) {
+    notFound();
+  }
+
   // profile and activeLocationId are likewise independent of each other
   // -- one needs user.id, the other tenant.id, neither needs the
   // other's result.
   const [{ data: profile }, activeLocationId] = await Promise.all([
-    user
-      ? supabase.from("profiles").select("full_name").eq("id", user.id).maybeSingle()
-      : Promise.resolve({ data: null }),
-    resolveActiveLocationId(supabase, tenant!.id),
+    supabase.from("profiles").select("full_name").eq("id", user.id).maybeSingle(),
+    resolveActiveLocationId(supabase, tenant.id),
   ]);
 
   // Multi-Branch User Access Phase 5. No active_branch_sessions row for
@@ -87,11 +100,11 @@ export default async function SalesPage({
   let location: { id: string };
   if (activeLocationId) {
     location = { id: activeLocationId };
-  } else if (user && (await new PlatformAdminService(createServiceRoleClient()).getActiveImpersonation(user.id, tenant!.id))) {
+  } else if (await new PlatformAdminService(createServiceRoleClient()).getActiveImpersonation(user.id, tenant.id)) {
     const { data: firstLocation } = await supabase
       .from("locations")
       .select("id")
-      .eq("tenant_id", tenant!.id)
+      .eq("tenant_id", tenant.id)
       .order("created_at", { ascending: true })
       .limit(1)
       .single();
@@ -116,15 +129,21 @@ export default async function SalesPage({
     day: "numeric",
   });
 
-  // None of these four depend on each other -- businessDay only needs
-  // location.id, the rest only need tenant.id -- so they can all run in
-  // one round trip instead of businessDay blocking the other three.
-  const [businessDay, canOpenDay, canReopenDay, activeWish] = await Promise.all([
-    businessDayService.getTodayBusinessDay(tenant!.id, location.id),
-    can("business_day.open", { tenantId: tenant!.id }),
-    can("business_day.reopen", { tenantId: tenant!.id }),
-    new AnniversaryService(supabase).getActiveWish(tenant!.id).catch(() => null),
+  // None of these six depend on each other -- businessDay/activeLocation
+  // only need location.id, the rest only need tenant.id -- so they can
+  // all run in one round trip instead of blocking each other.
+  const [businessDay, canOpenDay, canReopenDay, activeWish, activeLocation, { count: branchCount }] = await Promise.all([
+    businessDayService.getTodayBusinessDay(tenant.id, location.id),
+    can("business_day.open", { tenantId: tenant.id }),
+    can("business_day.reopen", { tenantId: tenant.id }),
+    new AnniversaryService(supabase).getActiveWish(tenant.id).catch(() => null),
+    supabase.from("locations").select("name").eq("id", location.id).maybeSingle(),
+    // Only ever shown for genuinely multi-branch tenants (docs/24-multi-
+    // branch-access.md) -- a single-branch tenant already knows which
+    // branch it is, so this badge would just be clutter there.
+    supabase.from("locations").select("id", { count: "exact", head: true }).eq("tenant_id", tenant.id).eq("status", "active"),
   ]);
+  const activeBranchName = (branchCount ?? 0) > 1 ? (activeLocation.data?.name ?? null) : null;
 
   const canCapture = businessDay?.status === "open" || businessDay?.status === "reopened";
 
@@ -136,10 +155,10 @@ export default async function SalesPage({
   // role) since it's a whole-business celebration, not an admin tool;
   // getActiveWish is already tenant_id-scoped and RLS-gated, so it can
   // never surface another tenant's wish here.
-  const todayDateKey = todayString(tenant!.timezone);
+  const todayDateKey = todayString(tenant.timezone);
   const wishSentToday =
     activeWish?.sentAt != null &&
-    new Intl.DateTimeFormat("en-CA", { timeZone: tenant!.timezone }).format(new Date(activeWish.sentAt)) === todayDateKey;
+    new Intl.DateTimeFormat("en-CA", { timeZone: tenant.timezone }).format(new Date(activeWish.sentAt)) === todayDateKey;
 
   return (
     <div className="flex flex-1 flex-col p-6">
@@ -149,8 +168,14 @@ export default async function SalesPage({
       <p className="text-sm text-muted-foreground">{today}</p>
       <h1 className="mt-1 text-xl font-semibold">{t("greeting", { name: firstName })}</h1>
 
-      <div className="mt-6">
+      <div className="mt-6 flex flex-wrap items-center gap-2">
         <SalesVisibilityBadge />
+        {activeBranchName && (
+          <Badge variant="outline" className="gap-1">
+            <MapPin className="h-3 w-3" />
+            {activeBranchName}
+          </Badge>
+        )}
       </div>
 
       {businessDay?.status === "reopened" && businessDay.reopenExpiresAt && (
@@ -167,9 +192,9 @@ export default async function SalesPage({
       {canCapture && businessDay ? (
         <Suspense fallback={<ProductGridSkeleton />}>
           <SalesCaptureBody
-            tenantId={tenant!.id}
+            tenantId={tenant.id}
             tenantSlug={tenantSlug}
-            timezone={tenant!.timezone}
+            timezone={tenant.timezone}
             locationId={location.id}
             businessDayId={businessDay.id}
             supabase={supabase}
@@ -194,13 +219,13 @@ export default async function SalesPage({
               ? canReopenDay && (
                   <ReopenBusinessDayDialog
                     businessDayId={businessDay.id}
-                    tenantId={tenant!.id}
+                    tenantId={tenant.id}
                     tenantSlug={tenantSlug}
                   />
                 )
               : canOpenDay && (
                   <OpenBusinessDayButton
-                    tenantId={tenant!.id}
+                    tenantId={tenant.id}
                     tenantSlug={tenantSlug}
                     locationId={location.id}
                   />
@@ -237,6 +262,7 @@ async function SalesCaptureBody({
       "show_daily_sales_volume",
       "show_product_price_on_landing",
       "quantity_enabled",
+      "notes_field_enabled",
     ]),
   ]);
 
@@ -244,6 +270,7 @@ async function SalesCaptureBody({
   const showDailyVolume = (settings.show_daily_sales_volume as boolean | undefined) ?? false;
   const showProductPrice = (settings.show_product_price_on_landing as boolean | undefined) ?? true;
   const quantityEnabled = (settings.quantity_enabled as boolean | undefined) ?? true;
+  const notesEnabled = (settings.notes_field_enabled as boolean | undefined) ?? true;
 
   let rankedProducts: ReturnType<typeof rankProducts> = products.map((p) => ({
     ...p,
@@ -295,6 +322,7 @@ async function SalesCaptureBody({
         todayRevenue={todayRevenue}
         showProductPrice={showProductPrice}
         quantityEnabled={quantityEnabled}
+        notesEnabled={notesEnabled}
         tenantId={tenantId}
         tenantSlug={tenantSlug}
         locationId={locationId}

@@ -50,6 +50,7 @@ export function ProductGrid({
   todayRevenue,
   showProductPrice = true,
   quantityEnabled = true,
+  notesEnabled = true,
   tenantId,
   tenantSlug,
   locationId,
@@ -60,6 +61,7 @@ export function ProductGrid({
   todayRevenue?: Map<string, number>;
   showProductPrice?: boolean;
   quantityEnabled?: boolean;
+  notesEnabled?: boolean;
   tenantId: string;
   tenantSlug: string;
   locationId: string;
@@ -185,6 +187,7 @@ export function ProductGrid({
         locationId={locationId}
         businessDayId={businessDayId}
         quantityEnabled={quantityEnabled}
+        notesEnabled={notesEnabled}
         onOpenChange={(open) => !open && setSelected(null)}
         onRecorded={onRecorded}
       />

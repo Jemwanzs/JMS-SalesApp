@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
+import { notFound, redirect } from "next/navigation";
 
 import { AnalyticsFilters } from "@/features/analytics/components/analytics-filters";
 import { InsightsList } from "@/features/analytics/components/insights-list";
@@ -58,8 +59,17 @@ export default async function AnalyticsPage({
 
   const [user, tenant] = await Promise.all([getCurrentUser(), getTenantBySlug(supabase, tenantSlug)]);
 
-  const tenantId = tenant!.id;
-  const timezone = tenant!.timezone;
+  // See sales-history/page.tsx's identical guard for why this can't just
+  // rely on the tenant layout's own redirect/notFound.
+  if (!user) {
+    redirect("/login");
+  }
+  if (!tenant) {
+    notFound();
+  }
+
+  const tenantId = tenant.id;
+  const timezone = tenant.timezone;
   const today = todayString(timezone);
 
   const [viewAll, pastDates, dateRange, products, allUsers] = await Promise.all([

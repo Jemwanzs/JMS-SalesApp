@@ -24,6 +24,7 @@ export function RecordSaleDialog({
   locationId,
   businessDayId,
   quantityEnabled,
+  notesEnabled,
   onOpenChange,
   onRecorded,
 }: {
@@ -33,6 +34,7 @@ export function RecordSaleDialog({
   locationId: string;
   businessDayId: string;
   quantityEnabled: boolean;
+  notesEnabled: boolean;
   onOpenChange: (open: boolean) => void;
   onRecorded: (sale: NonNullable<RecordSaleState["sale"]>) => void;
 }) {
@@ -80,7 +82,7 @@ export function RecordSaleDialog({
     // entirely (rather than sending "") would break every submission
     // while quantityEnabled is false.
     formData.set("quantity", quantityEnabled ? quantity : "");
-    formData.set("notes", notes);
+    formData.set("notes", notesEnabled ? notes : "");
     formData.set("idempotencyKey", idempotencyKey);
 
     startTransition(async () => {
@@ -166,14 +168,16 @@ export function RecordSaleDialog({
                 </div>
               )}
 
-              <div className="space-y-2">
-                <Label htmlFor="notes">{t("notesOptional")}</Label>
-                <Input
-                  id="notes"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                />
-              </div>
+              {notesEnabled && (
+                <div className="space-y-2">
+                  <Label htmlFor="notes">{t("notesOptional")}</Label>
+                  <Input
+                    id="notes"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                  />
+                </div>
+              )}
 
               {error && <p className="text-sm text-destructive">{error}</p>}
 
