@@ -86,7 +86,7 @@ export class ReportService {
   async generateDailyReport(businessDayId: string): Promise<string> {
     const { data: businessDay, error: dayError } = await this.supabase
       .from("business_days")
-      .select("id, tenant_id, location_id, business_date, aggregates")
+      .select("id, tenant_id, location_id, business_date")
       .eq("id", businessDayId)
       .single();
 
@@ -94,74 +94,11 @@ export class ReportService {
       throw new Error(`ReportService.generateDailyReport: business day not found`);
     }
 
-    // Excludes 'corrected' too -- see AnalyticsService.getAnalytics's
-    // own comment on this exact filter.
-    const { data: sales, error: salesError } = await this.supabase
-      .from("sales")
-      .select("product_name_snapshot, actual_amount, recorded_by")
-      .eq("business_day_id", businessDayId)
-      .neq("status", "voided")
-      .neq("status", "corrected");
-
-    if (salesError) {
-      throw new Error(`ReportService.generateDailyReport: ${salesError.message}`);
-    }
-
-    const aggregates = businessDay.aggregates as { grossSales?: number; transactionCount?: number };
-    const grossSales = aggregates.grossSales ?? 0;
-    const transactionCount = aggregates.transactionCount ?? 0;
-    const averageSale = transactionCount > 0 ? grossSales / transactionCount : 0;
-
-    const topProduct = topByNormalizedName(sales ?? []);
-
-    let topSalesPerson: DailyReportPayload["topSalesPerson"] = null;
-    const topRecorder = topBy(sales ?? [], (s) => s.recorded_by);
-    if (topRecorder) {
-      const { data: profile } = await this.supabase
-        .from("profiles")
-        .select("full_name, email")
-        .eq("id", topRecorder.key)
-        .maybeSingle();
-      topSalesPerson = {
-        name: profile?.full_name ?? profile?.email ?? "Unknown",
-        revenue: topRecorder.revenue,
-      };
-    }
-
-    let vsPreviousDay: DailyReportPayload["vsPreviousDay"] = null;
-    if (businessDay.location_id) {
-      const { data: previousDay } = await this.supabase
-        .from("business_days")
-        .select("aggregates")
-        .eq("tenant_id", businessDay.tenant_id)
-        .eq("location_id", businessDay.location_id)
-        .eq("status", "closed")
-        .lt("business_date", businessDay.business_date)
-        .order("business_date", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (previousDay) {
-        const previousGrossSales =
-          (previousDay.aggregates as { grossSales?: number }).grossSales ?? 0;
-        vsPreviousDay = {
-          previousGrossSales,
-          changePercent:
-            previousGrossSales > 0
-              ? ((grossSales - previousGrossSales) / previousGrossSales) * 100
-              : null,
-        };
-      }
-    }
-
-    const payload: DailyReportPayload = {
-      grossSales,
-      transactionCount,
-      averageSale,
-      topProduct: topProduct ? { name: topProduct.key, revenue: topProduct.revenue } : null,
-      topSalesPerson,
-      vsPreviousDay,
-    };
+    const payload = await this.computeDailyReportPayload(
+      businessDay.tenant_id,
+      businessDay.location_id,
+      businessDay.business_date
+    );
 
     const { data: report, error: reportError } = await this.supabase
       .from("reports")
@@ -182,6 +119,104 @@ export class ReportService {
     }
 
     return report.id;
+  }
+
+  /**
+   * Reports Must Always Be Available (Product Enhancements): the daily
+   * sales report used to exist only as a `reports` row written at
+   * business-day close (see generateDailyReport above) -- meaning a
+   * still-open day had no report at all, not even a zero one, until it
+   * closed. This computes the SAME payload shape live, straight from
+   * `sales` for the given tenant/location/date, so the Reports page can
+   * show today's figures (real or zero) while the day is still open,
+   * not just after close.
+   *
+   * Deliberately queries by tenant_id + location_id + sale_date rather
+   * than business_day_id -- unlike generateDailyReport (always called
+   * for an already-closed, already-businessDayId-known day), this is
+   * called for a date that may not have a business_days row at all yet
+   * (never opened today). Extracted as the one shared computation both
+   * generateDailyReport and this method use, so a closed day's stored
+   * report and an open day's live figures can never drift apart from
+   * computing the same numbers two different ways.
+   */
+  async computeDailyReportPayload(
+    tenantId: string,
+    locationId: string | null,
+    businessDate: string
+  ): Promise<DailyReportPayload> {
+    // Excludes 'corrected' too -- see AnalyticsService.getAnalytics's
+    // own comment on this exact filter.
+    let query = this.supabase
+      .from("sales")
+      .select("product_name_snapshot, actual_amount, recorded_by")
+      .eq("tenant_id", tenantId)
+      .eq("sale_date", businessDate)
+      .neq("status", "voided")
+      .neq("status", "corrected");
+    if (locationId) {
+      query = query.eq("location_id", locationId);
+    }
+    const { data: sales, error: salesError } = await query;
+
+    if (salesError) {
+      throw new Error(`ReportService.computeDailyReportPayload: ${salesError.message}`);
+    }
+
+    const grossSales = (sales ?? []).reduce((sum, s) => sum + Number(s.actual_amount), 0);
+    const transactionCount = (sales ?? []).length;
+    const averageSale = transactionCount > 0 ? grossSales / transactionCount : 0;
+
+    const topProduct = topByNormalizedName(sales ?? []);
+
+    let topSalesPerson: DailyReportPayload["topSalesPerson"] = null;
+    const topRecorder = topBy(sales ?? [], (s) => s.recorded_by);
+    if (topRecorder) {
+      const { data: profile } = await this.supabase
+        .from("profiles")
+        .select("full_name, email")
+        .eq("id", topRecorder.key)
+        .maybeSingle();
+      topSalesPerson = {
+        name: profile?.full_name ?? profile?.email ?? "Unknown",
+        revenue: topRecorder.revenue,
+      };
+    }
+
+    let vsPreviousDay: DailyReportPayload["vsPreviousDay"] = null;
+    if (locationId) {
+      const { data: previousDay } = await this.supabase
+        .from("business_days")
+        .select("aggregates")
+        .eq("tenant_id", tenantId)
+        .eq("location_id", locationId)
+        .eq("status", "closed")
+        .lt("business_date", businessDate)
+        .order("business_date", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (previousDay) {
+        const previousGrossSales =
+          (previousDay.aggregates as { grossSales?: number }).grossSales ?? 0;
+        vsPreviousDay = {
+          previousGrossSales,
+          changePercent:
+            previousGrossSales > 0
+              ? ((grossSales - previousGrossSales) / previousGrossSales) * 100
+              : null,
+        };
+      }
+    }
+
+    return {
+      grossSales,
+      transactionCount,
+      averageSale,
+      topProduct: topProduct ? { name: topProduct.key, revenue: topProduct.revenue } : null,
+      topSalesPerson,
+      vsPreviousDay,
+    };
   }
 
   /**

@@ -1,7 +1,7 @@
 import { getLocale, getTranslations } from "next-intl/server";
 
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LOCALE_BCP47, type SupportedLocale } from "@/lib/i18n/config";
 import type { CorrectionsReportPayload, DailyReportPayload } from "@/services/ReportService";
 
@@ -24,10 +24,12 @@ async function DailyReportCard({
   periodStart,
   payload,
   bcp47,
+  status,
 }: {
   periodStart: string;
   payload: DailyReportPayload;
   bcp47: string;
+  status: "live" | "final";
 }) {
   const t = await getTranslations("Reports");
 
@@ -35,6 +37,11 @@ async function DailyReportCard({
     <Card>
       <CardHeader>
         <CardTitle>{formatPeriod(periodStart, bcp47)}</CardTitle>
+        <CardAction>
+          <Badge variant={status === "live" ? "default" : "secondary"}>
+            {status === "live" ? t("todayLive") : t("closedFinal")}
+          </Badge>
+        </CardAction>
       </CardHeader>
       <CardContent className="space-y-2 text-sm">
         <div className="flex justify-between">
@@ -152,6 +159,7 @@ export async function ReportList({
     reportType: string;
     periodStart: string;
     payload: DailyReportPayload | CorrectionsReportPayload;
+    status: "live" | "final";
   }>;
 }) {
   const [t, locale] = await Promise.all([getTranslations("Reports"), getLocale()]);
@@ -182,6 +190,7 @@ export async function ReportList({
             key={report.id}
             periodStart={report.periodStart}
             bcp47={bcp47}
+            status={report.status}
             payload={report.payload as DailyReportPayload}
           />
         )

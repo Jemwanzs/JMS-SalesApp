@@ -183,6 +183,8 @@
   "Reports": {
     "heading": "Reports",
     "noReportsYet": "No reports yet. A daily report is generated automatically each time a business day closes.",
+    "todayLive": "Today — Live",
+    "closedFinal": "Closed — Final",
 
     "grossSales": "Gross Sales",
     "transactions": "Transactions",

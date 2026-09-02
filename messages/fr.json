@@ -183,6 +183,8 @@
   "Reports": {
     "heading": "Rapports",
     "noReportsYet": "Aucun rapport pour le moment. Un rapport journalier est généré automatiquement à chaque clôture de journée commerciale.",
+    "todayLive": "Aujourd'hui — En direct",
+    "closedFinal": "Clôturé — Final",
 
     "grossSales": "Ventes brutes",
     "transactions": "Transactions",
