@@ -97,6 +97,12 @@ import type { Database } from "@/types/database.types";
  *     table's location-scoped RLS policy which branch this session is
  *     in, so it can't be gated behind that same lookup without a
  *     circular dependency
+ *   - lib/supabase/middleware.ts — the 12-hour session-age cap (Smart
+ *     Auto-Login & 12-Hour Session) reads/revokes the requester's own
+ *     `sessions` row on every request; same RLS reasoning as every other
+ *     sessions/login_events write above, and this is the one place that
+ *     already runs before any RLS-respecting client exists for the
+ *     request at all
  *
  * Every other read/write MUST go through lib/supabase/server.ts so RLS
  * stays the enforced boundary. Reaching for this file because "it's

@@ -25,6 +25,16 @@ Available actions instead: send password reset, disable user, revoke sessions, i
 - `login_events`: user, timestamp, IP, approximate location, device type, browser, OS, session ID, success/failure, logout time. Device/browser identification is best-effort, not a guaranteed physical-device fingerprint (spec §72).
 - `sessions`: active session list per user, with revoke capability (self-service and admin-driven).
 
+### Smart Auto-Login & 12-Hour Session
+
+Two distinct pieces, not one mechanism:
+
+1. **Auto-login.** `app/(auth)/login/page.tsx` checks `getCurrentUser()` first and redirects an already-signed-in visitor straight into the app (reusing `app/page.tsx`'s existing tenant/onboarding routing) instead of showing the form again. This was the actual root cause of "users keep being asked to log in" — the underlying `@supabase/ssr` cookie/refresh mechanics were already correct (default cookie `maxAge` is 400 days, and `lib/supabase/middleware.ts` refreshes the access token via `getUser()` on every request); the login screen itself simply never checked for an existing valid session before rendering.
+
+2. **A hard, non-extending 12-hour cap**, enforced in `lib/supabase/middleware.ts` (the one place that already runs on every request and can write cookies). Anchored to `sessions.created_at` — written once, at actual sign-in (`SecurityService.createSession()`), never touched by a token refresh — not the JWT's own `iat`/`exp`, which would let the window slide forward forever with continued use. On every authenticated request, `now (server clock) − sessions.created_at (server-written) > 12h` forces a real sign-out (`supabase.auth.signOut()`), clears the `sid` cookie, marks that `sessions` row `revoked_at`/`revoked_reason`, writes an `AUDIT_ACTION.SESSION_REVOKED` entry, and redirects to `/login?sessionExpired=1` (a small banner explains why). A session with no `sid` cookie or no matching row (predates this feature, or the best-effort cookie write failed) is left alone rather than forced out — no basis to enforce a limit that can't be measured, same self-heal posture as `active_branch_sessions`.
+
+Manual logout (`features/auth/actions/sign-out.ts`) also now clears the `sid` cookie and marks the `sessions` row revoked (`"Signed out"`), closing a pre-existing tracking gap — the real Supabase session cookies were already being cleared correctly, so a manually-logged-out user was never actually at risk of silent auto-relogin.
+
 ## Working-hours access restriction
 
 Tenant-configurable: `restrict_login_to_working_hours`. When enabled, a session nearing the configured end time gets a countdown warning, then: stop new transactions → save safe draft state where applicable → sign out → log the event (spec §74–75).

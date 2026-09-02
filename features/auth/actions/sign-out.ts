@@ -1,5 +1,6 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 
@@ -26,6 +27,17 @@ export async function signOutAction(): Promise<void> {
   const userId = claims?.claims.sub;
   const sessionId = claims?.claims.session_id;
 
+  // Smart Auto-Login & 12-Hour Session: the `sid` cookie (features/auth/
+  // actions/sign-in.ts) correlates this browser to its `sessions` row --
+  // a manual logout should terminate that tracked row immediately too,
+  // not just the real Supabase auth cookies (which authService.signOut()
+  // below already correctly clears; a manually-logged-out user was never
+  // actually at risk of silent auto-relogin -- this is closing a
+  // tracking gap, not a security hole).
+  const cookieStore = await cookies();
+  const sid = cookieStore.get("sid")?.value;
+  cookieStore.delete("sid");
+
   // The audit write doesn't gate anything the redirect depends on --
   // after() defers it until the response has been sent (unlike a bare
   // un-awaited promise, the platform keeps the function alive until it
@@ -47,6 +59,13 @@ export async function signOutAction(): Promise<void> {
           .catch(() => {}),
         sessionId
           ? serviceRole.from("active_branch_sessions").delete().eq("session_id", sessionId)
+          : Promise.resolve(),
+        sid
+          ? serviceRole
+              .from("sessions")
+              .update({ revoked_at: new Date().toISOString(), revoked_by: userId, revoked_reason: "Signed out" })
+              .eq("id", sid)
+              .is("revoked_at", null)
           : Promise.resolve(),
       ]).catch(() => {});
     });
