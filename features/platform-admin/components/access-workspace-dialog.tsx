@@ -164,7 +164,7 @@ export function AccessWorkspaceDialog({
               className="mt-1 w-full rounded border border-white/10 bg-white/5 px-2 py-1.5 text-sm outline-none focus:border-white/30"
             >
               {DURATION_OPTIONS.map((opt) => (
-                <option key={opt.minutes} value={opt.minutes} className="bg-[#0B1220]">
+                <option key={opt.minutes} value={opt.minutes} className="bg-[#0E2B1D]">
                   {opt.label}
                 </option>
               ))}

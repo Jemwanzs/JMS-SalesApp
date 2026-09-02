@@ -35,7 +35,7 @@ export function PlatformAdminBottomNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="sticky bottom-0 z-10 flex border-t border-white/10 bg-[#0B1220]">
+    <nav className="sticky bottom-0 z-10 flex border-t border-white/10 bg-[#0E2B1D]">
       {NAV_ITEMS.map((item) => {
         const active = pathname === item.href || (item.href !== "/admin" && pathname.startsWith(`${item.href}/`));
         const Icon = item.icon;
