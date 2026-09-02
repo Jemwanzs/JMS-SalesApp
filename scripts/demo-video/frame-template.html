@@ -1,0 +1,47 @@
+<!doctype html>
+<!--
+  Generic, non-branded smartphone bezel used as the "casing" around the
+  demo video's real screen recording (docs/25-demo-video-generation.md).
+  Deliberately NOT modeled on any specific real device (no notch/button
+  shapes that read as a particular manufacturer's product) -- a plain
+  rounded rectangle with a pill camera cutout and a home-indicator bar,
+  drawn from scratch so there's no third-party asset/likeness to license.
+
+  Rendered once by generate-frame.mjs (Playwright screenshot with
+  omitBackground) into assets/phone-frame.png -- a transparent PNG whose
+  only opaque pixels are the bezel itself; the "screen" rectangle stays
+  transparent so compose.mjs can overlay the real recording through it.
+  Re-run generate-frame.mjs after editing the geometry below; keep the
+  CANVAS/BEZEL/SCREEN numbers in sync with compose.mjs's SCREEN_* consts.
+-->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      html, body { margin: 0; padding: 0; background: transparent; }
+      svg { display: block; }
+    </style>
+  </head>
+  <body>
+    <!--
+      Canvas 600x1100. Bezel occupies a 470x970 rounded rect offset
+      (65,65) within it (leaves a margin on every side for compose.mjs's
+      drop-shadow filter to have room to render, plus visual breathing
+      room against the backdrop colour it lays underneath). Screen
+      cutout is a 390x844 rounded rect offset (40,40) inside the bezel,
+      i.e. (105,105) in canvas coordinates -- this is the exact rect
+      compose.mjs positions the real recording into.
+    -->
+    <svg width="600" height="1100" viewBox="0 0 600 1100" xmlns="http://www.w3.org/2000/svg">
+      <mask id="screen-cutout">
+        <rect x="65" y="65" width="470" height="970" rx="60" fill="white" />
+        <rect x="105" y="105" width="390" height="844" rx="36" fill="black" />
+      </mask>
+      <rect x="65" y="65" width="470" height="970" rx="60" fill="#0a0a0a" mask="url(#screen-cutout)" />
+      <!-- Camera pill (decorative, generic -- not a specific device's shape) -->
+      <rect x="240" y="88" width="120" height="26" rx="13" fill="#0a0a0a" />
+      <!-- Home indicator bar -->
+      <rect x="240" y="978" width="120" height="5" rx="2.5" fill="#3a3a3c" />
+    </svg>
+  </body>
+</html>

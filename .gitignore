@@ -50,3 +50,8 @@ next-env.d.ts
 
 # scripts/build-user-guide-pdf.mjs's intermediate HTML -- public/docs/User-Guide.pdf is the committed artifact
 /scripts/user-guide-preview.html
+
+# scripts/demo-video/record.mjs + compose.mjs's intermediate recording/
+# sidecar/sound files -- public/demo-video-v1.mp4 is the committed
+# artifact, assets/phone-frame.png is the committed reusable bezel.
+/scripts/demo-video/output/
