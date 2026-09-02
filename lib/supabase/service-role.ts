@@ -34,6 +34,11 @@ import type { Database } from "@/types/database.types";
  *     profile crosses tenant boundaries, which profiles_select RLS
  *     deliberately blocks for an ordinary tenant admin's RLS-respecting
  *     client — see UserService's own header comment)
+ *   - UserService.resendInvite (features/users/actions/resend-invite.ts) —
+ *     same Admin API reasoning as inviteUser above (auth.admin.inviteUserByEmail
+ *     is unreachable from the RLS-respecting client regardless of
+ *     permissions); the caller's own session is checked first via
+ *     assertCan("users.create") before this ever runs
  *   - UserService.acceptInvite / getPendingInvite (a newly-invited user
  *     holds no role/permission on themselves yet — same class of
  *     bootstrapping problem as TenantService's onboarding sequence and
@@ -76,6 +81,14 @@ import type { Database } from "@/types/database.types";
  *     products import writes import_rows + products directly for the
  *     same "one bulk actor, not a per-row authenticated write" reason —
  *     see ImportService's own header comment and migration 0020
+ *   - ProductService.enableTrackingForExistingProducts (called from
+ *     features/settings/actions/set-inventory-enabled.ts when the
+ *     Inventory module is switched on) — a system-triggered bulk
+ *     consequence of enabling the module (flipping tracks_inventory on
+ *     every existing product so none stay permanently invisible on the
+ *     Stock page), not a user-initiated per-product edit, so it
+ *     shouldn't depend on the caller also holding products.edit on top
+ *     of the settings.manage the surrounding action already requires
  *   - features/auth/actions/sign-in.ts / select-branch.ts / sign-out.ts —
  *     writing and deleting active_branch_sessions rows (Multi-Branch
  *     User Access Phase 4). active_branch_sessions has RLS enabled with
