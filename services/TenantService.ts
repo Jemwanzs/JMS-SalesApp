@@ -137,6 +137,34 @@ export class TenantService {
   }
 
   /**
+   * Same as getSetting, but for several keys in one round trip instead
+   * of one query per key -- performance audit finding: the Capture
+   * Sales landing page alone fetches 4 separate settings this way on
+   * every single page load (product_ranking_enabled, show_daily_sales_
+   * volume, show_product_price_on_landing, quantity_enabled), and
+   * Settings/Security do similarly. Missing keys are simply absent from
+   * the returned map (same "no row = not configured" contract as
+   * getSetting, just without a per-key null placeholder to check).
+   */
+  async getSettings(tenantId: string, keys: string[]): Promise<Record<string, unknown>> {
+    const { data, error } = await this.supabase
+      .from("tenant_settings")
+      .select("setting_key, value")
+      .eq("tenant_id", tenantId)
+      .in("setting_key", keys);
+
+    if (error) {
+      throw new Error(`TenantService.getSettings: ${error.message}`);
+    }
+
+    const result: Record<string, unknown> = {};
+    for (const row of data ?? []) {
+      result[row.setting_key] = row.value;
+    }
+    return result;
+  }
+
+  /**
    * RLS (tenant_settings_upsert/update, migration 0001) gates this on
    * settings.manage -- callers should check that first for a clear error
    * rather than relying solely on the RLS rejection.

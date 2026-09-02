@@ -168,18 +168,23 @@ export async function signInAction(
 
     if (gate.allowed && gate.bypassed) {
       bypassNotice = gate.blockedBy;
-      await auditService
-        .log({
-          tenantId: tenant.tenantId,
-          actorProfileId: userId,
-          action: AUDIT_ACTION.ACCESS_RESTRICTION_BYPASSED,
-          entityType: "session",
-          reason: gate.reason ?? null,
-          ipAddress: ip,
-          device: userAgent,
-          metadata: gate.blockedBy ? { blockedBy: gate.blockedBy } : null,
-        })
-        .catch(() => {});
+      // Deferred via after(), matching the success-path login/audit
+      // logs further down -- nothing downstream reads this write's
+      // result, so there's no reason to make the redirect wait on it.
+      after(() =>
+        auditService
+          .log({
+            tenantId: tenant.tenantId,
+            actorProfileId: userId,
+            action: AUDIT_ACTION.ACCESS_RESTRICTION_BYPASSED,
+            entityType: "session",
+            reason: gate.reason ?? null,
+            ipAddress: ip,
+            device: userAgent,
+            metadata: gate.blockedBy ? { blockedBy: gate.blockedBy } : null,
+          })
+          .catch(() => {})
+      );
     }
 
     if (!gate.allowed) {

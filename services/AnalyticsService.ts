@@ -90,6 +90,17 @@ export interface DailyTrendPoint {
 export class AnalyticsService {
   constructor(private readonly supabase: SupabaseClient<Database>) {}
 
+  // Instance-level memoization, not a fresh query per call: getKpis,
+  // getProductPerformance, and getProductRevenueTotals each resolve the
+  // system "Others" product id independently, and a single request can
+  // legitimately call getProductRevenueTotals twice in a row (Capture
+  // Sales' "no sales yet today -> fall back to last active day" path,
+  // app/(tenant)/t/[tenantSlug]/(dashboard)/sales/page.tsx). One
+  // AnalyticsService instance is always request-scoped (constructed
+  // fresh per call site, never reused across requests), so caching on
+  // `this` can't leak between requests or tenants.
+  private systemProductIdCache = new Map<string, Promise<string | null>>();
+
   /**
    * Throws if the requested range needs a permission the caller doesn't
    * hold, rather than silently clamping to "today" -- a caller
@@ -145,14 +156,18 @@ export class AnalyticsService {
     return data ?? [];
   }
 
-  private async getSystemProductId(tenantId: string): Promise<string | null> {
-    const { data } = await this.supabase
-      .from("products")
-      .select("id")
-      .eq("tenant_id", tenantId)
-      .eq("is_system", true)
-      .maybeSingle();
-    return data?.id ?? null;
+  private getSystemProductId(tenantId: string): Promise<string | null> {
+    const cached = this.systemProductIdCache.get(tenantId);
+    if (cached) {
+      return cached;
+    }
+
+    const promise = Promise.resolve(
+      this.supabase.from("products").select("id").eq("tenant_id", tenantId).eq("is_system", true).maybeSingle()
+    ).then(({ data }) => data?.id ?? null);
+
+    this.systemProductIdCache.set(tenantId, promise);
+    return promise;
   }
 
   async getKpis(

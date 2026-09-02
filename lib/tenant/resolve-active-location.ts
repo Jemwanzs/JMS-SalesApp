@@ -1,3 +1,4 @@
+import { cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "@/types/database.types";
@@ -15,8 +16,13 @@ import type { Database } from "@/types/database.types";
  * predates Phase 4/5, or the very rare active_branch_sessions write
  * failure) -- callers must treat that as "can't proceed," not "show
  * everything," matching the fail-closed RLS policies this mirrors.
+ *
+ * cache()-wrapped: the tenant layout and sales/page.tsx (and now
+ * reports/page.tsx) each independently resolve the same tenant's
+ * active branch for the same request -- same dedup reasoning as
+ * getTenantBySlug's own header comment (lib/tenant/resolve-tenant-by-slug.ts).
  */
-export async function resolveActiveLocationId(
+export const resolveActiveLocationId = cache(async function resolveActiveLocationId(
   supabase: SupabaseClient<Database>,
   tenantId: string
 ): Promise<string | null> {
@@ -34,4 +40,4 @@ export async function resolveActiveLocationId(
     .maybeSingle();
 
   return data?.location_id ?? null;
-}
+});

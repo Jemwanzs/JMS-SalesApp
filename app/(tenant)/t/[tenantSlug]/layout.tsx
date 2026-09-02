@@ -83,13 +83,16 @@ export default async function TenantLayout({
   const { tenantSlug } = await params;
   const supabase = await createClient();
 
-  const user = await getCurrentUser();
+  // getTenantBySlug only depends on tenantSlug (from the URL) and a
+  // cookie-based client -- no dependency on the signed-in user, so
+  // there's no reason to wait on getCurrentUser() first. Both are
+  // cache()-wrapped, so sales/page.tsx's later identical pair reuses
+  // these exact results instead of re-fetching.
+  const [user, tenant] = await Promise.all([getCurrentUser(), getTenantBySlug(supabase, tenantSlug)]);
 
   if (!user) {
     redirect("/login");
   }
-
-  const tenant = await getTenantBySlug(supabase, tenantSlug);
 
   if (!tenant) {
     notFound();

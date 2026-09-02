@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import { getLocale, getTranslations } from "next-intl/server";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 
 import { AnniversaryCelebrationDialog } from "@/features/sales/components/anniversary-celebration-dialog";
 import { OpenBusinessDayButton } from "@/features/sales/components/open-business-day-button";
 import { ProductGrid } from "@/features/sales/components/product-grid";
+import { ProductGridSkeleton } from "@/features/sales/components/product-grid-skeleton";
 import { ReopenBusinessDayDialog } from "@/features/sales/components/reopen-business-day-dialog";
 import { SalesVisibilityBadge } from "@/features/sales/components/sales-visibility-badge";
 import { AnalyticsService } from "@/services/AnalyticsService";
@@ -163,14 +165,16 @@ export default async function SalesPage({
       )}
 
       {canCapture && businessDay ? (
-        <SalesCaptureBody
-          tenantId={tenant!.id}
-          tenantSlug={tenantSlug}
-          timezone={tenant!.timezone}
-          locationId={location.id}
-          businessDayId={businessDay.id}
-          supabase={supabase}
-        />
+        <Suspense fallback={<ProductGridSkeleton />}>
+          <SalesCaptureBody
+            tenantId={tenant!.id}
+            tenantSlug={tenantSlug}
+            timezone={tenant!.timezone}
+            locationId={location.id}
+            businessDayId={businessDay.id}
+            supabase={supabase}
+          />
+        </Suspense>
       ) : (
         <div className="mt-8 flex flex-1 flex-col items-center justify-center rounded-lg border border-dashed p-8 text-center">
           <p className="text-lg font-medium">
@@ -226,18 +230,20 @@ async function SalesCaptureBody({
   const productService = new ProductService(supabase);
   const tenantService = new TenantService(supabase);
 
-  const [products, rankingEnabledSetting, showDailyVolumeSetting, showProductPriceSetting, quantityEnabledSetting] = await Promise.all([
+  const [products, settings] = await Promise.all([
     productService.listActive(tenantId),
-    tenantService.getSetting<boolean>(tenantId, "product_ranking_enabled"),
-    tenantService.getSetting<boolean>(tenantId, "show_daily_sales_volume"),
-    tenantService.getSetting<boolean>(tenantId, "show_product_price_on_landing"),
-    tenantService.getSetting<boolean>(tenantId, "quantity_enabled"),
+    tenantService.getSettings(tenantId, [
+      "product_ranking_enabled",
+      "show_daily_sales_volume",
+      "show_product_price_on_landing",
+      "quantity_enabled",
+    ]),
   ]);
 
-  const rankingEnabled = rankingEnabledSetting ?? true;
-  const showDailyVolume = showDailyVolumeSetting ?? false;
-  const showProductPrice = showProductPriceSetting ?? true;
-  const quantityEnabled = quantityEnabledSetting ?? true;
+  const rankingEnabled = (settings.product_ranking_enabled as boolean | undefined) ?? true;
+  const showDailyVolume = (settings.show_daily_sales_volume as boolean | undefined) ?? false;
+  const showProductPrice = (settings.show_product_price_on_landing as boolean | undefined) ?? true;
+  const quantityEnabled = (settings.quantity_enabled as boolean | undefined) ?? true;
 
   let rankedProducts: ReturnType<typeof rankProducts> = products.map((p) => ({
     ...p,
