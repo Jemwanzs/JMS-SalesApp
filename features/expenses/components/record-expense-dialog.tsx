@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 
 import { recordExpenseAction } from "@/features/expenses/actions/record-expense";
+import { ExpenseItemCombobox } from "@/features/expenses/components/expense-item-combobox";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -43,7 +44,11 @@ export function RecordExpenseDialog({
   activeItems: ExpenseItem[];
 }) {
   const [isPending, startTransition] = useTransition();
-  const [expenseItemId, setExpenseItemId] = useState(activeItems[0]?.id ?? "");
+  // Starts unset (no item pre-selected) -- the searchable combobox
+  // requires an explicit tap-to-select, so silently defaulting to the
+  // first item would make it easy to record an expense against the
+  // wrong one without noticing.
+  const [expenseItemId, setExpenseItemId] = useState("");
   const [actualAmount, setActualAmount] = useState("");
   const [expenseDate, setExpenseDate] = useState(todayDate);
   const [notes, setNotes] = useState("");
@@ -51,7 +56,7 @@ export function RecordExpenseDialog({
 
   useEffect(() => {
     if (!open) return;
-    setExpenseItemId(activeItems[0]?.id ?? "");
+    setExpenseItemId("");
     setActualAmount("");
     setExpenseDate(todayDate);
     setNotes("");
@@ -64,6 +69,11 @@ export function RecordExpenseDialog({
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+
+    if (!expenseItemId) {
+      setError("Select an expense item");
+      return;
+    }
 
     const formData = new FormData();
     formData.set("expenseItemId", expenseItemId);
@@ -100,19 +110,7 @@ export function RecordExpenseDialog({
           <form onSubmit={onSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="expense-item">Expense item</Label>
-              <select
-                id="expense-item"
-                value={expenseItemId}
-                onChange={(e) => setExpenseItemId(e.target.value)}
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                required
-              >
-                {activeItems.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
+              <ExpenseItemCombobox id="expense-item" items={activeItems} value={expenseItemId} onChange={setExpenseItemId} />
               {selectedItem?.estimatedAmount != null && (
                 <p className="text-xs text-muted-foreground">Estimated: {selectedItem.estimatedAmount.toFixed(2)} (a guide only)</p>
               )}
