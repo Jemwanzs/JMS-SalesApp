@@ -117,6 +117,19 @@ export default async function PlatformAdminTenantDetailPage({
         ))}
       </div>
 
+      <div>
+        <h2 className="mb-2 text-sm font-semibold text-white/70">Branches ({detail.branches.length})</h2>
+        <div className="divide-y divide-white/5 rounded-lg border border-white/10">
+          {detail.branches.length === 0 && <p className="p-4 text-sm text-white/50">No branches yet.</p>}
+          {detail.branches.map((branch) => (
+            <div key={branch.id} className="p-3 text-sm">
+              <p className="font-medium">{branch.name}</p>
+              <p className="text-xs text-white/50">{branch.address ?? "—"}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {detail.businessHours && (
         <div>
           <h2 className="mb-2 text-sm font-semibold text-white/70">Business hours</h2>

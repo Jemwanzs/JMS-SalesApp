@@ -71,6 +71,8 @@ export interface TenantDetail extends TenantListItem {
   locationAddress: string | null;
   /** Null when the tenant has no location yet (onboarding Step 2 skipped) -- distinct from "location exists but every day is closedAllDay", which is a real, displayable answer. */
   businessHours: { dayOfWeek: number; openTime: string; closeTime: string; closedAllDay: boolean }[] | null;
+  /** Every branch under this tenant (Multi-Branch User Access, docs/24-multi-branch-access.md) -- locationName/locationAddress above stay the single primary/oldest branch for the existing summary row; this is the full list for the Branches section. */
+  branches: { id: string; name: string; address: string | null }[];
   /** True when billing_owner_profile_id resolves to a real platform_admins row -- the platform owner's own tenant, which suspendTenant/deactivateTenant refuse to touch and the billing sweep (migration 0044) never pushes. Drives TenantActionsPanel hiding those two buttons. */
   isPlatformOwner: boolean;
 }
@@ -485,7 +487,7 @@ export class PlatformAdminService {
       { count: userCount },
       { data: lastPayment },
       { data: lastLogin },
-      { data: primaryLocation },
+      { data: allLocations },
       { data: soldSales },
       { data: platformAdminRow },
     ] = await Promise.all([
@@ -513,13 +515,7 @@ export class PlatformAdminService {
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
-      this.supabase
-        .from("locations")
-        .select("id, name, address")
-        .eq("tenant_id", tenantId)
-        .order("created_at", { ascending: true })
-        .limit(1)
-        .maybeSingle(),
+      this.supabase.from("locations").select("id, name, address").eq("tenant_id", tenantId).order("created_at", { ascending: true }),
       // Distinct products actually SOLD, not catalog size -- different
       // from getUsageAnalytics()'s TenantUsageRow.productCount, which
       // counts every non-archived catalog product regardless of sales.
@@ -540,6 +536,8 @@ export class PlatformAdminService {
     const plan = sub?.plan_id
       ? await this.supabase.from("billing_plans").select("name").eq("id", sub.plan_id).maybeSingle()
       : { data: null };
+
+    const primaryLocation = allLocations?.[0] ?? null;
 
     // Depends on primaryLocation.id, so it can't join the Promise.all
     // above -- same "sequential because it genuinely depends on an
@@ -576,6 +574,7 @@ export class PlatformAdminService {
       locationName: primaryLocation?.name ?? null,
       locationAddress: primaryLocation?.address ?? null,
       businessHours,
+      branches: (allLocations ?? []).map((l) => ({ id: l.id, name: l.name, address: l.address })),
       productsSoldCount: new Set((soldSales ?? []).map((s) => s.product_id)).size,
       isPlatformOwner: !!platformAdminRow,
     };
