@@ -84,6 +84,19 @@ export function todayString(timezone: string): string {
 }
 
 /**
+ * Subtracts `days` calendar days from a plain `YYYY-MM-DD` date string,
+ * returning another `YYYY-MM-DD` string -- no timezone involved (unlike
+ * nowInTimezone/todayString, which resolve "now" for a specific tenant),
+ * since the input is already a resolved calendar date (e.g. a
+ * business_days.business_date). Anchored at UTC midnight purely as an
+ * arithmetic scratch value, same reasoning as nowInTimezone's own
+ * comment -- never compared against a real timestamp.
+ */
+export function subtractDays(dateStr: string, days: number): string {
+  return ymd(addDays(new Date(`${dateStr}T00:00:00Z`), -days));
+}
+
+/**
  * A rolling N-day window ending today (inclusive), in the tenant's local
  * time -- unlike the calendar-bound presets above (this_month/last_month
  * reset on the 1st), this always covers exactly `days` calendar days

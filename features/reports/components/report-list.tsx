@@ -25,16 +25,18 @@ async function DailyReportCard({
   payload,
   bcp47,
   status,
+  muted,
 }: {
   periodStart: string;
   payload: DailyReportPayload;
   bcp47: string;
   status: "live" | "final";
+  muted?: boolean;
 }) {
   const t = await getTranslations("Reports");
 
   return (
-    <Card>
+    <Card className={muted ? "bg-muted" : undefined}>
       <CardHeader>
         <CardTitle>{formatPeriod(periodStart, bcp47)}</CardTitle>
         <CardAction>
@@ -89,15 +91,17 @@ async function CorrectionsReportCard({
   periodStart,
   payload,
   bcp47,
+  muted,
 }: {
   periodStart: string;
   payload: CorrectionsReportPayload;
   bcp47: string;
+  muted?: boolean;
 }) {
   const t = await getTranslations("Reports");
 
   return (
-    <Card>
+    <Card className={muted ? "bg-muted" : undefined}>
       <CardHeader>
         <CardTitle>{t("correctionsAndVoids", { date: formatPeriod(periodStart, bcp47) })}</CardTitle>
       </CardHeader>
@@ -160,6 +164,9 @@ export async function ReportList({
     periodStart: string;
     payload: DailyReportPayload | CorrectionsReportPayload;
     status: "live" | "final";
+    /** Warm-gray card background -- the three days immediately before
+     * today's (live, default-white) card, see reports/page.tsx. */
+    muted?: boolean;
   }>;
 }) {
   const [t, locale] = await Promise.all([getTranslations("Reports"), getLocale()]);
@@ -184,6 +191,7 @@ export async function ReportList({
             periodStart={report.periodStart}
             payload={report.payload as CorrectionsReportPayload}
             bcp47={bcp47}
+            muted={report.muted}
           />
         ) : (
           <DailyReportCard
@@ -192,6 +200,7 @@ export async function ReportList({
             bcp47={bcp47}
             status={report.status}
             payload={report.payload as DailyReportPayload}
+            muted={report.muted}
           />
         )
       )}

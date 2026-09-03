@@ -10,6 +10,12 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import { resolveActiveLocationId } from "@/lib/tenant/resolve-active-location";
 import { getTenantBySlug } from "@/lib/tenant/resolve-tenant-by-slug";
+import { subtractDays } from "@/lib/utils/date-ranges";
+
+/** How many immediately-preceding days get their own card, on top of
+ * today's live one -- see the "at least four cards" request this
+ * implements. */
+const PAST_DAYS_SHOWN = 3;
 
 export const metadata: Metadata = {
   title: "Reports | JMS Sales App",
@@ -77,10 +83,8 @@ export default async function ReportsPage({
   ]);
   const todayDate = effectiveDate?.date ?? null;
 
-  let reports: Array<(typeof storedReports)[number] & { status: "live" | "final" }> = storedReports.map((r) => ({
-    ...r,
-    status: "final",
-  }));
+  let reports: Array<(typeof storedReports)[number] & { status: "live" | "final"; muted?: boolean }> =
+    storedReports.map((r) => ({ ...r, status: "final" }));
 
   if (activeLocationId && todayDate) {
     const todayPayload = await reportService.computeDailyReportPayload(tenant.id, activeLocationId, todayDate);
@@ -89,6 +93,36 @@ export default async function ReportsPage({
     // live-computed entry above always supersedes it (same computation,
     // guaranteed fresher), so showing both would just duplicate the day.
     reports = reports.filter((r) => !(r.reportType === "daily" && r.periodStart === todayDate));
+
+    // The immediately preceding PAST_DAYS_SHOWN days each get their own
+    // card too (spec: "at least four cards -- three past days and
+    // today"), stepping backward by calendar days from the resolved
+    // EFFECTIVE business date -- business_days still gets exactly one
+    // row per calendar day even for a cross-midnight tenant, so this
+    // lines up with real business-day boundaries either way. Reuses
+    // whatever's already in `storedReports` for a date that has one;
+    // only computes live (same "Reports Must Always Be Available"
+    // fallback today's own card already uses) for a date with no stored
+    // daily report yet.
+    const pastDates = Array.from({ length: PAST_DAYS_SHOWN }, (_, i) => subtractDays(todayDate, i + 1));
+    const missingDates = pastDates.filter(
+      (date) => !reports.some((r) => r.reportType === "daily" && r.periodStart === date)
+    );
+    const filledIn = await Promise.all(
+      missingDates.map(async (date) => ({
+        id: `live-daily-${date}`,
+        reportType: "daily",
+        periodStart: date,
+        periodEnd: date,
+        payload: await reportService.computeDailyReportPayload(tenant.id, activeLocationId, date),
+        createdAt: new Date().toISOString(),
+        status: "final" as const,
+      }))
+    );
+
+    reports = [...reports, ...filledIn]
+      .sort((a, b) => b.periodStart.localeCompare(a.periodStart))
+      .map((r) => (pastDates.includes(r.periodStart) ? { ...r, muted: true } : r));
 
     reports = [
       {
