@@ -5,6 +5,7 @@ import { notFound, redirect } from "next/navigation";
 import { ReportList } from "@/features/reports/components/report-list";
 import { BusinessDayService } from "@/services/BusinessDayService";
 import { ReportService } from "@/services/ReportService";
+import { TenantService } from "@/services/TenantService";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import { resolveActiveLocationId } from "@/lib/tenant/resolve-active-location";
@@ -48,6 +49,14 @@ export default async function ReportsPage({
   }
   if (!tenant) {
     notFound();
+  }
+
+  // Reporting Tabs (Settings): defense in depth alongside BottomNav's
+  // own gate on this same setting -- see sales-history/page.tsx's
+  // identical guard.
+  const reportsEnabled = await new TenantService(supabase).getSetting<boolean>(tenant.id, "reports_enabled");
+  if (reportsEnabled === false) {
+    redirect(`/t/${tenantSlug}/sales`);
   }
 
   const reportService = new ReportService(supabase);

@@ -10,6 +10,7 @@ import { NotesFieldCard } from "@/features/settings/components/notes-field-card"
 import { ProductRankingCard } from "@/features/settings/components/product-ranking-card";
 import { QuantityFieldCard } from "@/features/settings/components/quantity-field-card";
 import { SaleNumberTemplateCard } from "@/features/settings/components/sale-number-template-card";
+import { TabsVisibilityCard } from "@/features/settings/components/tabs-visibility-card";
 import { AnniversaryService } from "@/services/AnniversaryService";
 import { BillingService } from "@/services/BillingService";
 import { LocationService } from "@/services/LocationService";
@@ -72,6 +73,9 @@ export default async function SettingsPage({
     inventoryAddon,
     inventoryPlans,
     inventoryTrialDays,
+    historyEnabled,
+    analyticsEnabled,
+    reportsEnabled,
   ] = await Promise.all([
     new AnniversaryService(supabase).getWishMode(tenantId),
     tenantService.getSetting<string>(tenantId, "sale_number_template"),
@@ -87,6 +91,9 @@ export default async function SettingsPage({
     addonBillingService.getAddonSubscription(tenantId, "inventory"),
     addonBillingService.listAddonPlans("inventory"),
     addonBillingService.getAddonTrialDaysConfigured(tenantId, "inventory"),
+    tenantService.getSetting<boolean>(tenantId, "history_enabled"),
+    tenantService.getSetting<boolean>(tenantId, "analytics_enabled"),
+    tenantService.getSetting<boolean>(tenantId, "reports_enabled"),
   ]);
 
   // Matches features/settings/actions/set-inventory-enabled.ts's own
@@ -130,6 +137,13 @@ export default async function SettingsPage({
       />
       <QuantityFieldCard tenantId={tenantId} tenantSlug={tenantSlug} initialEnabled={quantityEnabled ?? true} />
       <NotesFieldCard tenantId={tenantId} tenantSlug={tenantSlug} initialEnabled={notesFieldEnabled ?? true} />
+      <TabsVisibilityCard
+        tenantId={tenantId}
+        tenantSlug={tenantSlug}
+        initialHistoryEnabled={historyEnabled ?? true}
+        initialAnalyticsEnabled={analyticsEnabled ?? true}
+        initialReportsEnabled={reportsEnabled ?? true}
+      />
       <ExpensesModuleCard tenantId={tenantId} tenantSlug={tenantSlug} initialEnabled={expensesEnabled ?? false} />
       {inventoryPlans.length > 0 && (
         <InventoryModuleCard

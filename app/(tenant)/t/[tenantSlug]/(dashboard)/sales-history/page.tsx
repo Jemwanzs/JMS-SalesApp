@@ -69,6 +69,15 @@ export default async function SalesHistoryPage({
 
   const tenantId = tenant.id;
 
+  // Reporting Tabs (Settings): defense in depth alongside BottomNav's
+  // own gate on this same setting -- a direct visit to the URL must be
+  // blocked too, not just the nav entry hidden. Default ON (`=== false`
+  // only matches an explicit turn-off, never "not configured yet").
+  const historyEnabled = await new TenantService(supabase).getSetting<boolean>(tenantId, "history_enabled");
+  if (historyEnabled === false) {
+    redirect(`/t/${tenantSlug}/sales`);
+  }
+
   // Business Day Rollover: "today" here means the effective BUSINESS
   // date, not the raw calendar date -- for a cross-midnight tenant, a
   // sale recorded at 01:00 still belongs to yesterday's still-open

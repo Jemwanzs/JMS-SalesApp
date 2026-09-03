@@ -18,7 +18,7 @@ const SESSION_STORAGE_KEY = "jms_tour_step_index";
  * TenantProvider) rather than on the static tour-steps.ts data.
  */
 function useVisibleSteps(): TourStep[] {
-  const { inventoryEnabled } = useTenant();
+  const { inventoryEnabled, analyticsEnabled, reportsEnabled } = useTenant();
   const canManageSettings = usePermission("settings.manage");
   const canCreateProducts = usePermission("products.create");
   const canEditProducts = usePermission("products.edit");
@@ -34,8 +34,8 @@ function useVisibleSteps(): TourStep[] {
     products: canCreateProducts || canEditProducts,
     sale: canRecordSales,
     stock: canViewInventory && inventoryEnabled,
-    analytics: canViewAnalytics,
-    reports: canViewReports,
+    analytics: canViewAnalytics && analyticsEnabled,
+    reports: canViewReports && reportsEnabled,
     finish: true,
   };
 

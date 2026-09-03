@@ -38,6 +38,17 @@ export interface TenantContextValue {
    * own (every stock action/page re-asserts entitlement server-side).
    */
   inventoryEnabled: boolean;
+  /**
+   * Tenant-admin visibility toggles for the persistent bottom-nav's
+   * core reporting tabs (Settings -> "Reporting Tabs") -- default ON,
+   * resolved once in the tenant layout the same "compute once, reuse
+   * everywhere" way as inventoryEnabled. Distinct from a permission:
+   * these gate whether the tab shows at all, on top of (not instead of)
+   * each tab's own existing permission requirement.
+   */
+  historyEnabled: boolean;
+  analyticsEnabled: boolean;
+  reportsEnabled: boolean;
 }
 
 const TenantContext = createContext<TenantContextValue | null>(null);

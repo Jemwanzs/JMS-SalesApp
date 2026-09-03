@@ -12,6 +12,7 @@ import { UserPerformanceList } from "@/features/analytics/components/user-perfor
 import { AnalyticsService, type AnalyticsPermissions } from "@/services/AnalyticsService";
 import { BusinessDayService } from "@/services/BusinessDayService";
 import { InsightsService } from "@/services/InsightsService";
+import { TenantService } from "@/services/TenantService";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
@@ -72,6 +73,14 @@ export default async function AnalyticsPage({
 
   const tenantId = tenant.id;
   const timezone = tenant.timezone;
+
+  // Reporting Tabs (Settings): defense in depth alongside BottomNav's
+  // own gate on this same setting -- see sales-history/page.tsx's
+  // identical guard.
+  const analyticsEnabled = await new TenantService(supabase).getSetting<boolean>(tenantId, "analytics_enabled");
+  if (analyticsEnabled === false) {
+    redirect(`/t/${tenantSlug}/sales`);
+  }
 
   // Business Day Rollover: "today" is the effective BUSINESS date, not
   // the raw calendar date -- both the default/`?preset=today` range AND

@@ -17,12 +17,14 @@ interface NavItem {
   /** null = always visible (e.g. More/settings/logout). */
   permission: string | null;
   /**
-   * Product Enhancements #3: gates a nav item on TenantContext's
-   * `inventoryEnabled` too, in addition to `permission` -- both must be
-   * true. `undefined`/absent = no setting gate, same as every existing
-   * item today.
+   * Product Enhancements #3: gates a nav item on a TenantContext
+   * setting flag too, in addition to `permission` -- both must be true.
+   * `undefined`/absent = no setting gate, same as every existing item
+   * today. `historyEnabled`/`analyticsEnabled`/`reportsEnabled` are the
+   * "Reporting Tabs" settings (Settings page) a tenant admin can toggle
+   * to hide a core tab, default ON.
    */
-  requiresSetting?: "inventoryEnabled";
+  requiresSetting?: "inventoryEnabled" | "historyEnabled" | "analyticsEnabled" | "reportsEnabled";
 }
 
 /**
@@ -43,9 +45,9 @@ interface NavItem {
  */
 const NAV_ITEMS: NavItem[] = [
   { href: "sales", labelKey: "sales", icon: ShoppingCart, permission: "sales.view_own" },
-  { href: "sales-history", labelKey: "history", icon: History, permission: null },
-  { href: "analytics", labelKey: "analytics", icon: BarChart3, permission: "analytics.view_own" },
-  { href: "reports", labelKey: "reports", icon: FileText, permission: "reports.view" },
+  { href: "sales-history", labelKey: "history", icon: History, permission: null, requiresSetting: "historyEnabled" },
+  { href: "analytics", labelKey: "analytics", icon: BarChart3, permission: "analytics.view_own", requiresSetting: "analyticsEnabled" },
+  { href: "reports", labelKey: "reports", icon: FileText, permission: "reports.view", requiresSetting: "reportsEnabled" },
   { href: "stock", labelKey: "stock", icon: Boxes, permission: "inventory.view", requiresSetting: "inventoryEnabled" },
   { href: "more", labelKey: "more", icon: Menu, permission: null },
 ];
@@ -82,10 +84,11 @@ function NavLink({
   // permission key, so hasPermission is simply unused when permission
   // is null.
   const hasPermission = usePermission(item.permission ?? "__always__");
-  const { inventoryEnabled } = useTenant();
+  const { inventoryEnabled, historyEnabled, analyticsEnabled, reportsEnabled } = useTenant();
   const t = useTranslations("Nav");
   const permitted = item.permission === null || hasPermission;
-  const settingSatisfied = item.requiresSetting == null || (item.requiresSetting === "inventoryEnabled" && inventoryEnabled);
+  const settingFlags = { inventoryEnabled, historyEnabled, analyticsEnabled, reportsEnabled };
+  const settingSatisfied = item.requiresSetting == null || settingFlags[item.requiresSetting];
   const visible = permitted && settingSatisfied;
 
   if (!visible) {

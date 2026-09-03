@@ -25,6 +25,7 @@ import { getTenantBySlug } from "@/lib/tenant/resolve-tenant-by-slug";
 import { AnniversaryService } from "@/services/AnniversaryService";
 import { BillingService } from "@/services/BillingService";
 import { PlatformAdminService } from "@/services/PlatformAdminService";
+import { TenantService } from "@/services/TenantService";
 
 /**
  * Resolves the :tenantSlug segment to a real tenant and enforces that the
@@ -72,7 +73,10 @@ import { PlatformAdminService } from "@/services/PlatformAdminService";
  * entitlement.ts) is resolved once here too and hydrated into
  * TenantContext, the same "compute once, reuse everywhere" pattern as
  * `permissions` — components/shared/bottom-nav.tsx reads it to decide
- * whether the Stock tab renders.
+ * whether the Stock tab renders. `historyEnabled`/`analyticsEnabled`/
+ * `reportsEnabled` (Settings -> "Reporting Tabs") follow the identical
+ * pattern for the three other core nav tabs a tenant admin can choose
+ * to hide.
  */
 export default async function TenantLayout({
   children,
@@ -162,6 +166,7 @@ export default async function TenantLayout({
     activeLocationId,
     hasAnyLocation,
     tourCompletedAt,
+    tabsVisibility,
   ] = await Promise.all([
     getMyPermissions(tenant.id),
     new AnniversaryService(supabase).getActiveWish(tenant.id).catch(() => null),
@@ -190,6 +195,10 @@ export default async function TenantLayout({
     // unconditionally alongside everything else above -- cheap, and
     // keeps this one Promise.all instead of a second round trip.
     resolveTourCompleted(supabase, user.id),
+    // Reporting Tabs visibility (Settings): default ON for all three --
+    // a missing key means "not configured," same "no row = not
+    // configured" contract getSettings documents, not "off."
+    new TenantService(supabase).getSettings(tenant.id, ["history_enabled", "analytics_enabled", "reports_enabled"]),
   ]);
 
   // Never auto-launches for impersonation (Support isn't a new user)
@@ -230,6 +239,9 @@ export default async function TenantLayout({
         permissions,
         impersonation,
         inventoryEnabled: inventoryEntitlement.enabled,
+        historyEnabled: (tabsVisibility.history_enabled as boolean | undefined) ?? true,
+        analyticsEnabled: (tabsVisibility.analytics_enabled as boolean | undefined) ?? true,
+        reportsEnabled: (tabsVisibility.reports_enabled as boolean | undefined) ?? true,
       }}
     >
       <div className="flex min-h-screen w-full justify-center bg-muted/30">
