@@ -1,9 +1,8 @@
-import Link from "next/link";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { BackLink } from "@/components/shared/back-link";
-import { ProductPhotoThumbnail } from "@/features/products/components/product-photo-viewer";
+import { ReconciliationQueueList } from "@/features/stock/components/reconciliation-queue-list";
 import { BusinessDayService } from "@/services/BusinessDayService";
 import { StockService } from "@/services/StockService";
 import { assertInventoryEnabled } from "@/lib/inventory/entitlement";
@@ -57,27 +56,7 @@ export default async function StockReconcilePage({ params }: { params: Promise<{
       <h1 className="mb-1 text-xl font-semibold">Reconcile stock</h1>
       <p className="mb-4 text-sm text-muted-foreground">Today&apos;s physical count</p>
 
-      {pending.length === 0 ? (
-        <p className="text-center text-sm text-muted-foreground">Every tracked product has been counted today.</p>
-      ) : (
-        <div className="divide-y rounded-lg border">
-          {pending.map((row) => (
-            <Link
-              key={row.productId}
-              href={`/t/${tenantSlug}/stock/reconcile/${row.productId}`}
-              className="flex items-center gap-3 p-3 hover:bg-muted/50"
-            >
-              <ProductPhotoThumbnail imageUrl={row.imageUrl} productName={row.productName} showName={false} className="h-14 w-14 border" />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{row.productName}</p>
-                <p className="text-xs text-muted-foreground tabular-nums">
-                  System balance: {row.balance} {row.unitOfMeasure ?? "units"}
-                </p>
-              </div>
-            </Link>
-          ))}
-        </div>
-      )}
+      <ReconciliationQueueList tenantSlug={tenantSlug} pending={pending} />
     </div>
   );
 }

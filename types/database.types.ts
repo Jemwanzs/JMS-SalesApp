@@ -430,8 +430,9 @@ export interface Database {
           stock_in_quantity: number;
           stock_out_quantity: number;
           expected_closing_quantity: number;
-          actual_quantity: number;
-          variance: number;
+          /** Nullable since migration 0068 -- a value-controlled product's reconciliation has no physical unit count. */
+          actual_quantity: number | null;
+          variance: number | null;
           variance_reason: string | null;
           recorded_by: string;
           created_at: string;
@@ -450,7 +451,6 @@ export interface Database {
           product_id: string;
           reconciliation_date: string;
           opening_quantity: number;
-          actual_quantity: number;
           recorded_by: string;
         };
         Update: Partial<Database["public"]["Tables"]["stock_reconciliations"]["Row"]>;
@@ -1180,7 +1180,7 @@ export interface Database {
           p_product_id: string;
           p_location_id: string | null;
           p_reconciliation_date: string;
-          p_actual_quantity: number;
+          p_actual_quantity: number | null;
           p_variance_reason: string | null;
           p_actual_recorded_sales?: number | null;
           p_actual_remaining_value?: number | null;

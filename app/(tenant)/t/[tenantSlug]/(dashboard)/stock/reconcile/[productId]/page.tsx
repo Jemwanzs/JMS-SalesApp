@@ -52,7 +52,12 @@ export default async function ReconcileProductPage({
   const today = activeLocationId
     ? (await new BusinessDayService(supabase).getEffectiveBusinessDate(tenantId, activeLocationId)).date
     : todayString(tenant!.timezone);
-  const preview = await new StockService(supabase).getReconciliationPreview(tenantId, productId, today);
+
+  const stockService = new StockService(supabase);
+  const [preview, actualRecordedSales] = await Promise.all([
+    stockService.getReconciliationPreview(tenantId, productId, today),
+    product.stockControlMethod === "value" ? stockService.getActualRecordedSales(tenantId, productId, today) : Promise.resolve(0),
+  ]);
 
   return (
     <div className="flex flex-1 flex-col p-6">
@@ -65,8 +70,10 @@ export default async function ReconcileProductPage({
         productId={productId}
         productName={product.name}
         unitOfMeasure={product.unitOfMeasure}
+        stockControlMethod={product.stockControlMethod}
         date={today}
         preview={preview}
+        actualRecordedSales={actualRecordedSales}
       />
     </div>
   );

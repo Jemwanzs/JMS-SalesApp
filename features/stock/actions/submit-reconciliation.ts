@@ -28,16 +28,22 @@ export async function submitReconciliationAction(
   formData: FormData
 ): Promise<SubmitReconciliationState> {
   const date = String(formData.get("date") ?? "");
-  const actualQuantity = Number(formData.get("actualQuantity"));
+  const actualQuantityRaw = formData.get("actualQuantity");
   const varianceReason = String(formData.get("varianceReason") ?? "").trim();
   const actualRecordedSalesRaw = formData.get("actualRecordedSales");
   const actualRemainingValueRaw = formData.get("actualRemainingValue");
   const validAdjustmentsValueRaw = formData.get("validAdjustmentsValue");
 
+  // Omitted entirely for a value-controlled product (no physical unit
+  // count) -- the RPC itself enforces that a quantity-controlled product
+  // still requires one (migration 0068), so no client-side requirement
+  // is duplicated here.
+  const actualQuantity = actualQuantityRaw && actualQuantityRaw !== "" ? Number(actualQuantityRaw) : null;
+
   if (!date) {
     return { error: "Missing reconciliation date" };
   }
-  if (!Number.isFinite(actualQuantity) || actualQuantity < 0) {
+  if (actualQuantity !== null && (!Number.isFinite(actualQuantity) || actualQuantity < 0)) {
     return { error: "Enter the actual physical count" };
   }
 

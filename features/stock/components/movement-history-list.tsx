@@ -1,6 +1,6 @@
 import type { StockMovementRow } from "@/services/StockService";
 
-const MOVEMENT_LABEL: Record<string, string> = {
+export const MOVEMENT_LABEL: Record<string, string> = {
   opening_stock: "Opening stock",
   stock_in: "Stock in",
   stock_out: "Stock out",
@@ -10,6 +10,8 @@ const MOVEMENT_LABEL: Record<string, string> = {
   expired: "Expired",
   lost: "Lost/missing",
   reconciliation_variance: "Reconciliation variance",
+  sale: "Sale",
+  sale_reversal: "Sale reversal",
 };
 
 function formatDate(date: string): string {

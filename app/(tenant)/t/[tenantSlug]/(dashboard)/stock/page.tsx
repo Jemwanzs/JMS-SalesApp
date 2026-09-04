@@ -1,27 +1,32 @@
-import Link from "next/link";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { BarChart3, ClipboardCheck } from "lucide-react";
 
-import { StockDashboardList } from "@/features/stock/components/stock-dashboard-list";
+import { StockTabs } from "@/features/stock/components/stock-tabs";
+import { BusinessDayService } from "@/services/BusinessDayService";
 import { StockService } from "@/services/StockService";
 import { getInventoryEntitlement } from "@/lib/inventory/entitlement";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
+import { resolveActiveLocationId } from "@/lib/tenant/resolve-active-location";
 import { getTenantBySlug } from "@/lib/tenant/resolve-tenant-by-slug";
+import { todayString, trailingDaysRange } from "@/lib/utils/date-ranges";
 
 export const metadata: Metadata = {
   title: "Stock | JMS Sales App",
 };
 
+const OVERVIEW_WINDOW_DAYS = 30;
+
 /**
- * Stock dashboard (Product Enhancements #4/#6) -- mobile card list (not
- * a desktop table) of every tracks_inventory product with its current
- * balance, a low-stock badge, and a tap-through to the per-product
- * detail/quick-entry page. assertInventoryEnabled here is defense in
- * depth alongside the bottom nav already hiding this entry point when
- * the module isn't entitled (lib/inventory/entitlement.ts) -- a direct
- * URL hit still needs to redirect cleanly, not error.
+ * Robust Stock/Inventory Management: a single "Stock" bottom-nav
+ * destination (unchanged) with six internal sub-tabs (Overview / Items /
+ * Stock In / Adjust / Reconcile / History) instead of the previous
+ * separate-route model -- see docs/21-inventory-management.md. Every
+ * tab's data is fetched here, up front, in parallel: this app's stock
+ * volume is modest enough that a single request per tab switch isn't
+ * warranted (the same reasoning stock_balances' own view already
+ * applies), and it keeps StockTabs a plain client component with no
+ * data-fetching of its own.
  */
 export default async function StockPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
   const { tenantSlug } = await params;
@@ -30,45 +35,50 @@ export default async function StockPage({ params }: { params: Promise<{ tenantSl
   const tenant = await getTenantBySlug(supabase, tenantSlug);
   const tenantId = tenant!.id;
 
-  // Hardening roadmap Phase 1 (docs/22-hardening-roadmap.md, perf finding
-  // #8): both checks are independent of each other, and both failure
-  // modes redirect to the exact same place -- run them together with the
-  // non-throwing entitlement read instead of a sequential await + a
-  // second try/catch around the throwing variant.
   const [canView, entitlement] = await Promise.all([can("inventory.view", { tenantId }), getInventoryEntitlement(tenantId)]);
   if (!canView || !entitlement.enabled) {
     redirect(`/t/${tenantSlug}/more`);
   }
 
-  const [balances, canReconcile] = await Promise.all([
-    new StockService(supabase).listBalances(tenantId),
+  const [canRecord, canReconcile] = await Promise.all([
+    can("stock.movement.record", { tenantId }),
     can("stock.reconcile", { tenantId }),
+  ]);
+
+  const stockService = new StockService(supabase);
+  const overviewRange = trailingDaysRange(OVERVIEW_WINDOW_DAYS, tenant!.timezone);
+
+  const activeLocationId = await resolveActiveLocationId(supabase, tenantId);
+  const today = activeLocationId
+    ? (await new BusinessDayService(supabase).getEffectiveBusinessDate(tenantId, activeLocationId)).date
+    : todayString(tenant!.timezone);
+
+  const [summary, movementTrend, varianceReport, lowStock, balances, pendingReconciliation, historyEntries] = await Promise.all([
+    stockService.getOverviewSummary(tenantId, overviewRange),
+    stockService.getMovementTrend(tenantId, overviewRange),
+    stockService.getVarianceReport(tenantId, overviewRange),
+    stockService.listLowStock(tenantId),
+    stockService.listBalances(tenantId),
+    canReconcile ? stockService.listPendingReconciliation(tenantId, today) : Promise.resolve([]),
+    stockService.listHistory(tenantId),
   ]);
 
   return (
     <div className="flex flex-1 flex-col p-6">
-      <div className="mb-4 flex items-center justify-between gap-2">
-        <h1 className="text-xl font-semibold">Stock</h1>
-        <div className="flex gap-2">
-          <Link
-            href={`/t/${tenantSlug}/stock/reports`}
-            className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium hover:bg-muted"
-          >
-            <BarChart3 className="h-4 w-4" />
-            Reports
-          </Link>
-          {canReconcile && (
-            <Link
-              href={`/t/${tenantSlug}/stock/reconcile`}
-              className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium hover:bg-muted"
-            >
-              <ClipboardCheck className="h-4 w-4" />
-              Reconcile
-            </Link>
-          )}
-        </div>
-      </div>
-      <StockDashboardList tenantSlug={tenantSlug} balances={balances} />
+      <h1 className="mb-4 text-xl font-semibold">Stock</h1>
+      <StockTabs
+        tenantId={tenantId}
+        tenantSlug={tenantSlug}
+        summary={summary}
+        movementTrend={movementTrend}
+        varianceReport={varianceReport}
+        lowStock={lowStock}
+        balances={balances}
+        pendingReconciliation={pendingReconciliation}
+        historyEntries={historyEntries}
+        canRecord={canRecord}
+        canReconcile={canReconcile}
+      />
     </div>
   );
 }

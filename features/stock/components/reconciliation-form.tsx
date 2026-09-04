@@ -22,6 +22,55 @@ export function ReconciliationForm({
   productId,
   productName,
   unitOfMeasure,
+  stockControlMethod,
+  date,
+  preview,
+  actualRecordedSales,
+}: {
+  tenantId: string;
+  tenantSlug: string;
+  productId: string;
+  productName: string;
+  unitOfMeasure: string | null;
+  stockControlMethod: "quantity" | "value";
+  date: string;
+  preview: ReconciliationPreview;
+  /** Value-based control only -- today's real revenue for this product, pre-fetched. */
+  actualRecordedSales?: number;
+}) {
+  if (stockControlMethod === "value") {
+    return (
+      <ValueReconciliationForm
+        tenantId={tenantId}
+        tenantSlug={tenantSlug}
+        productId={productId}
+        productName={productName}
+        date={date}
+        preview={preview}
+        actualRecordedSales={actualRecordedSales ?? 0}
+      />
+    );
+  }
+
+  return (
+    <QuantityReconciliationForm
+      tenantId={tenantId}
+      tenantSlug={tenantSlug}
+      productId={productId}
+      productName={productName}
+      unitOfMeasure={unitOfMeasure}
+      date={date}
+      preview={preview}
+    />
+  );
+}
+
+function QuantityReconciliationForm({
+  tenantId,
+  tenantSlug,
+  productId,
+  productName,
+  unitOfMeasure,
   date,
   preview,
 }: {
@@ -131,12 +180,150 @@ export function ReconciliationForm({
   );
 }
 
-function ReadOnlyStat({ label, value, unit, emphasize }: { label: string; value: number; unit: string; emphasize?: boolean }) {
+/**
+ * Value-based control: no physical unit count. Expected Sales Value
+ * (opening + added, both already priced via each movement's own
+ * snapshot -- see migration 0067) is compared against real recorded
+ * revenue plus an estimated remaining-stock value the reconciler enters,
+ * plus any already-recorded valid adjustments (damage/spoilage/etc,
+ * entered here as a single rolled-up figure for the day). Only what's
+ * left over becomes the unexplained variance -- never assumed to be
+ * theft/loss outright, per the user's own explicit instruction.
+ */
+function ValueReconciliationForm({
+  tenantId,
+  tenantSlug,
+  productId,
+  productName,
+  date,
+  preview,
+  actualRecordedSales,
+}: {
+  tenantId: string;
+  tenantSlug: string;
+  productId: string;
+  productName: string;
+  date: string;
+  preview: ReconciliationPreview;
+  actualRecordedSales: number;
+}) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [actualRemainingValue, setActualRemainingValue] = useState("");
+  const [validAdjustmentsValue, setValidAdjustmentsValue] = useState("0");
+  const [error, setError] = useState<string | null>(null);
+
+  const expectedSalesValue = preview.expectedSalesValue;
+
+  const unexplainedVariance = useMemo(() => {
+    const remaining = Number(actualRemainingValue);
+    const adjustments = Number(validAdjustmentsValue) || 0;
+    if (actualRemainingValue === "" || !Number.isFinite(remaining)) return null;
+    return expectedSalesValue - actualRecordedSales - remaining - adjustments;
+  }, [actualRemainingValue, validAdjustmentsValue, expectedSalesValue, actualRecordedSales]);
+
+  function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (unexplainedVariance === null) {
+      setError("Enter the estimated remaining stock value");
+      return;
+    }
+    setError(null);
+
+    const formData = new FormData();
+    formData.set("date", date);
+    formData.set("actualRecordedSales", String(actualRecordedSales));
+    formData.set("actualRemainingValue", actualRemainingValue);
+    formData.set("validAdjustmentsValue", validAdjustmentsValue || "0");
+    if (unexplainedVariance !== 0) {
+      formData.set("varianceReason", "See value-based reconciliation figures");
+    }
+
+    startTransition(async () => {
+      const result = await submitReconciliationAction(tenantId, tenantSlug, productId, {}, formData);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      toast.success("Reconciliation saved");
+      router.push(`/t/${tenantSlug}/stock/reconcile`);
+    });
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="space-y-4">
+      <div className="grid grid-cols-2 gap-3">
+        <ReadOnlyStat label="Opening value" value={preview.openingValue} unit="" decimals />
+        <ReadOnlyStat label="Added value" value={preview.addedValue} unit="" decimals />
+        <ReadOnlyStat label="Expected sales value" value={expectedSalesValue} unit="" emphasize decimals />
+        <ReadOnlyStat label="Actual recorded sales" value={actualRecordedSales} unit="" decimals />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="actual-remaining-value">Actual remaining stock value (estimate)</Label>
+        <Input
+          id="actual-remaining-value"
+          type="number"
+          inputMode="decimal"
+          min="0"
+          step="0.01"
+          value={actualRemainingValue}
+          onChange={(e) => setActualRemainingValue(e.target.value)}
+          autoFocus
+          required
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="valid-adjustments-value">Valid adjustments (discounts, damage, complimentary, etc.)</Label>
+        <Input
+          id="valid-adjustments-value"
+          type="number"
+          inputMode="decimal"
+          min="0"
+          step="0.01"
+          value={validAdjustmentsValue}
+          onChange={(e) => setValidAdjustmentsValue(e.target.value)}
+        />
+      </div>
+
+      {unexplainedVariance !== null && (
+        <div className={`rounded-lg border p-3 text-center ${unexplainedVariance === 0 ? "" : "border-destructive"}`}>
+          <p className="text-xs text-muted-foreground">Unexplained variance</p>
+          <p className={`mt-1 text-lg font-semibold tabular-nums ${unexplainedVariance === 0 ? "" : "text-destructive"}`}>
+            {unexplainedVariance > 0 ? "+" : ""}
+            {unexplainedVariance.toFixed(2)}
+          </p>
+        </div>
+      )}
+
+      {error && <p className="text-sm text-destructive">{error}</p>}
+
+      <Button type="submit" className="w-full" disabled={isPending}>
+        {isPending ? "Saving..." : `Complete reconciliation for ${productName}`}
+      </Button>
+    </form>
+  );
+}
+
+function ReadOnlyStat({
+  label,
+  value,
+  unit,
+  emphasize,
+  decimals,
+}: {
+  label: string;
+  value: number;
+  unit: string;
+  emphasize?: boolean;
+  decimals?: boolean;
+}) {
   return (
     <div className="rounded-lg border p-3">
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className={`mt-1 tabular-nums ${emphasize ? "text-lg font-semibold" : "text-sm font-medium"}`}>
-        {value} {unit}
+        {decimals ? value.toFixed(2) : value} {unit}
       </p>
     </div>
   );
