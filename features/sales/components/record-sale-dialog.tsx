@@ -62,7 +62,16 @@ export function RecordSaleDialog({
     }
   }, [product]);
 
-  const showQuantity = quantityEnabled || (product?.tracksInventory ?? false);
+  // Only a QUANTITY-controlled tracked product forces this field visible/
+  // required -- a VALUE-controlled one (the tenant's own stated choice:
+  // "measure this product's stock by value, not count") never needs a
+  // per-sale unit count from the seller at all. The deduction trigger
+  // (migration 0069) infers an implied quantity from the sale amount and
+  // the product's own selling price when none is given, so staff selling
+  // a value-tracked product see exactly the same form as an untracked one
+  // -- still fully respecting the tenant's own quantityEnabled toggle.
+  const quantityRequiredForProduct = (product?.tracksInventory ?? false) && product?.stockControlMethod === "quantity";
+  const showQuantity = quantityEnabled || quantityRequiredForProduct;
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -71,7 +80,7 @@ export function RecordSaleDialog({
       setError(t("enterProductNameError"));
       return;
     }
-    if (product.tracksInventory && (!quantity || Number(quantity) <= 0)) {
+    if (quantityRequiredForProduct && (!quantity || Number(quantity) <= 0)) {
       setError(t("enterQuantityForTracked", { name: product.name }));
       return;
     }
@@ -86,10 +95,13 @@ export function RecordSaleDialog({
     // sale.ts), but FormData.get() on a key that was never set() returns
     // null, which fails that schema on both branches. Omitting the key
     // entirely (rather than sending "") would break every submission
-    // while quantityEnabled is false. Tracked products force the field
-    // visible (see showQuantity below) regardless of the tenant-wide
-    // quantityEnabled preference, since SalesService rejects a tracked
-    // sale with no quantity -- stock has nothing to deduct otherwise.
+    // while quantityEnabled is false. A quantity-controlled tracked
+    // product forces the field visible (see showQuantity above)
+    // regardless of the tenant-wide quantityEnabled preference, since
+    // SalesService rejects such a sale with no quantity -- stock has
+    // nothing to deduct otherwise. A value-controlled tracked product
+    // never forces it -- omitted entirely unless the tenant's own
+    // preference already shows it.
     formData.set("quantity", showQuantity ? quantity : "");
     formData.set("notes", notesEnabled ? notes : "");
     formData.set("idempotencyKey", idempotencyKey);
@@ -167,7 +179,7 @@ export function RecordSaleDialog({
                 <div className="space-y-2">
                   <Label htmlFor="quantity">
                     {t("quantity")}
-                    {product.tracksInventory && " *"}
+                    {quantityRequiredForProduct && " *"}
                   </Label>
                   <Input
                     id="quantity"
@@ -176,7 +188,7 @@ export function RecordSaleDialog({
                     step="1"
                     value={quantity}
                     onChange={(e) => setQuantity(e.target.value)}
-                    required={product.tracksInventory}
+                    required={quantityRequiredForProduct}
                   />
                 </div>
               )}
