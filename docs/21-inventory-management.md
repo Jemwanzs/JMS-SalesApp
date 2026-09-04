@@ -37,21 +37,53 @@ A fixed, code-level catalog (`lib/inventory/units-of-measure.ts`) grouped by cat
 | `adjustment_decrease` | negative | **yes** |
 | `damaged`, `expired`, `lost` | negative | **yes** |
 | `reconciliation_variance` | either | **yes**, whenever the variance is nonzero |
+| `sale` | negative | no — automatic, see "Sales integration" |
+| `sale_reversal` | positive | no — automatic, see "Sales integration" |
 
-The sign convention lives in exactly one place (`StockService.recordMovement`'s `INCREASES_BALANCE` set and the mirrored `record_stock_reconciliation()` SQL function) — current balance is always a plain `SUM(quantity)`, never a per-type CASE expression scattered across every reader. `stock_balances` is a plain (non-materialized) view over that sum — movement volume for small-business daily stock is modest enough that avoiding refresh staleness is worth more than the marginal query cost of a live aggregate; revisit only if a real performance problem shows up.
+The sign convention lives in exactly one place (`StockService.recordMovement`'s `INCREASES_BALANCE` set and the mirrored `record_stock_reconciliation()` SQL function) — current balance is always a plain `SUM(quantity)`, never a per-type CASE expression scattered across every reader. `stock_balances` is a plain (non-materialized) view over that sum — movement volume for small-business daily stock is modest enough that avoiding refresh staleness is worth more than the marginal query cost of a live aggregate; revisit only if a real performance problem shows up. The view is `security_invoker` (migration `0066`, fixing a real cross-tenant leak the view's own earlier comment had gotten backwards about Postgres's actual default).
 
-`reconciliation_variance` is deliberately not a valid input to the general `recordMovement` path — it's written only by the reconciliation RPC below, atomically alongside the reconciliation row it belongs to, so the ledger and the reconciliation log can never disagree about whether a variance was actually recorded.
+`reconciliation_variance` is deliberately not a valid input to the general `recordMovement` path — it's written only by the reconciliation RPC below, atomically alongside the reconciliation row it belongs to, so the ledger and the reconciliation log can never disagree about whether a variance was actually recorded. `sale`/`sale_reversal` are similarly never inserted through `recordMovement` — see "Sales integration" below.
+
+Every row also carries `unit_cost_snapshot`/`unit_price_snapshot` (migration `0067`), copied from the product's `cost_price`/`expected_price` **at the moment of the movement**, never re-derived from the product's current price later. This is what lets every monetary figure downstream (Overview cards, value-based reconciliation, reports) stay accurate even after a product's price changes — the movement already knows what it was worth when it happened.
+
+## Cost price & per-product control method
+
+`products.cost_price` (nullable) is the acquisition/purchase cost per unit — distinct from the existing `expected_price` (selling price). `products.stock_control_method` (`'quantity'` default, or `'value'`) is a per-product **reporting preference, not a second ledger**: both methods write to the exact same `stock_movements` table with the exact same signed `quantity` column. A quantity-controlled product's Reconciliation/Overview views foreground units (opening/in/out/expected-closing in the product's own unit of measure); a value-controlled product's views foreground currency, computed by multiplying each movement's own quantity by its own snapshot price — never a duplicate source of truth for the balance itself.
 
 ## Daily reconciliation
+
+**Quantity-based** (the original design, unchanged):
 
 ```
 Opening + Stock In − Stock Out = Expected Closing
 Actual Physical Count − Expected Closing = Variance
 ```
 
-A variance of exactly zero needs no reason and writes no offsetting ledger row. Any nonzero variance requires a reason before the reconciliation can be saved — enforced twice: client-side (the form won't submit without one) and server-side (the RPC itself rejects a nonzero variance with an empty reason, so a direct API call can't bypass the rule either).
+**Value-based** (migration `0067`/`0068`):
 
-The write path is one atomic call, `record_stock_reconciliation(p_tenant_id, p_product_id, p_location_id, p_reconciliation_date, p_actual_quantity, p_variance_reason)` — a `SECURITY DEFINER` Postgres function following the exact same established pattern this codebase already uses for `sales.void_sale()`/`correct_sale()` (`19-security-checklist.md`), not a new one invented for this feature: since neither `stock_movements` nor `stock_reconciliations` has an RLS write policy a client could use directly, the function does its own `has_permission(tenant_id, 'stock.reconcile')` check in code, then writes with the function-owner's privileges. `auth.uid()` still resolves to the real calling user regardless of security mode (it reads the request's own JWT claims, unrelated to function ownership), so `recorded_by` is always the actual person who reconciled, never generic. One reconciliation per product per day is enforced by a coalesce-normalized unique index (location-independent for now, since there's no per-location stock UI yet).
+```
+Opening Value + Stock Added Value = Expected Sales Value   (both from movements' own price snapshots)
+Expected Sales Value − Actual Recorded Sales − Actual Remaining Value − Valid Adjustments = Unexplained Variance
+```
+
+`Actual Recorded Sales` is real revenue (`sales.actual_amount`, excluding voided/corrected originals — the same exclusion every gross-sales aggregate in this app already applies), not a theoretical full-price figure — so a legitimate discount shows up as an accounted-for gap, not phantom variance. `Actual Remaining Value` and `Valid Adjustments` (discounts/damage/spoilage/complimentary/etc., already reflected in the ledger for the day) are what the reconciler enters; only what's left over after subtracting both becomes the real, unexplained variance — the reconciliation never assumes every difference is theft or loss.
+
+A quantity variance of exactly zero needs no reason and writes no offsetting ledger row; any nonzero variance requires a reason. `stock_reconciliations.actual_quantity` is nullable (migration `0068`) — required and enforced server-side for a quantity-controlled product, left null for a value-controlled one (which has no physical unit count at all).
+
+Every reconciliation also gets a `status` (`balanced` / `within_tolerance` / `variance` / `material_variance`), computed and **stored** at write time against whatever the tenant's variance-tolerance setting was at that moment (`tenant_settings.stock_variance_tolerance_percent`/`_amount`, sensible built-in defaults when unset) — never recomputed on read, so a later tolerance change can't retroactively reclassify old history.
+
+The write path is one atomic call, `record_stock_reconciliation(...)` — a `SECURITY DEFINER` Postgres function following the exact same established pattern this codebase already uses for `sales.void_sale()`/`correct_sale()` (`19-security-checklist.md`), not a new one invented for this feature: since neither `stock_movements` nor `stock_reconciliations` has an RLS write policy a client could use directly, the function does its own `has_permission(tenant_id, 'stock.reconcile')` check in code, then writes with the function-owner's privileges. `auth.uid()` still resolves to the real calling user regardless of security mode, so `recorded_by` is always the actual person who reconciled, never generic. One reconciliation per product per day is enforced by a coalesce-normalized unique index (location-independent for now, since there's no per-location stock UI yet).
+
+## Sales integration
+
+Recording, voiding, correcting, or reversing a sale of a `tracks_inventory` product automatically moves stock — implemented as two triggers on `sales` (migration `0067`), not application-code calls from `SalesService`. This matters: `void_sale`/`correct_sale`/`reverse_sale` can defer their real effect to `resolve_approval_request()` when a tenant requires sign-off (`08-sales-engine.md`), so a TypeScript-side hook would silently miss that path. A trigger fires on the actual row mutation regardless of which code path produced it:
+
+- **`AFTER INSERT`** deducts stock (`movement_type = 'sale'`, `reference_type = 'sale'`, `reference_id = sales.id`) for any new row representing a real sale of tracked stock — every ordinary `recordSale` insert, and a correction's replacement row — but explicitly skips a reversal's replacement row (`reversal_of_sale_id is not null`), since that row exists only to zero out revenue, not to represent new stock leaving.
+- **`AFTER UPDATE OF status`** restores stock (`movement_type = 'sale_reversal'`) when a sale transitions out of `'open'` (voided/corrected/reversed), by looking up whatever **that same row's own** `'sale'` movement actually recorded — not by re-deriving eligibility from the product's current `tracks_inventory`, which could have changed since. A correction therefore needs no special-casing: the original's full deduction is restored, the replacement's new deduction is applied, and the two net to exactly the right delta.
+
+A partial unique index (`tenant_id, product_id, reference_id, movement_type` where `reference_type = 'sale'`) makes both triggers idempotent via `on conflict do nothing` — a retried write can never deduct or restore the same sale's stock twice.
+
+`sales.quantity` — optional and "informational only" everywhere else in this app (`08-sales-engine.md`) — becomes **required** specifically when the sold product `tracks_inventory`, enforced both client-side (the Sales form) and in `SalesService.recordSale` (a friendly pre-insert error) and, as a hard backstop against a direct API call bypassing both, inside the insert trigger itself. The tenant's one system "Others" product (free-text sales) can never be `tracks_inventory = true`, so ad-hoc sales are automatically excluded with no special-casing anywhere in this integration.
 
 ## Permissions
 
@@ -60,10 +92,15 @@ The write path is one atomic call, `record_stock_reconciliation(p_tenant_id, p_p
 ## UI surface
 
 - **Settings → Modules** — the on/off toggle, gated behind a confirmation dialog whose copy (trial vs. re-enable vs. real checkout) is computed server-side using the exact same branching the enable action itself uses, so the dialog never promises a free trial the action won't actually grant.
-- **Bottom nav "Stock"** tab — appears only once both `inventory.view` and the entitlement above are satisfied; a direct URL hit without entitlement redirects cleanly (`assertInventoryEnabled`), it doesn't error.
-- **`/stock`** — every tracked product with its current balance and a low-stock badge; **`/stock/[productId]`** — balance, quick-action buttons (opening stock, in, out, adjust ±, damaged, expired, lost) sharing one dialog (same "tap an item, get a focused form" idiom as `RecordSaleDialog`), movement history below.
-- **`/stock/reconcile`** — today's queue (every tracked product with no reconciliation row yet for the tenant's own "today"); **`/stock/reconcile/[productId]`** — the full-screen reconciliation form (deliberately not a dialog/sheet — a multi-field flow, not a quick tap).
-- **`/stock/reports`** — a stock-in-vs-out trend chart (trailing 30 days, reusing the same `components/ui/chart.tsx` wrapper Analytics uses), plus plain ranked lists for variances and low stock — deliberately lists, not more charts, since the reason text and exact counts are the actionable part, not a magnitude to compare at a glance.
+- **Bottom nav "Stock"** — still exactly one nav item (unchanged) — appears only once both `inventory.view` and the entitlement above are satisfied; a direct URL hit without entitlement redirects cleanly (`assertInventoryEnabled`), it doesn't error.
+- **`/stock`** — a single page with six internal sub-tabs (`components/ui/tabs.tsx`, the same Base UI wrapper Analytics already uses for its Products/User-Performance tabs), all data fetched server-side up front so tab switching is instant, no per-tab round trip:
+  - **Overview** — summary cards (`StockService.getOverviewSummary`: current stock, stock value, products tracked, low/out of stock, stock added/sold, damaged-lost-adjusted, expected vs. actual sales, stock variance — the set the spec explicitly asked for, not every number that could theoretically be shown), plus the trend chart, variance list, and low-stock list that used to live on the separate `/stock/reports` page (that route still works, just no longer linked — nothing was deleted).
+  - **Items** — the original per-product balance list, unchanged (`StockDashboardList`).
+  - **Stock In** / **Adjust** — a searchable product picker; tapping a product opens the same `QuickStockEntryDialog` every per-product quick action already uses (`StockActionList`), scoped to the tab's relevant movement types (opening stock/stock in vs. stock out/adjust/damaged/expired/lost).
+  - **Reconcile** — today's queue (`ReconciliationQueueList`, shared with the still-working standalone `/stock/reconcile` route), tapping through to the full-screen reconciliation form.
+  - **History** — a tenant-wide, filterable feed of every stock-changing event across every tracked product (`StockService.listHistory` / `StockHistoryList`) — search by product, filter by event type.
+- **`/stock/[productId]`** — unchanged: balance, quick-action buttons, movement history for one product.
+- **`/stock/reconcile/[productId]`** — the full-screen reconciliation form, now branching on the product's `stock_control_method`: the original quantity form for `'quantity'`, a new value form (Opening/Added/Expected Sales Value, real recorded sales, an "actual remaining value" + "valid adjustments" entry, unexplained variance) for `'value'`.
 
 ## Barcode/QR readiness
 
