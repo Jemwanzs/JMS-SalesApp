@@ -21,16 +21,20 @@ import type { VoidOrCorrectResult } from "@/types/database.types";
 export function CorrectSaleDialog({
   saleId,
   currentAmount,
+  currentQuantity,
   tenantSlug,
   onResolved,
 }: {
   saleId: string;
   currentAmount: number;
+  /** The original sale's own quantity -- a tracks_inventory product always has one (enforced at record time, migration 0067), so its presence here is what tells this form the quantity field must stay filled, not just optionally editable. */
+  currentQuantity: number | null;
   tenantSlug: string;
   onResolved: (result: VoidOrCorrectResult) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [newAmount, setNewAmount] = useState(String(currentAmount));
+  const [newQuantity, setNewQuantity] = useState(currentQuantity !== null ? String(currentQuantity) : "");
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -38,14 +42,20 @@ export function CorrectSaleDialog({
   const tCommon = useTranslations("Common");
   const tSales = useTranslations("Sales");
 
+  const quantityRequired = currentQuantity !== null;
+
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (quantityRequired && (!newQuantity || Number(newQuantity) <= 0)) {
+      setError(tCommon("checkEntries"));
+      return;
+    }
     setError(null);
 
     const formData = new FormData();
     formData.set("saleId", saleId);
     formData.set("newAmount", newAmount);
-    formData.set("newQuantity", "");
+    formData.set("newQuantity", newQuantity);
     formData.set("newNotes", "");
     formData.set("reason", reason);
 
@@ -92,6 +102,20 @@ export function CorrectSaleDialog({
               required
             />
           </div>
+          {quantityRequired && (
+            <div className="space-y-2">
+              <Label htmlFor="correct-quantity">{tSales("quantity")}</Label>
+              <Input
+                id="correct-quantity"
+                type="number"
+                min="1"
+                step="1"
+                value={newQuantity}
+                onChange={(e) => setNewQuantity(e.target.value)}
+                required
+              />
+            </div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="correct-reason">{tSales("reason")}</Label>
             <Input

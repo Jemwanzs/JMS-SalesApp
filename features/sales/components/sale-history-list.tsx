@@ -243,6 +243,7 @@ export function SaleHistoryList({
                     <CorrectSaleDialog
                       saleId={sale.id}
                       currentAmount={sale.actualAmount}
+                      currentQuantity={sale.quantity}
                       tenantSlug={tenantSlug}
                       onResolved={(result) => onResolved(sale.id, result)}
                     />
