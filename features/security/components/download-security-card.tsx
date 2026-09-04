@@ -19,12 +19,17 @@ import { Switch } from "@/components/ui/switch";
  * Currently applied to the one real export surface (Sales History's
  * CSV button) -- see export-sales-history.ts.
  *
- * This same passcode also doubles as Phase 2h's business-day reopen
- * fallback gate (docs/09-business-day-engine.md: "MFA or passcode") for
- * a team member who hasn't enrolled in two-factor authentication — one
- * memorized passcode covers both, rather than a second one to configure
- * here. The toggle above only governs *downloads*; reopening always
- * checks the passcode when MFA isn't available, with no separate switch.
+ * This same passcode also doubles as two other gates, neither controlled
+ * by the toggle above (which only governs *downloads*) -- both instead
+ * key off whether a passcode has been CREATED at all:
+ * Phase 2h's business-day reopen fallback (docs/09-business-day-
+ * engine.md: "MFA or passcode") for a team member who hasn't enrolled
+ * in two-factor authentication, always checked when MFA isn't
+ * available, with no separate switch; and opening the business day --
+ * gated only when a passcode actually exists (features/sales/actions/
+ * open-business-day.ts), so a tenant that's never set one up sees no
+ * change in behavior at all. One memorized passcode covers all three
+ * uses, rather than a separate one to configure per gate.
  */
 export function DownloadSecurityCard({
   tenantId,
@@ -112,7 +117,8 @@ export function DownloadSecurityCard({
           </div>
           {saveError && <p className="text-xs text-destructive">{saveError}</p>}
           <p className="text-xs text-muted-foreground">
-            This passcode is also used to reopen a closed business day when two-factor authentication isn&rsquo;t enabled.
+            Once set, this passcode is also required to open the business day, and to reopen a closed one when
+            two-factor authentication isn&rsquo;t enabled.
           </p>
         </form>
       </CardContent>

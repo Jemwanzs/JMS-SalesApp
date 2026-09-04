@@ -44,6 +44,8 @@
 
     "openBusinessDay": "Open Business Day",
     "opening": "Opening...",
+    "verifyAndOpen": "Verify & Open",
+    "openBusinessDayPasscodeHelper": "Enter your workspace's security passcode to open the business day.",
 
     "reopenBusinessDay": "Reopen business day",
     "reopenThisBusinessDay": "Reopen this business day",

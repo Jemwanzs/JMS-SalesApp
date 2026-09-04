@@ -44,6 +44,8 @@
 
     "openBusinessDay": "Ouvrir la journée commerciale",
     "opening": "Ouverture...",
+    "verifyAndOpen": "Vérifier et ouvrir",
+    "openBusinessDayPasscodeHelper": "Saisissez le code de sécurité de votre espace de travail pour ouvrir la journée commerciale.",
 
     "reopenBusinessDay": "Rouvrir la journée commerciale",
     "reopenThisBusinessDay": "Rouvrir cette journée commerciale",

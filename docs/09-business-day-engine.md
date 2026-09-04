@@ -45,7 +45,9 @@ Manual early-open, forced close, and the time-boxed reopen window all reuse the 
 
 ## Manual open
 
-Authorized user (`business_day.open`) can open before configured hours. Requires a reason, logged automatically (spec §25).
+Authorized user (`business_day.open`) can open before configured hours. Requires a reason, logged automatically (spec §25). If the tenant has ever created a security passcode (Security → Download security — see below), opening also requires it; a tenant that's never set one up sees no change in behavior. Unlike reopen, this is deliberately conditional, not always-on — opening is a routine everyday action, not the "highly privileged" reopen case.
+
+`BusinessDayService.getTodayBusinessDayRow()` — a direct, unfiltered lookup of today's own `business_days` row by calendar date — backs both this gate's existence check and the Sales page's closed-vs-never-opened distinction. It's deliberately separate from `getTodayBusinessDay()` (only ever returns a row when live) and `getEffectiveBusinessDate()` (can resolve to yesterday or the gap period's last closed day): those two answer "what's the tenant's current effective business day," this one answers "does *today's own* row exist, and in what state" — the question a manual action or today-specific UI decision actually needs.
 
 ## Closing
 

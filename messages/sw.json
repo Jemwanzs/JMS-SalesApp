@@ -44,6 +44,8 @@
 
     "openBusinessDay": "Fungua Siku ya Biashara",
     "opening": "Inafungua...",
+    "verifyAndOpen": "Thibitisha na Ufungue",
+    "openBusinessDayPasscodeHelper": "Ingiza msimbo wa usalama wa eneo lako la kazi ili kufungua siku ya biashara.",
 
     "reopenBusinessDay": "Fungua tena siku ya biashara",
     "reopenThisBusinessDay": "Fungua tena siku hii ya biashara",

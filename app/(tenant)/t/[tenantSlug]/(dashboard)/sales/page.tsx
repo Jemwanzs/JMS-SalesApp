@@ -129,16 +129,27 @@ export default async function SalesPage({
     day: "numeric",
   });
 
-  // None of these five depend on each other -- businessDay/activeLocation
-  // only need location.id, the rest only need tenant.id -- so they can
-  // all run in one round trip instead of blocking each other.
-  const [businessDay, canOpenDay, canReopenDay, activeWish, activeLocation] = await Promise.all([
-    businessDayService.getTodayBusinessDay(tenant.id, location.id),
-    can("business_day.open", { tenantId: tenant.id }),
-    can("business_day.reopen", { tenantId: tenant.id }),
-    new AnniversaryService(supabase).getActiveWish(tenant.id).catch(() => null),
-    supabase.from("locations").select("name").eq("id", location.id).maybeSingle(),
-  ]);
+  // None of these seven depend on each other -- businessDay/todayRow/
+  // activeLocation only need location.id, the rest only need tenant.id
+  // -- so they can all run in one round trip instead of blocking each
+  // other. `businessDay` (live-only) still gates canCapture exactly as
+  // before; `todayRow` is the new, separate "does today's own row exist
+  // regardless of status" lookup -- see BusinessDayService.
+  // getTodayBusinessDayRow's own header comment for why businessDay
+  // alone could never detect "closed."
+  const [businessDay, todayRow, canOpenDay, canReopenDay, activeWish, activeLocation, hashedOpenPasscode] =
+    await Promise.all([
+      businessDayService.getTodayBusinessDay(tenant.id, location.id),
+      businessDayService.getTodayBusinessDayRow(tenant.id, location.id),
+      can("business_day.open", { tenantId: tenant.id }),
+      can("business_day.reopen", { tenantId: tenant.id }),
+      new AnniversaryService(supabase).getActiveWish(tenant.id).catch(() => null),
+      supabase.from("locations").select("name").eq("id", location.id).maybeSingle(),
+      // Gated on whether a passcode has been CREATED at all (matches
+      // open-business-day.ts's own check), not require_download_passcode
+      // -- that toggle only governs downloads, see DownloadSecurityCard.
+      new TenantService(supabase).getSetting<string>(tenant.id, "hashed_download_passcode"),
+    ]);
   // Business + branch identity always shows here now, single-branch
   // tenants included -- this is the golden-path landing screen (spec
   // S13) where sales get captured, and being certain which business/
@@ -213,10 +224,10 @@ export default async function SalesPage({
       ) : (
         <div className="mt-8 flex flex-1 flex-col items-center justify-center rounded-lg border border-dashed p-8 text-center">
           <p className="text-lg font-medium">
-            {businessDay?.status === "closed" ? t("businessDayClosed") : t("businessDayNotOpen")}
+            {todayRow?.status === "closed" ? t("businessDayClosed") : t("businessDayNotOpen")}
           </p>
           <p className="mt-2 max-w-[28ch] text-sm text-muted-foreground">
-            {businessDay?.status === "closed"
+            {todayRow?.status === "closed"
               ? canReopenDay
                 ? t("reopenToAddMissedSale")
                 : t("askAdminToReopen")
@@ -225,10 +236,10 @@ export default async function SalesPage({
                 : t("askAdminToOpen")}
           </p>
           <div className="mt-4 w-full max-w-[240px]">
-            {businessDay?.status === "closed"
+            {todayRow?.status === "closed"
               ? canReopenDay && (
                   <ReopenBusinessDayDialog
-                    businessDayId={businessDay.id}
+                    businessDayId={todayRow.id}
                     tenantId={tenant.id}
                     tenantSlug={tenantSlug}
                   />
@@ -238,6 +249,7 @@ export default async function SalesPage({
                     tenantId={tenant.id}
                     tenantSlug={tenantSlug}
                     locationId={location.id}
+                    requiresPasscode={!!hashedOpenPasscode}
                   />
                 )}
           </div>

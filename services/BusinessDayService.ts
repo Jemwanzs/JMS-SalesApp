@@ -187,6 +187,41 @@ export class BusinessDayService {
     return { date: resolved.businessDate, isLive: resolved.isLive };
   }
 
+  /**
+   * The row for the RAW calendar "today" (todayInTimezone), regardless
+   * of its status -- distinct from both getTodayBusinessDay() (only
+   * ever returns a row when it's currently live/open, by design) and
+   * getEffectiveBusinessDate() (can resolve to yesterday's date during
+   * a cross-midnight extension, or the gap period's most recently
+   * closed day, which may not even be today). This answers a third,
+   * narrower question -- "does *today's own* business_days row exist,
+   * and in what state" -- needed anywhere a decision is specifically
+   * about today's calendar date: openDay()'s own existence check below
+   * (a manual open always targets "right now," not the resolved
+   * effective date -- see that method's header comment), and the Sales
+   * page's closed-vs-never-opened UI branch, which previously could
+   * never actually detect "closed" at all: it read businessDay (from
+   * getTodayBusinessDay(), always null the instant a day closes, by
+   * that method's own is_live filter), so the "ask an administrator to
+   * reopen" state was unreachable dead code for every tenant.
+   */
+  async getTodayBusinessDayRow(tenantId: string, locationId: string): Promise<BusinessDay | null> {
+    const businessDate = await this.todayInTimezone(locationId);
+    const { data, error } = await this.supabase
+      .from("business_days")
+      .select(BUSINESS_DAY_SELECT)
+      .eq("tenant_id", tenantId)
+      .eq("location_id", locationId)
+      .eq("business_date", businessDate)
+      .maybeSingle();
+
+    if (error) {
+      throw new Error(`BusinessDayService.getTodayBusinessDayRow: ${error.message}`);
+    }
+
+    return data ? toBusinessDay(data) : null;
+  }
+
   async openDay(
     tenantId: string,
     locationId: string,
@@ -194,9 +229,22 @@ export class BusinessDayService {
     reason?: string
   ): Promise<BusinessDay> {
     const businessDate = await this.todayInTimezone(locationId);
-    const existing = await this.getTodayBusinessDay(tenantId, locationId);
+    // getTodayBusinessDayRow(), not getTodayBusinessDay() -- the latter
+    // only ever returns a row when it's currently live, so it can never
+    // distinguish "no row exists yet" from "a row exists but it's
+    // already closed." Both looked identical (existing === null) to
+    // this method before, so a day that had already been opened and
+    // closed earlier today would fall into the INSERT branch below and
+    // hit business_days' own (tenant_id, location_id, business_date)
+    // unique constraint -- a raw DB error instead of a clear one.
+    const existing = await this.getTodayBusinessDayRow(tenantId, locationId);
 
     if (existing && existing.status !== "scheduled") {
+      if (existing.status === "closed") {
+        throw new Error(
+          "Today's business day is already closed. Ask an administrator to reopen it."
+        );
+      }
       throw new Error(
         `BusinessDayService.openDay: today's business day is already "${existing.status}"`
       );

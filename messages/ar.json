@@ -44,6 +44,8 @@
 
     "openBusinessDay": "فتح يوم العمل",
     "opening": "جارٍ الفتح...",
+    "verifyAndOpen": "تحقق وافتح",
+    "openBusinessDayPasscodeHelper": "أدخل رمز الأمان الخاص بمساحة عملك لفتح يوم العمل.",
 
     "reopenBusinessDay": "إعادة فتح يوم العمل",
     "reopenThisBusinessDay": "إعادة فتح يوم العمل هذا",
