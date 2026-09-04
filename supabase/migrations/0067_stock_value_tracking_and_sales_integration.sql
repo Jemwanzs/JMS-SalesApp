@@ -60,20 +60,17 @@ alter table public.products add column stock_control_method text not null defaul
 alter table public.stock_movements add column unit_cost_snapshot numeric(12, 2);
 alter table public.stock_movements add column unit_price_snapshot numeric(12, 2);
 
-do $$
-declare
-  v_conname text;
-begin
-  select conname into v_conname
-  from pg_constraint
-  where conrelid = 'public.stock_movements'::regclass
-    and contype = 'c'
-    and pg_get_constraintdef(oid) ilike '%movement_type%in%';
-
-  if v_conname is not null then
-    execute format('alter table public.stock_movements drop constraint %I', v_conname);
-  end if;
-end $$;
+-- migration 0035 wrote both checks inline, right after each column's own
+-- type declaration -- Postgres auto-names an unnamed COLUMN-level check
+-- exactly `{table}_{column}_check`, deterministically, so these two exact
+-- names are known, not guessed. (An earlier version of this migration
+-- tried to find them by fuzzy-matching pg_get_constraintdef() text, which
+-- also matched the unrelated "reason required" check further down this
+-- same table -- both definitions contain "movement_type" and "in" as
+-- substrings -- and without an ORDER BY, an unordered SELECT INTO could
+-- grab either one. Direct DROP CONSTRAINT IF EXISTS on the known name
+-- removes that ambiguity entirely.)
+alter table public.stock_movements drop constraint if exists stock_movements_movement_type_check;
 
 alter table public.stock_movements add constraint stock_movements_movement_type_check
   check (movement_type in (
@@ -83,20 +80,7 @@ alter table public.stock_movements add constraint stock_movements_movement_type_
     'sale', 'sale_reversal'
   ));
 
-do $$
-declare
-  v_conname text;
-begin
-  select conname into v_conname
-  from pg_constraint
-  where conrelid = 'public.stock_movements'::regclass
-    and contype = 'c'
-    and pg_get_constraintdef(oid) ilike '%reference_type%in%';
-
-  if v_conname is not null then
-    execute format('alter table public.stock_movements drop constraint %I', v_conname);
-  end if;
-end $$;
+alter table public.stock_movements drop constraint if exists stock_movements_reference_type_check;
 
 alter table public.stock_movements add constraint stock_movements_reference_type_check
   check (reference_type in ('manual', 'reconciliation', 'sale'));
