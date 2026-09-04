@@ -103,6 +103,28 @@ import type { Database } from "@/types/database.types";
  *     sessions/login_events write above, and this is the one place that
  *     already runs before any RLS-respecting client exists for the
  *     request at all
+ *   - features/settings/actions/self-delete-account.ts (Account
+ *     Deletion) — UserService.setActive/SecurityService.forceSignOutUser
+ *     on the caller's own membership; the caller never holds users.edit
+ *     (tenant_memberships_update RLS requires it), and forceSignOutUser
+ *     needs the Admin API's ban regardless
+ *   - TenantService.requestDeletion / cancelDeletion (Account Deletion,
+ *     called via features/settings/actions/{request,cancel}-tenant-
+ *     deletion.ts) — cancelDeletion specifically CANNOT go through RLS:
+ *     has_permission() (migration 0031) returns zero permissions
+ *     unconditionally once a tenant is deactivated, for every caller
+ *     including the requester, so tenants_update would reject it
+ *     outright; requestDeletion uses the same client for one consistent
+ *     code path across both halves of the feature
+ *   - app/api/cron/outbox/route.ts's new purge phase — calling
+ *     PlatformAdminService.deleteTenant(null, ...) for a tenant whose
+ *     30-day self-service deletion grace period has elapsed (same
+ *     already-listed PlatformAdminService reasoning above)
+ *   - PushNotificationService (Web Push) — reads OTHER profiles'
+ *     push_subscriptions rows to deliver a notification (a device's
+ *     subscription is only writable by its own profile via RLS, but
+ *     sending has to reach every subscribed member of a tenant); only
+ *     ever constructed inside app/api/cron/outbox/route.ts
  *
  * Every other read/write MUST go through lib/supabase/server.ts so RLS
  * stays the enforced boundary. Reaching for this file because "it's

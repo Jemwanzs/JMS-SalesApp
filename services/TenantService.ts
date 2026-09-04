@@ -1,8 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { AuditService } from "@/services/AuditService";
 import { BillingService } from "@/services/BillingService";
 import { RoleService } from "@/services/RoleService";
 import type { Database } from "@/types/database.types";
+import { AUDIT_ACTION } from "@/lib/audit/actions";
+import { assertNotPlatformOwnerTenant } from "@/lib/tenant/assert-not-platform-owner";
 import { hashPasscode } from "@/lib/utils/passcode";
 import { randomSlugSuffix, slugify } from "@/lib/utils/slug";
 
@@ -491,6 +494,100 @@ export class TenantService {
     if (insertError) {
       throw new Error(`TenantService.setLocationHours: ${insertError.message}`);
     }
+  }
+
+  /**
+   * Account Deletion (Feature 1) -- a Tenant Administrator's self-
+   * service "delete my business" request. Same shape as
+   * PlatformAdminService.deactivateTenant/reactivateTenant (before-
+   * select -> update -> AuditService.log), constructed with the
+   * SERVICE-ROLE client by the caller (features/settings/actions/
+   * request-tenant-deletion.ts) -- not because this write couldn't pass
+   * RLS at request time (tenants_update just needs settings.manage,
+   * which the action already asserts first), but so requestDeletion and
+   * cancelDeletion share one consistent client strategy: cancelDeletion
+   * genuinely cannot go through RLS (see its own comment below), and
+   * splitting one small feature across two different client strategies
+   * depending on which half of it you're looking at isn't worth it.
+   *
+   * Logs to the TENANT-scoped audit_logs (AuditService), not
+   * PlatformAdminService's platform_audit_logs -- this is tenant-
+   * initiated, not a platform-admin action.
+   */
+  async requestDeletion(tenantId: string, requestedBy: string): Promise<void> {
+    await assertNotPlatformOwnerTenant(this.supabase, tenantId, "delete");
+
+    const { data: before } = await this.supabase.from("tenants").select("status").eq("id", tenantId).single();
+
+    const { error } = await this.supabase
+      .from("tenants")
+      .update({ status: "deactivated", deletion_requested_at: new Date().toISOString(), deletion_requested_by: requestedBy })
+      .eq("id", tenantId);
+
+    if (error) {
+      throw new Error(`TenantService.requestDeletion: ${error.message}`);
+    }
+
+    await new AuditService(this.supabase)
+      .log({
+        tenantId,
+        actorProfileId: requestedBy,
+        action: AUDIT_ACTION.TENANT_DELETION_REQUESTED,
+        entityType: "tenant",
+        entityId: tenantId,
+        oldValues: before,
+        newValues: { status: "deactivated" },
+        reason: "Self-service business deletion requested",
+      })
+      .catch(() => {});
+  }
+
+  /**
+   * Structurally cannot be an RLS-respecting write: has_permission()
+   * (migration 0031) returns zero permissions unconditionally for a
+   * deactivated tenant -- tenants_update RLS would reject EVERY caller
+   * here, including the requester, once status='deactivated' has
+   * already taken effect. `deletion_requested_by === callerId` is the
+   * only viable authorization signal left at that point (a different
+   * Tenant Administrator, even one who'd normally hold settings.manage,
+   * cannot cancel someone else's request this way -- contact support,
+   * matching platform-admin's own reactivateTenant as the fallback).
+   */
+  async cancelDeletion(tenantId: string, callerId: string): Promise<void> {
+    const { data: tenant, error: fetchError } = await this.supabase
+      .from("tenants")
+      .select("status, deletion_requested_by")
+      .eq("id", tenantId)
+      .single();
+
+    if (fetchError || !tenant) {
+      throw new Error("TenantService.cancelDeletion: tenant not found");
+    }
+    if (tenant.deletion_requested_by !== callerId) {
+      throw new Error("TenantService.cancelDeletion: only the person who requested deletion can cancel it");
+    }
+
+    const { error } = await this.supabase
+      .from("tenants")
+      .update({ status: "active", deletion_requested_at: null, deletion_requested_by: null })
+      .eq("id", tenantId);
+
+    if (error) {
+      throw new Error(`TenantService.cancelDeletion: ${error.message}`);
+    }
+
+    await new AuditService(this.supabase)
+      .log({
+        tenantId,
+        actorProfileId: callerId,
+        action: AUDIT_ACTION.TENANT_DELETION_CANCELLED,
+        entityType: "tenant",
+        entityId: tenantId,
+        oldValues: { status: tenant.status },
+        newValues: { status: "active" },
+        reason: "Deletion request cancelled within the grace period",
+      })
+      .catch(() => {});
   }
 
   private async generateUniqueSlug(name: string): Promise<string> {

@@ -128,6 +128,8 @@ export interface Database {
           country: string | null;
           anniversary_date: string | null;
           billing_owner_profile_id: string | null;
+          deletion_requested_at: string | null;
+          deletion_requested_by: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -155,6 +157,25 @@ export interface Database {
         Update: Partial<
           Database["public"]["Tables"]["tenant_memberships"]["Row"]
         >;
+        Relationships: [];
+      };
+      push_subscriptions: {
+        Row: {
+          id: string;
+          profile_id: string;
+          endpoint: string;
+          p256dh: string;
+          auth: string;
+          user_agent: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["push_subscriptions"]["Row"]> & {
+          profile_id: string;
+          endpoint: string;
+          p256dh: string;
+          auth: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["push_subscriptions"]["Row"]>;
         Relationships: [];
       };
       tenant_settings: {
@@ -1029,7 +1050,7 @@ export interface Database {
       platform_audit_logs: {
         Row: {
           id: string;
-          platform_admin_id: string;
+          platform_admin_id: string | null;
           action: string;
           target_tenant_id: string | null;
           target_profile_id: string | null;
@@ -1040,7 +1061,6 @@ export interface Database {
           created_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["platform_audit_logs"]["Row"]> & {
-          platform_admin_id: string;
           action: string;
         };
         Update: Partial<Database["public"]["Tables"]["platform_audit_logs"]["Row"]>;

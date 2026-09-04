@@ -153,7 +153,21 @@ export async function signInAction(
   const tenant = await resolveActiveTenant(supabase, userId);
   let bypassNotice: "working_hours" | "geofence" | undefined;
 
+  // Account Deletion (Feature 1): checkAccountStatus above deliberately
+  // lets sign-in through for a tenant deactivated by its OWN pending
+  // self-service deletion request (the requester has to be able to log
+  // back in to cancel it). Resolved once here, checked again below --
+  // AFTER session creation, so a genuinely successful authentication
+  // still gets its session/login-event/audit trail exactly as normal,
+  // and BEFORE evaluateAccessGate/branch-resolution, which have nothing
+  // meaningful to do for a tenant nobody can access anyway.
+  let tenantIsDeactivated = false;
   if (tenant) {
+    const { data: tenantRow } = await supabase.from("tenants").select("status").eq("id", tenant.tenantId).maybeSingle();
+    tenantIsDeactivated = tenantRow?.status === "deactivated";
+  }
+
+  if (tenant && !tenantIsDeactivated) {
     const rawLat = formData.get("latitude");
     const rawLng = formData.get("longitude");
     const latitude = typeof rawLat === "string" && rawLat.length > 0 ? Number(rawLat) : null;
@@ -278,6 +292,10 @@ export async function signInAction(
 
   if (!tenant) {
     redirect("/no-tenant");
+  }
+
+  if (tenantIsDeactivated) {
+    redirect("/tenant-deactivated");
   }
 
   const bypassQuery = bypassNotice ? `?adminBypass=${bypassNotice}` : "";

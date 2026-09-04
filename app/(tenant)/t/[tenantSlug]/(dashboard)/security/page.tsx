@@ -9,6 +9,8 @@ import { MfaEnrollment } from "@/features/security/components/mfa-enrollment";
 import { SessionList } from "@/features/security/components/session-list";
 import { TenantSessionList } from "@/features/security/components/tenant-session-list";
 import { WorkingHoursRestrictionToggle } from "@/features/security/components/working-hours-restriction-toggle";
+import { RequestTenantDeletionCard } from "@/features/settings/components/request-tenant-deletion-card";
+import { SelfDeleteAccountCard } from "@/features/settings/components/self-delete-account-card";
 import { SecurityService } from "@/services/SecurityService";
 import { TenantService } from "@/services/TenantService";
 import { can } from "@/lib/permissions/can";
@@ -124,6 +126,11 @@ export default async function SecurityPage({
         <TenantSessionList sessions={tenantSessions} tenantId={tenantId} tenantSlug={tenantSlug} currentUserId={user!.id} />
       )}
       {canManageSecurity && <LoginEventList title="Tenant-wide sign-in activity" events={tenantEvents} />}
+      {canManageSettings ? (
+        <RequestTenantDeletionCard tenantId={tenantId} tenantSlug={tenantSlug} tenantName={tenant!.name} />
+      ) : (
+        <SelfDeleteAccountCard tenantId={tenantId} userEmail={user!.email ?? ""} />
+      )}
     </div>
   );
 }

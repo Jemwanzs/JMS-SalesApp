@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { BackLink } from "@/components/shared/back-link";
 import { FontPreferenceCard } from "@/features/preferences/components/font-preference-card";
 import { LanguagePreferenceCard } from "@/features/preferences/components/language-preference-card";
+import { PushNotificationCard } from "@/features/preferences/components/push-notification-card";
 import { ThemePreferenceCard } from "@/features/preferences/components/theme-preference-card";
 import { resolveColorPalette } from "@/lib/branding/color-palette";
 import { resolvePreferredFont } from "@/lib/branding/preferred-font";
@@ -46,6 +47,7 @@ export default async function PreferencesPage({
       <FontPreferenceCard tenantSlug={tenantSlug} initialFont={preferredFont} />
       <LanguagePreferenceCard tenantSlug={tenantSlug} initialLocale={preferredLocale} />
       <ThemePreferenceCard tenantSlug={tenantSlug} initialPalette={colorPalette} />
+      <PushNotificationCard />
     </div>
   );
 }

@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { TenantService } from "@/services/TenantService";
 import type { AddonKey, Database, SubscriptionStatus, TenantCreditStatus, TenantStatus } from "@/types/database.types";
+import { assertNotPlatformOwnerTenant } from "@/lib/tenant/assert-not-platform-owner";
 
 /**
  * PlatformAdminService — tenant management, impersonation, platform
@@ -592,19 +593,7 @@ export class PlatformAdminService {
    * toward suspension in the first place.
    */
   private async assertNotPlatformOwnerTenant(tenantId: string, verb: "suspend" | "deactivate" | "delete"): Promise<void> {
-    const { data: tenant } = await this.supabase.from("tenants").select("billing_owner_profile_id").eq("id", tenantId).maybeSingle();
-
-    if (!tenant?.billing_owner_profile_id) return;
-
-    const { data: admin } = await this.supabase
-      .from("platform_admins")
-      .select("id")
-      .eq("profile_id", tenant.billing_owner_profile_id)
-      .maybeSingle();
-
-    if (admin) {
-      throw new Error(`Cannot ${verb} the platform owner's own tenant`);
-    }
+    await assertNotPlatformOwnerTenant(this.supabase, tenantId, verb);
   }
 
   async suspendTenant(platformAdminId: string, tenantId: string, reason: string): Promise<void> {
@@ -664,7 +653,7 @@ export class PlatformAdminService {
    * succeeded. profiles itself cascades from auth.users (migration
    * 0001), so deleting the auth user is the one call needed.
    */
-  async deleteTenant(platformAdminId: string, tenantId: string, reason: string): Promise<void> {
+  async deleteTenant(platformAdminId: string | null, tenantId: string, reason: string): Promise<void> {
     await this.assertNotPlatformOwnerTenant(tenantId, "delete");
 
     const { data: before } = await this.supabase
@@ -703,7 +692,7 @@ export class PlatformAdminService {
    * every tenant deletion.
    */
   private async deleteOrphanedMemberLogins(
-    platformAdminId: string,
+    platformAdminId: string | null,
     reason: string,
     memberProfileIds: string[]
   ): Promise<void> {
@@ -750,10 +739,24 @@ export class PlatformAdminService {
     }
   }
 
+  /**
+   * Also clears any pending self-service deletion request (migration
+   * 0063) -- a platform admin manually rescuing a tenant that requested
+   * its own deletion must not leave stale grace-period state behind
+   * (the outbox purge only ever looks at deletion_requested_at, not
+   * status alone, but a reactivated tenant with those columns still set
+   * would confusingly still show "scheduled for deletion" on its own
+   * /tenant-deactivated page if it were ever deactivated again).
+   * Unconditional, same as the status update itself -- a no-op when
+   * already null.
+   */
   async reactivateTenant(platformAdminId: string, tenantId: string, reason: string): Promise<void> {
     const { data: before } = await this.supabase.from("tenants").select("status").eq("id", tenantId).single();
 
-    const { error } = await this.supabase.from("tenants").update({ status: "active" }).eq("id", tenantId);
+    const { error } = await this.supabase
+      .from("tenants")
+      .update({ status: "active", deletion_requested_at: null, deletion_requested_by: null })
+      .eq("id", tenantId);
     if (error) {
       throw new Error(`PlatformAdminService.reactivateTenant: ${error.message}`);
     }
@@ -1126,7 +1129,11 @@ export class PlatformAdminService {
       throw new Error(`PlatformAdminService.listTenantAuditLog: ${error.message}`);
     }
 
-    const adminIds = [...new Set((logs ?? []).map((l) => l.platform_admin_id))];
+    // System-actioned entries (e.g. the automatic 30-day deletion-grace
+    // purge, migration 0062) have platform_admin_id = null -- filtered
+    // out before .in(), same "drop nulls before .in()" pattern already
+    // used for ownerIds elsewhere in this class.
+    const adminIds = [...new Set((logs ?? []).map((l) => l.platform_admin_id))].filter((id): id is string => id !== null);
     const { data: admins } =
       adminIds.length > 0 ? await this.supabase.from("platform_admins").select("id, profile_id").in("id", adminIds) : { data: [] };
     const profileIdByAdminId = new Map((admins ?? []).map((a) => [a.id, a.profile_id]));
@@ -1137,7 +1144,7 @@ export class PlatformAdminService {
     const profileById = new Map((profiles ?? []).map((p) => [p.id, p]));
 
     return (logs ?? []).map((l) => {
-      const profileId = profileIdByAdminId.get(l.platform_admin_id);
+      const profileId = l.platform_admin_id ? profileIdByAdminId.get(l.platform_admin_id) : undefined;
       const profile = profileId ? profileById.get(profileId) : undefined;
       return {
         id: l.id,
@@ -1167,7 +1174,7 @@ export class PlatformAdminService {
    * write path to platform_audit_logs.
    */
   async logAction(
-    platformAdminId: string,
+    platformAdminId: string | null,
     action: string,
     targetTenantId: string | null,
     targetProfileId: string | null,

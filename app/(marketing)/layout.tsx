@@ -5,6 +5,7 @@ import { Logo } from "@/components/shared/logo";
 const LEGAL_LINKS = [
   { href: "/privacy-policy", label: "Privacy Policy" },
   { href: "/terms-of-service", label: "Terms of Service" },
+  { href: "/account-deletion", label: "Delete My Account" },
   { href: "/support", label: "Support" },
 ];
 

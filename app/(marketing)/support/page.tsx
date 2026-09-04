@@ -117,17 +117,16 @@ export default async function SupportPage({
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">Deleting your account</h2>
         <p>
-          You can request deletion of your account, or your entire business&apos;s data, at any time by emailing{" "}
+          Both an individual account and an entire business can be deleted from within the app — More → Security. See{" "}
+          <Link href="/account-deletion" className="underline">
+            Delete My Account
+          </Link>{" "}
+          for exactly what each option does and what happens to your data. If you can&apos;t sign in to use either
+          option, email{" "}
           <a href="mailto:jamosammy@gmail.com" className="underline">
             jamosammy@gmail.com
           </a>{" "}
-          from the email address on the account. If you&apos;re a Tenant Administrator, let us know whether you want just
-          your own access removed or the whole business account closed — closing a business account removes access for
-          every staff member on it, so we&apos;ll always confirm scope with you before acting on the request. See our{" "}
-          <Link href="/privacy-policy" className="underline">
-            Privacy Policy
-          </Link>{" "}
-          for more on how your data is handled.
+          from the address on the account and we&apos;ll process the request manually.
         </p>
       </section>
     </article>

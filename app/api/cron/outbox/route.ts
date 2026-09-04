@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 
 import { AnniversaryService } from "@/services/AnniversaryService";
 import { InsightsService } from "@/services/InsightsService";
+import { PlatformAdminService } from "@/services/PlatformAdminService";
+import { PushNotificationService } from "@/services/PushNotificationService";
 import { ReportService } from "@/services/ReportService";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
@@ -93,7 +95,7 @@ export async function GET(request: Request) {
     await supabase.from("report_jobs").update({ status: "running" }).eq("id", job.id);
 
     try {
-      let reportId: string;
+      let reportId: string | null = null;
       if (job.job_type === "daily_business_day_report") {
         const businessDayId = (job.payload as { business_day_id: string }).business_day_id;
         reportId = await reportService.generateDailyReport(businessDayId);
@@ -111,13 +113,19 @@ export async function GET(request: Request) {
         } catch {
           // Same best-effort posture as insights above.
         }
+      } else if (job.job_type === "push_daily_summary") {
+        // Web Push (Feature 3): doesn't produce a `reports` row, so
+        // report_id stays null for this job type -- see the completion
+        // update below.
+        const { business_day_id } = job.payload as { business_day_id: string };
+        await new PushNotificationService(supabase).sendDailySummaryForTenant(job.tenant_id, business_day_id);
       } else {
         throw new Error(`Unknown report_jobs.job_type: ${job.job_type}`);
       }
 
       await supabase
         .from("report_jobs")
-        .update({ status: "completed", report_id: reportId })
+        .update({ status: "completed", ...(reportId ? { report_id: reportId } : {}) })
         .eq("id", job.id);
       completed += 1;
     } catch (err) {
@@ -152,6 +160,46 @@ export async function GET(request: Request) {
     // best-effort
   }
 
+  // Account Deletion (Feature 1): a self-service deletion request
+  // (tenants.deletion_requested_at, migration 0063) becomes eligible
+  // for permanent purge 30 days after it was made, unless cancelled.
+  // Filters on `deletion_requested_at is not null` specifically, NOT
+  // `status = 'deactivated'` alone -- a tenant a platform admin
+  // deactivated for an unrelated reason (an investigation, suspicious
+  // activity) must never be swept up here just because 30 days passed.
+  // Reuses PlatformAdminService.deleteTenant directly rather than
+  // reimplementing its cascading-delete + orphan-login-cleanup logic --
+  // platformAdminId=null attributes the platform_audit_logs entry to
+  // the system (migration 0062 widened that column to allow it), same
+  // "null actor for an automatic action" convention audit_logs already
+  // uses for BUSINESS_DAY_CLOSED. Each purge runs in its own try/catch,
+  // same per-job isolation as the report_jobs loop above -- one
+  // tenant's purge failing must never block another's.
+  let purged = 0;
+  let purgeFailed = 0;
+  try {
+    const platformAdminService = new PlatformAdminService(supabase);
+    const graceCutoff = new Date(Date.now() - 30 * 86_400_000).toISOString();
+
+    const { data: expired } = await supabase
+      .from("tenants")
+      .select("id, name")
+      .eq("status", "deactivated")
+      .not("deletion_requested_at", "is", null)
+      .lte("deletion_requested_at", graceCutoff);
+
+    for (const tenant of expired ?? []) {
+      try {
+        await platformAdminService.deleteTenant(null, tenant.id, "Automatic purge: 30-day deletion grace period elapsed");
+        purged += 1;
+      } catch {
+        purgeFailed += 1;
+      }
+    }
+  } catch {
+    // best-effort, same posture as the anniversary block above
+  }
+
   return NextResponse.json({
     processed: jobs?.length ?? 0,
     completed,
@@ -159,5 +207,7 @@ export async function GET(request: Request) {
     retried,
     anniversariesScheduled,
     anniversariesSent,
+    purged,
+    purgeFailed,
   });
 }

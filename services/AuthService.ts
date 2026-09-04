@@ -195,7 +195,11 @@ export class AuthService {
       };
     }
 
-    const { data: tenant } = await this.supabase.from("tenants").select("status").eq("id", membership.tenant_id).maybeSingle();
+    const { data: tenant } = await this.supabase
+      .from("tenants")
+      .select("status, deletion_requested_at")
+      .eq("id", membership.tenant_id)
+      .maybeSingle();
 
     if (tenant?.status === "suspended") {
       return {
@@ -205,7 +209,17 @@ export class AuthService {
       };
     }
 
-    if (tenant?.status === "deactivated") {
+    // Account Deletion (Feature 1): a tenant deactivated by its OWN
+    // self-service deletion request (deletion_requested_at set) must
+    // NOT block sign-in the way an admin-initiated deactivation does --
+    // the requester (or any member) needs to be able to log back in to
+    // even reach /tenant-deactivated's Cancel button. Every other
+    // deactivation reason still blocks exactly as before; the tenant
+    // layout's own redirect (app/(tenant)/t/[tenantSlug]/layout.tsx)
+    // still sends a real member straight to /tenant-deactivated either
+    // way -- this only decides whether login itself is allowed to
+    // reach that point.
+    if (tenant?.status === "deactivated" && !tenant.deletion_requested_at) {
       return {
         blocked: true,
         reason: "This business account has been deactivated. Contact support for assistance.",
