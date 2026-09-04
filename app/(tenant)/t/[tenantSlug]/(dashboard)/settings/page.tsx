@@ -10,11 +10,13 @@ import { NotesFieldCard } from "@/features/settings/components/notes-field-card"
 import { ProductRankingCard } from "@/features/settings/components/product-ranking-card";
 import { QuantityFieldCard } from "@/features/settings/components/quantity-field-card";
 import { SaleNumberTemplateCard } from "@/features/settings/components/sale-number-template-card";
+import { StockVarianceToleranceCard } from "@/features/settings/components/stock-variance-tolerance-card";
 import { TabsVisibilityCard } from "@/features/settings/components/tabs-visibility-card";
 import { AnniversaryService } from "@/services/AnniversaryService";
 import { BillingService } from "@/services/BillingService";
 import { LocationService } from "@/services/LocationService";
 import { TenantService } from "@/services/TenantService";
+import { getInventoryEntitlement } from "@/lib/inventory/entitlement";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
@@ -76,6 +78,9 @@ export default async function SettingsPage({
     historyEnabled,
     analyticsEnabled,
     reportsEnabled,
+    stockVarianceTolerancePercent,
+    stockVarianceToleranceAmount,
+    inventoryEntitlement,
   ] = await Promise.all([
     new AnniversaryService(supabase).getWishMode(tenantId),
     tenantService.getSetting<string>(tenantId, "sale_number_template"),
@@ -94,6 +99,9 @@ export default async function SettingsPage({
     tenantService.getSetting<boolean>(tenantId, "history_enabled"),
     tenantService.getSetting<boolean>(tenantId, "analytics_enabled"),
     tenantService.getSetting<boolean>(tenantId, "reports_enabled"),
+    tenantService.getSetting<number>(tenantId, "stock_variance_tolerance_percent"),
+    tenantService.getSetting<number>(tenantId, "stock_variance_tolerance_amount"),
+    getInventoryEntitlement(tenantId),
   ]);
 
   // Matches features/settings/actions/set-inventory-enabled.ts's own
@@ -145,6 +153,14 @@ export default async function SettingsPage({
         initialReportsEnabled={reportsEnabled ?? true}
       />
       <ExpensesModuleCard tenantId={tenantId} tenantSlug={tenantSlug} initialEnabled={expensesEnabled ?? false} />
+      {inventoryEntitlement.enabled && (
+        <StockVarianceToleranceCard
+          tenantId={tenantId}
+          tenantSlug={tenantSlug}
+          initialTolerancePercent={stockVarianceTolerancePercent ?? null}
+          initialToleranceAmount={stockVarianceToleranceAmount ?? null}
+        />
+      )}
       {inventoryPlans.length > 0 && (
         <InventoryModuleCard
           tenantId={tenantId}
