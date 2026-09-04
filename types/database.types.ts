@@ -348,6 +348,9 @@ export interface Database {
           unit_of_measure: string | null;
           unit_of_measure_is_custom: boolean;
           low_stock_threshold: number | null;
+          /** Robust Stock Management (migration 0067). */
+          cost_price: number | null;
+          stock_control_method: "quantity" | "value";
         };
         Insert: Partial<Database["public"]["Tables"]["products"]["Row"]> & {
           tenant_id: string;
@@ -390,14 +393,19 @@ export interface Database {
             | "damaged"
             | "expired"
             | "lost"
-            | "reconciliation_variance";
+            | "reconciliation_variance"
+            | "sale"
+            | "sale_reversal";
           quantity: number;
           reason: string | null;
-          reference_type: "manual" | "reconciliation" | null;
+          reference_type: "manual" | "reconciliation" | "sale" | null;
           reference_id: string | null;
           recorded_by: string;
           occurred_on: string;
           created_at: string;
+          /** Robust Stock Management (migration 0067) -- captured at insert time, never re-derived from the product's current price. */
+          unit_cost_snapshot: number | null;
+          unit_price_snapshot: number | null;
         };
         Insert: Partial<Database["public"]["Tables"]["stock_movements"]["Row"]> & {
           tenant_id: string;
@@ -427,6 +435,15 @@ export interface Database {
           variance_reason: string | null;
           recorded_by: string;
           created_at: string;
+          /** Robust Stock Management (migration 0067) -- value-side, populated only for stock_control_method = 'value' products. */
+          opening_value: number | null;
+          stock_added_value: number | null;
+          expected_sales_value: number | null;
+          actual_recorded_sales: number | null;
+          actual_remaining_value: number | null;
+          valid_adjustments_value: number;
+          unexplained_variance_value: number | null;
+          status: "balanced" | "within_tolerance" | "variance" | "material_variance" | null;
         };
         Insert: Partial<Database["public"]["Tables"]["stock_reconciliations"]["Row"]> & {
           tenant_id: string;
@@ -1165,6 +1182,9 @@ export interface Database {
           p_reconciliation_date: string;
           p_actual_quantity: number;
           p_variance_reason: string | null;
+          p_actual_recorded_sales?: number | null;
+          p_actual_remaining_value?: number | null;
+          p_valid_adjustments_value?: number | null;
         };
         Returns: Database["public"]["Tables"]["stock_reconciliations"]["Row"];
       };

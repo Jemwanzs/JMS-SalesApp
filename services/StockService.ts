@@ -77,6 +77,8 @@ export interface ReconciliationPreview {
   expectedClosing: number;
 }
 
+export type ReconciliationStatus = "balanced" | "within_tolerance" | "variance" | "material_variance";
+
 export interface StockReconciliationRow {
   id: string;
   productId: string;
@@ -90,6 +92,14 @@ export interface StockReconciliationRow {
   varianceReason: string | null;
   recordedBy: string;
   createdAt: string;
+  openingValue: number | null;
+  stockAddedValue: number | null;
+  expectedSalesValue: number | null;
+  actualRecordedSales: number | null;
+  actualRemainingValue: number | null;
+  validAdjustmentsValue: number;
+  unexplainedVarianceValue: number | null;
+  status: ReconciliationStatus | null;
 }
 
 export interface DateRangeInput {
@@ -125,7 +135,7 @@ export class StockService {
 
     const { data: product, error: productError } = await this.supabase
       .from("products")
-      .select("name, unit_of_measure, is_system")
+      .select("name, unit_of_measure, is_system, cost_price, expected_price")
       .eq("tenant_id", tenantId)
       .eq("id", input.productId)
       .single();
@@ -147,6 +157,11 @@ export class StockService {
       unit_of_measure_snapshot: product.unit_of_measure ?? "units",
       movement_type: input.movementType,
       quantity: signedQuantity,
+      // Snapshotted at the moment of the movement, never re-derived from
+      // the product's live price later -- see migration 0067's header
+      // comment on why reconciliation/reporting must stay snapshot-safe.
+      unit_cost_snapshot: product.cost_price,
+      unit_price_snapshot: product.expected_price,
       reason: input.reason ?? null,
       reference_type: "manual",
       recorded_by: input.recordedBy,
@@ -281,7 +296,17 @@ export class StockService {
 
   async submitReconciliation(
     tenantId: string,
-    input: { productId: string; locationId?: string | null; date: string; actualQuantity: number; varianceReason?: string | null }
+    input: {
+      productId: string;
+      locationId?: string | null;
+      date: string;
+      actualQuantity: number;
+      varianceReason?: string | null;
+      /** Value-based control only -- ignored (left null server-side) for a quantity-based product. */
+      actualRecordedSales?: number | null;
+      actualRemainingValue?: number | null;
+      validAdjustmentsValue?: number | null;
+    }
   ): Promise<StockReconciliationRow> {
     const { data, error } = await this.supabase.rpc("record_stock_reconciliation", {
       p_tenant_id: tenantId,
@@ -290,26 +315,16 @@ export class StockService {
       p_reconciliation_date: input.date,
       p_actual_quantity: input.actualQuantity,
       p_variance_reason: input.varianceReason ?? null,
+      p_actual_recorded_sales: input.actualRecordedSales ?? null,
+      p_actual_remaining_value: input.actualRemainingValue ?? null,
+      p_valid_adjustments_value: input.validAdjustmentsValue ?? 0,
     });
 
     if (error || !data) {
       throw new Error(`StockService.submitReconciliation: ${error?.message ?? "no row returned"}`);
     }
 
-    return {
-      id: data.id,
-      productId: data.product_id,
-      reconciliationDate: data.reconciliation_date,
-      openingQuantity: Number(data.opening_quantity),
-      stockInQuantity: Number(data.stock_in_quantity),
-      stockOutQuantity: Number(data.stock_out_quantity),
-      expectedClosingQuantity: Number(data.expected_closing_quantity),
-      actualQuantity: Number(data.actual_quantity),
-      variance: Number(data.variance),
-      varianceReason: data.variance_reason,
-      recordedBy: data.recorded_by,
-      createdAt: data.created_at,
-    };
+    return toReconciliationRow(data);
   }
 
   /** Every tracked product with no stock_reconciliations row yet for `date` -- the reconcile page's "needs today's count" list. */
@@ -404,4 +419,29 @@ export class StockService {
       })
       .sort((a, b) => Math.abs(b.variance) - Math.abs(a.variance));
   }
+}
+
+function toReconciliationRow(data: Database["public"]["Tables"]["stock_reconciliations"]["Row"]): StockReconciliationRow {
+  return {
+    id: data.id,
+    productId: data.product_id,
+    reconciliationDate: data.reconciliation_date,
+    openingQuantity: Number(data.opening_quantity),
+    stockInQuantity: Number(data.stock_in_quantity),
+    stockOutQuantity: Number(data.stock_out_quantity),
+    expectedClosingQuantity: Number(data.expected_closing_quantity),
+    actualQuantity: Number(data.actual_quantity),
+    variance: Number(data.variance),
+    varianceReason: data.variance_reason,
+    recordedBy: data.recorded_by,
+    createdAt: data.created_at,
+    openingValue: data.opening_value !== null ? Number(data.opening_value) : null,
+    stockAddedValue: data.stock_added_value !== null ? Number(data.stock_added_value) : null,
+    expectedSalesValue: data.expected_sales_value !== null ? Number(data.expected_sales_value) : null,
+    actualRecordedSales: data.actual_recorded_sales !== null ? Number(data.actual_recorded_sales) : null,
+    actualRemainingValue: data.actual_remaining_value !== null ? Number(data.actual_remaining_value) : null,
+    validAdjustmentsValue: Number(data.valid_adjustments_value),
+    unexplainedVarianceValue: data.unexplained_variance_value !== null ? Number(data.unexplained_variance_value) : null,
+    status: data.status,
+  };
 }

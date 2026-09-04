@@ -92,7 +92,7 @@ export class SalesService {
 
     const { data: product, error: productError } = await this.supabase
       .from("products")
-      .select("name, image_url, expected_price, is_system")
+      .select("name, image_url, expected_price, is_system, tracks_inventory")
       .eq("id", input.productId)
       .eq("tenant_id", input.tenantId)
       .single();
@@ -104,6 +104,16 @@ export class SalesService {
     const manualName = input.manualProductName ? cleanProductName(input.manualProductName) : "";
     if (product.is_system && !manualName) {
       throw new Error("Enter a product name for this sale.");
+    }
+
+    // Stock deduction (the AFTER INSERT trigger, migration 0067) is keyed
+    // on a real quantity -- a tracked product with none entered would
+    // silently never deduct anything, quietly drifting the stock ledger.
+    // The trigger itself also rejects this as a hard backstop against a
+    // direct API call bypassing this service; failing fast here just
+    // gives a friendlier, pre-insert error message.
+    if (product.tracks_inventory && (input.quantity === null || input.quantity === undefined || input.quantity === 0)) {
+      throw new Error(`Enter a quantity -- "${product.name}" tracks stock.`);
     }
 
     const { data: inserted, error: insertError } = await this.supabase

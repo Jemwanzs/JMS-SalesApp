@@ -69,6 +69,7 @@ export async function recordMovementAction(
 
     await new StockService(supabase).recordMovement(tenantId, {
       productId,
+      locationId,
       movementType,
       quantity,
       reason: reason || null,

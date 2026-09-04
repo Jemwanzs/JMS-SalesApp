@@ -62,11 +62,17 @@ export function RecordSaleDialog({
     }
   }, [product]);
 
+  const showQuantity = quantityEnabled || (product?.tracksInventory ?? false);
+
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!product) return;
     if (product.isSystem && !manualProductName.trim()) {
       setError(t("enterProductNameError"));
+      return;
+    }
+    if (product.tracksInventory && (!quantity || Number(quantity) <= 0)) {
+      setError(t("enterQuantityForTracked", { name: product.name }));
       return;
     }
     setError(null);
@@ -80,8 +86,11 @@ export function RecordSaleDialog({
     // sale.ts), but FormData.get() on a key that was never set() returns
     // null, which fails that schema on both branches. Omitting the key
     // entirely (rather than sending "") would break every submission
-    // while quantityEnabled is false.
-    formData.set("quantity", quantityEnabled ? quantity : "");
+    // while quantityEnabled is false. Tracked products force the field
+    // visible (see showQuantity below) regardless of the tenant-wide
+    // quantityEnabled preference, since SalesService rejects a tracked
+    // sale with no quantity -- stock has nothing to deduct otherwise.
+    formData.set("quantity", showQuantity ? quantity : "");
     formData.set("notes", notesEnabled ? notes : "");
     formData.set("idempotencyKey", idempotencyKey);
 
@@ -154,9 +163,12 @@ export function RecordSaleDialog({
                 />
               </div>
 
-              {quantityEnabled && (
+              {showQuantity && (
                 <div className="space-y-2">
-                  <Label htmlFor="quantity">{t("quantity")}</Label>
+                  <Label htmlFor="quantity">
+                    {t("quantity")}
+                    {product.tracksInventory && " *"}
+                  </Label>
                   <Input
                     id="quantity"
                     type="number"
@@ -164,6 +176,7 @@ export function RecordSaleDialog({
                     step="1"
                     value={quantity}
                     onChange={(e) => setQuantity(e.target.value)}
+                    required={product.tracksInventory}
                   />
                 </div>
               )}

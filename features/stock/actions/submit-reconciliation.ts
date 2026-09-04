@@ -8,6 +8,7 @@ import { AUDIT_ACTION } from "@/lib/audit/actions";
 import { assertInventoryEnabled } from "@/lib/inventory/entitlement";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
+import { resolveActiveLocationId } from "@/lib/tenant/resolve-active-location";
 
 export interface SubmitReconciliationState {
   error?: string;
@@ -29,6 +30,9 @@ export async function submitReconciliationAction(
   const date = String(formData.get("date") ?? "");
   const actualQuantity = Number(formData.get("actualQuantity"));
   const varianceReason = String(formData.get("varianceReason") ?? "").trim();
+  const actualRecordedSalesRaw = formData.get("actualRecordedSales");
+  const actualRemainingValueRaw = formData.get("actualRemainingValue");
+  const validAdjustmentsValueRaw = formData.get("validAdjustmentsValue");
 
   if (!date) {
     return { error: "Missing reconciliation date" };
@@ -48,11 +52,17 @@ export async function submitReconciliationAction(
       return { error: "Not signed in" };
     }
 
+    const locationId = await resolveActiveLocationId(supabase, tenantId);
+
     const result = await new StockService(supabase).submitReconciliation(tenantId, {
       productId,
+      locationId,
       date,
       actualQuantity,
       varianceReason: varianceReason || null,
+      actualRecordedSales: actualRecordedSalesRaw ? Number(actualRecordedSalesRaw) : null,
+      actualRemainingValue: actualRemainingValueRaw ? Number(actualRemainingValueRaw) : null,
+      validAdjustmentsValue: validAdjustmentsValueRaw ? Number(validAdjustmentsValueRaw) : 0,
     });
 
     await new AuditService(createServiceRoleClient())

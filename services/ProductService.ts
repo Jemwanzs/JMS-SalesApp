@@ -3,7 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database, ProductStatus } from "@/types/database.types";
 
 const PRODUCT_SELECT =
-  "id, name, description, expected_price, show_expected_price, show_name_in_photo_view, image_url, display_order, status, is_system, tracks_inventory, unit_of_measure, unit_of_measure_is_custom, low_stock_threshold, sku";
+  "id, name, description, expected_price, cost_price, show_expected_price, show_name_in_photo_view, image_url, display_order, status, is_system, tracks_inventory, stock_control_method, unit_of_measure, unit_of_measure_is_custom, low_stock_threshold, sku";
 const IMAGE_BUCKET = "product-images";
 export const OTHERS_PRODUCT_NAME = "Others";
 
@@ -25,17 +25,21 @@ export const OTHERS_PRODUCT_NAME = "Others";
  * 'products'`); reorder() (the other half of S45) is real too, see its
  * own header comment.
  */
+export type StockControlMethod = "quantity" | "value";
+
 export interface CreateProductInput {
   id?: string;
   name: string;
   description?: string | null;
   expectedPrice?: number | null;
+  costPrice?: number | null;
   showExpectedPrice?: boolean;
   showNameInPhotoView?: boolean;
   imageUrl?: string | null;
   imageStoragePath?: string | null;
   createdBy: string;
   tracksInventory?: boolean;
+  stockControlMethod?: StockControlMethod;
   unitOfMeasure?: string | null;
   unitOfMeasureIsCustom?: boolean;
   lowStockThreshold?: number | null;
@@ -45,9 +49,11 @@ export interface UpdateProductInput {
   name: string;
   description?: string | null;
   expectedPrice?: number | null;
+  costPrice?: number | null;
   showExpectedPrice?: boolean;
   showNameInPhotoView?: boolean;
   tracksInventory?: boolean;
+  stockControlMethod?: StockControlMethod;
   unitOfMeasure?: string | null;
   unitOfMeasureIsCustom?: boolean;
   lowStockThreshold?: number | null;
@@ -60,6 +66,7 @@ export interface Product {
   name: string;
   description: string | null;
   expectedPrice: number | null;
+  costPrice: number | null;
   showExpectedPrice: boolean;
   showNameInPhotoView: boolean;
   imageUrl: string | null;
@@ -67,6 +74,7 @@ export interface Product {
   status: ProductStatus;
   isSystem: boolean;
   tracksInventory: boolean;
+  stockControlMethod: StockControlMethod;
   unitOfMeasure: string | null;
   unitOfMeasureIsCustom: boolean;
   lowStockThreshold: number | null;
@@ -93,12 +101,14 @@ export class ProductService {
         name: input.name,
         description: input.description ?? null,
         expected_price: input.expectedPrice ?? null,
+        cost_price: input.costPrice ?? null,
         show_expected_price: input.showExpectedPrice ?? true,
         show_name_in_photo_view: input.showNameInPhotoView ?? true,
         image_url: input.imageUrl ?? null,
         display_order: (maxOrder?.display_order ?? -1) + 1,
         created_by: input.createdBy,
         tracks_inventory: input.tracksInventory ?? false,
+        stock_control_method: input.stockControlMethod ?? "quantity",
         unit_of_measure: input.unitOfMeasure ?? null,
         unit_of_measure_is_custom: input.unitOfMeasureIsCustom ?? false,
         low_stock_threshold: input.lowStockThreshold ?? null,
@@ -224,6 +234,8 @@ export class ProductService {
     // out a tracks_inventory/unit_of_measure value set elsewhere.
     const inventoryFields: Record<string, unknown> = {};
     if (input.tracksInventory !== undefined) inventoryFields.tracks_inventory = input.tracksInventory;
+    if (input.stockControlMethod !== undefined) inventoryFields.stock_control_method = input.stockControlMethod;
+    if (input.costPrice !== undefined) inventoryFields.cost_price = input.costPrice;
     if (input.unitOfMeasure !== undefined) inventoryFields.unit_of_measure = input.unitOfMeasure;
     if (input.unitOfMeasureIsCustom !== undefined) inventoryFields.unit_of_measure_is_custom = input.unitOfMeasureIsCustom;
     if (input.lowStockThreshold !== undefined) inventoryFields.low_stock_threshold = input.lowStockThreshold;
@@ -485,6 +497,7 @@ function toProduct(row: {
   name: string;
   description: string | null;
   expected_price: number | null;
+  cost_price: number | null;
   show_expected_price: boolean;
   show_name_in_photo_view: boolean;
   image_url: string | null;
@@ -492,6 +505,7 @@ function toProduct(row: {
   status: ProductStatus;
   is_system: boolean;
   tracks_inventory: boolean;
+  stock_control_method: string;
   unit_of_measure: string | null;
   unit_of_measure_is_custom: boolean;
   low_stock_threshold: number | null;
@@ -502,6 +516,7 @@ function toProduct(row: {
     name: row.name,
     description: row.description,
     expectedPrice: row.expected_price,
+    costPrice: row.cost_price,
     showExpectedPrice: row.show_expected_price,
     showNameInPhotoView: row.show_name_in_photo_view,
     imageUrl: row.image_url,
@@ -510,6 +525,7 @@ function toProduct(row: {
     sku: row.sku,
     isSystem: row.is_system,
     tracksInventory: row.tracks_inventory,
+    stockControlMethod: row.stock_control_method === "value" ? "value" : "quantity",
     unitOfMeasure: row.unit_of_measure,
     unitOfMeasureIsCustom: row.unit_of_measure_is_custom,
     lowStockThreshold: row.low_stock_threshold,
