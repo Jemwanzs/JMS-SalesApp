@@ -62,16 +62,22 @@ export function RecordSaleDialog({
     }
   }, [product]);
 
-  // Only a QUANTITY-controlled tracked product forces this field visible/
-  // required -- a VALUE-controlled one (the tenant's own stated choice:
-  // "measure this product's stock by value, not count") never needs a
-  // per-sale unit count from the seller at all. The deduction trigger
-  // (migration 0069) infers an implied quantity from the sale amount and
-  // the product's own selling price when none is given, so staff selling
-  // a value-tracked product see exactly the same form as an untracked one
-  // -- still fully respecting the tenant's own quantityEnabled toggle.
-  const quantityRequiredForProduct = (product?.tracksInventory ?? false) && product?.stockControlMethod === "quantity";
-  const showQuantity = quantityEnabled || quantityRequiredForProduct;
+  // A QUANTITY-controlled tracked product forces this field visible/
+  // required, overriding the tenant's own quantityEnabled preference the
+  // other way. A VALUE-controlled one is the opposite override: the
+  // tenant has explicitly said "measure this product's stock by value,
+  // not count," so quantity is irrelevant to it and the field is HIDDEN
+  // outright, even if quantityEnabled is on for every other product --
+  // this isn't merely "not required," it genuinely doesn't apply here.
+  // The deduction trigger (migration 0069) infers an implied quantity
+  // from the sale amount and the product's own selling price. Only an
+  // untracked product (or a tracked one with neither control method
+  // forcing an answer -- there is none today, but keeps this legible)
+  // falls back to the tenant's own quantityEnabled toggle.
+  const tracksInventory = product?.tracksInventory ?? false;
+  const quantityRequiredForProduct = tracksInventory && product?.stockControlMethod === "quantity";
+  const quantityIrrelevantForProduct = tracksInventory && product?.stockControlMethod === "value";
+  const showQuantity = !quantityIrrelevantForProduct && (quantityEnabled || quantityRequiredForProduct);
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
