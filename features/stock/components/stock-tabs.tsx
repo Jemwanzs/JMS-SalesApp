@@ -59,49 +59,39 @@ export function StockTabs({
   canReconcile: boolean;
   stockControlMethod: "quantity" | "value";
 }) {
+  // Fixed row CHUNKS, not a 4-column grid -- the grid version put a
+  // ragged last row (Reconcile/History) flush against columns 1-2 with
+  // 3-4 sitting empty, reading as ill-spaced and left-stuck rather than
+  // "look like line 1." Chunking into groups of (up to) 4 and giving
+  // each its OWN centered, independently-pilled row -- rather than one
+  // shared grid/flex track -- means a short remainder row visually
+  // centers itself instead of hugging the row above's left edge. Two
+  // earlier attempts (a single scrollable row, then plain flex-wrap)
+  // were each reverted after feedback for looking broken or splitting
+  // unevenly; this keeps the deterministic "4 per row" split those both
+  // lacked, but fixes the leftover-row centering the plain grid missed.
+  const allTabs = [
+    { value: "overview", label: "Overview" },
+    { value: "items", label: "Items" },
+    ...(canRecord ? [{ value: "stock-in", label: "Stock In" }, { value: "adjust", label: "Adjust" }] : []),
+    ...(canReconcile ? [{ value: "reconcile", label: "Reconcile" }] : []),
+    { value: "history", label: "History" },
+  ];
+  const tabRows: (typeof allTabs)[] = [];
+  for (let i = 0; i < allTabs.length; i += 4) tabRows.push(allTabs.slice(i, i + 4));
+
   return (
     <Tabs defaultValue="overview">
-      {/* flex-1 (the shared TabsTrigger's default) squeezes every tab into
-          an equal, ever-shrinking fraction of the bar's width -- fine for
-          Analytics' 2 tabs, but with up to 6 here it silently clipped
-          label text. Two later fixes were each reverted after feedback:
-          a single scrollable row (History disappearing off-screen with
-          no visible affordance it could be scrolled to), then plain
-          flex-wrap (packed 5 tabs onto row one and stranded History
-          alone on a cramped row two -- width-dependent natural packing,
-          not the clean split asked for). A fixed 4-column CSS grid
-          settles this deterministically regardless of viewport width or
-          label length: exactly 4 tabs per row, any 5th/6th wrapping onto
-          a full second row -- Overview/Items/Stock In/Adjust, then
-          Reconcile/History, matching the requested layout exactly
-          whenever all six are visible, and degrading gracefully to one
-          row when fewer are (a Sales User with neither canRecord nor
-          canReconcile sees only 3). */}
-      <TabsList className="grid h-auto w-full grid-cols-4 gap-1.5">
-        <TabsTrigger value="overview" className="flex-none justify-self-stretch">
-          Overview
-        </TabsTrigger>
-        <TabsTrigger value="items" className="flex-none justify-self-stretch">
-          Items
-        </TabsTrigger>
-        {canRecord && (
-          <TabsTrigger value="stock-in" className="flex-none justify-self-stretch">
-            Stock In
-          </TabsTrigger>
-        )}
-        {canRecord && (
-          <TabsTrigger value="adjust" className="flex-none justify-self-stretch">
-            Adjust
-          </TabsTrigger>
-        )}
-        {canReconcile && (
-          <TabsTrigger value="reconcile" className="flex-none justify-self-stretch">
-            Reconcile
-          </TabsTrigger>
-        )}
-        <TabsTrigger value="history" className="flex-none justify-self-stretch">
-          History
-        </TabsTrigger>
+      <TabsList className="h-auto w-full flex-col gap-2 bg-transparent p-0">
+        {tabRows.map((row, i) => (
+          <div key={i} className="flex w-full justify-center gap-1.5 rounded-lg bg-muted p-[3px]">
+            {row.map((tab) => (
+              <TabsTrigger key={tab.value} value={tab.value} className="flex-none">
+                {tab.label}
+              </TabsTrigger>
+            ))}
+          </div>
+        ))}
       </TabsList>
 
       <TabsContent value="overview" className="space-y-4 pt-4">
