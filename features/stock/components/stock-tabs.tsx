@@ -1,13 +1,12 @@
 "use client";
 
-import { LowStockList } from "@/features/stock/components/low-stock-list";
 import { ReconciliationQueueList } from "@/features/stock/components/reconciliation-queue-list";
 import { StockActionList } from "@/features/stock/components/stock-action-list";
 import { StockDashboardList } from "@/features/stock/components/stock-dashboard-list";
 import { StockHistoryList } from "@/features/stock/components/stock-history-list";
 import { StockMovementChartLazy } from "@/features/stock/components/stock-movement-chart-lazy";
 import { StockOverviewCards } from "@/features/stock/components/stock-overview-cards";
-import { VarianceReportList } from "@/features/stock/components/variance-report-list";
+import { StockStatusBar } from "@/features/stock/components/stock-status-bar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type {
   DailyMovementPoint,
@@ -58,20 +57,46 @@ export function StockTabs({
 }) {
   return (
     <Tabs defaultValue="overview">
-      <TabsList className="w-full overflow-x-auto">
-        <TabsTrigger value="overview">Overview</TabsTrigger>
-        <TabsTrigger value="items">Items</TabsTrigger>
-        {canRecord && <TabsTrigger value="stock-in">Stock In</TabsTrigger>}
-        {canRecord && <TabsTrigger value="adjust">Adjust</TabsTrigger>}
-        {canReconcile && <TabsTrigger value="reconcile">Reconcile</TabsTrigger>}
-        <TabsTrigger value="history">History</TabsTrigger>
+      {/* flex-1 (the shared TabsTrigger's default) squeezes every tab into
+          an equal, ever-shrinking fraction of the bar's width -- fine for
+          Analytics' 2 tabs, but with 6 here it silently clips label text
+          (no scrolling ever kicks in, since the row never actually
+          exceeds the container). flex-none + shrink-0 lets each tab keep
+          its natural width instead, so the row genuinely overflows and
+          overflow-x-auto below can do its job -- swipe/scroll to reach
+          every tab at a readable size, same idiom as a native app's
+          scrollable tab strip. */}
+      <TabsList className="w-full justify-start overflow-x-auto">
+        <TabsTrigger value="overview" className="flex-none shrink-0">
+          Overview
+        </TabsTrigger>
+        <TabsTrigger value="items" className="flex-none shrink-0">
+          Items
+        </TabsTrigger>
+        {canRecord && (
+          <TabsTrigger value="stock-in" className="flex-none shrink-0">
+            Stock In
+          </TabsTrigger>
+        )}
+        {canRecord && (
+          <TabsTrigger value="adjust" className="flex-none shrink-0">
+            Adjust
+          </TabsTrigger>
+        )}
+        {canReconcile && (
+          <TabsTrigger value="reconcile" className="flex-none shrink-0">
+            Reconcile
+          </TabsTrigger>
+        )}
+        <TabsTrigger value="history" className="flex-none shrink-0">
+          History
+        </TabsTrigger>
       </TabsList>
 
       <TabsContent value="overview" className="space-y-4 pt-4">
-        <StockOverviewCards summary={summary} />
+        <StockOverviewCards summary={summary} balances={balances} lowStock={lowStock} varianceReport={varianceReport} tenantSlug={tenantSlug} />
+        <StockStatusBar summary={summary} />
         <StockMovementChartLazy data={movementTrend} />
-        <VarianceReportList rows={varianceReport} />
-        <LowStockList tenantSlug={tenantSlug} rows={lowStock} />
         {movementTrend.length < 2 && varianceReport.length === 0 && lowStock.length === 0 && (
           <p className="text-center text-sm text-muted-foreground">Not enough activity yet to report on.</p>
         )}
