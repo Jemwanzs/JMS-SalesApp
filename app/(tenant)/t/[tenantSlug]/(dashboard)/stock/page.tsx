@@ -10,7 +10,7 @@ import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { resolveActiveLocationId } from "@/lib/tenant/resolve-active-location";
 import { getTenantBySlug } from "@/lib/tenant/resolve-tenant-by-slug";
-import { todayString, trailingDaysRange } from "@/lib/utils/date-ranges";
+import { subtractDays, todayString, trailingDaysRange } from "@/lib/utils/date-ranges";
 
 export const metadata: Metadata = {
   title: "Stock | JMS Sales App",
@@ -27,10 +27,21 @@ const OVERVIEW_WINDOW_DAYS = 30;
  * volume is modest enough that a single request per tab switch isn't
  * warranted (the same reasoning stock_balances' own view already
  * applies), and it keeps StockTabs a plain client component with no
- * data-fetching of its own.
+ * data-fetching of its own. The Overview tab's own Today/Yesterday/
+ * Select Date filter is the one exception -- driven by `?overviewDate=`
+ * so switching it re-renders this whole page with a fresh
+ * getDailyOverviewSummary() call, while every other tab's data stays
+ * exactly as it was (unaffected by that param).
  */
-export default async function StockPage({ params }: { params: Promise<{ tenantSlug: string }> }) {
+export default async function StockPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ tenantSlug: string }>;
+  searchParams: Promise<{ overviewDate?: string }>;
+}) {
   const { tenantSlug } = await params;
+  const { overviewDate } = await searchParams;
   const supabase = await createClient();
 
   const tenant = await getTenantBySlug(supabase, tenantSlug);
@@ -53,12 +64,13 @@ export default async function StockPage({ params }: { params: Promise<{ tenantSl
   const today = activeLocationId
     ? (await new BusinessDayService(supabase).getEffectiveBusinessDate(tenantId, activeLocationId)).date
     : todayString(tenant!.timezone);
+  const yesterday = subtractDays(today, 1);
+  const selectedOverviewDate = overviewDate && overviewDate <= today ? overviewDate : today;
 
-  const [summary, movementTrend, varianceReport, lowStock, balances, pendingReconciliation, historyEntries, stockControlMethod] =
+  const [dailySummary, movementTrend, lowStock, balances, pendingReconciliation, historyEntries, stockControlMethod] =
     await Promise.all([
-      stockService.getOverviewSummary(tenantId, overviewRange),
+      stockService.getDailyOverviewSummary(tenantId, selectedOverviewDate),
       stockService.getMovementTrend(tenantId, overviewRange),
-      stockService.getVarianceReport(tenantId, overviewRange),
       stockService.listLowStock(tenantId),
       stockService.listBalances(tenantId),
       canReconcile ? stockService.listPendingReconciliation(tenantId, today) : Promise.resolve([]),
@@ -72,9 +84,10 @@ export default async function StockPage({ params }: { params: Promise<{ tenantSl
       <StockTabs
         tenantId={tenantId}
         tenantSlug={tenantSlug}
-        summary={summary}
+        summary={dailySummary}
+        todayDate={today}
+        yesterdayDate={yesterday}
         movementTrend={movementTrend}
-        varianceReport={varianceReport}
         lowStock={lowStock}
         balances={balances}
         pendingReconciliation={pendingReconciliation}

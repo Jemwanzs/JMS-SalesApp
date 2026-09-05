@@ -99,6 +99,22 @@ export async function setInventoryEnabledAction(
       // on, since the tenant can still track products individually via
       // Edit either way.
       await new ProductService(createServiceRoleClient()).enableTrackingForExistingProducts(tenantId).catch(() => {});
+
+      // First-ever activation only (neither setting has ever been
+      // explicitly touched): Record Stock By defaults to Monetary Value
+      // (getStockControlMethod's own unset-fallback), and the Quantity
+      // field's recommended posture for that method is OFF -- see
+      // set-stock-control-method.ts's own "toggle follows the method"
+      // rule. Turning Inventory back on after previously turning it off
+      // must never re-run this: a tenant who already made a real choice
+      // (either setting present) keeps it untouched.
+      const [existingMethod, existingQuantityEnabled] = await Promise.all([
+        tenantService.getSetting<string>(tenantId, "stock_control_method"),
+        tenantService.getSetting<boolean>(tenantId, "quantity_enabled"),
+      ]);
+      if (existingMethod === null && existingQuantityEnabled === null) {
+        await tenantService.setSetting(tenantId, "quantity_enabled", false, user!.id);
+      }
     }
     revalidatePath(`/t/${tenantSlug}/settings`);
     revalidatePath(`/t/${tenantSlug}/stock`);

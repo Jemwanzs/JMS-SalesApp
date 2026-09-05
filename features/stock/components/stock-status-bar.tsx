@@ -1,13 +1,16 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { StockOverviewSummary } from "@/services/StockService";
+import type { StockDailyOverviewSummary } from "@/services/StockService";
 
 /**
  * The spec's "stock status distribution" visual -- one of the handful
  * of charts explicitly asked for, deliberately a single proportional bar
  * rather than a full chart component: three counts, at a glance, no
- * axes/legend-heavy chrome needed for something this simple.
+ * axes/legend-heavy chrome needed for something this simple. Sits right
+ * after the Product Status cards (Tracked/Low/Out) as their visual
+ * complement -- always live/current-state, never date-filtered, same as
+ * those cards.
  */
-export function StockStatusBar({ summary }: { summary: StockOverviewSummary }) {
+export function StockStatusBar({ summary }: { summary: StockDailyOverviewSummary }) {
   const inStock = Math.max(0, summary.productsTracked - summary.lowStockCount - summary.outOfStockCount);
   const total = summary.productsTracked;
 

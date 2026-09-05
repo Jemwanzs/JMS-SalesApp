@@ -138,18 +138,47 @@ export interface VarianceReportRow {
   varianceReason: string | null;
 }
 
-export interface StockOverviewSummary {
+/**
+ * The Overview tab's summary cards (Product Enhancements: "Inventory
+ * Module — Configuration & Stock Overview Enhancements"). Two families
+ * of figures, kept genuinely separate rather than one aggregate blur:
+ *
+ * - LIVE, never date-scoped: `currentStockQuantity`/`currentStockValue`
+ *   (right-now balance) and the product-status counts
+ *   (productsTracked/lowStockCount/outOfStockCount) -- "how much do I
+ *   have on hand at this very moment," unaffected by whichever date the
+ *   tenant is reviewing.
+ * - DATE-SCOPED to whatever single date the Overview's filter
+ *   (Today/Yesterday/Select Date) is set to: opening/new/sold/adjusted/
+ *   closing (both quantity and value) plus expected/actual sales value
+ *   and their variance -- "what happened on THIS day."
+ *
+ * Both quantity and value figures are always computed (regardless of
+ * the tenant's own stock_control_method) so the UI can pick whichever
+ * set that setting calls for without a second round trip -- the method
+ * only decides which numbers the cards foreground, never a second
+ * source of truth for the ledger itself.
+ */
+export interface StockDailyOverviewSummary {
+  date: string;
   productsTracked: number;
-  currentStockUnits: number;
-  stockValue: number;
-  expectedSalesValue: number;
   lowStockCount: number;
   outOfStockCount: number;
-  stockAddedValue: number;
-  stockSoldValue: number;
-  damagedLostAdjustedValue: number;
+  currentStockQuantity: number;
+  currentStockValue: number;
+  openingStockQuantity: number;
+  openingStockValue: number;
+  newStockQuantity: number;
+  newStockValue: number;
+  soldQuantity: number;
+  soldValue: number;
+  adjustedQuantity: number;
+  adjustedValue: number;
+  closingStockQuantity: number;
+  closingStockValue: number;
+  expectedSalesValue: number;
   actualSalesValue: number;
-  stockVarianceValue: number;
+  varianceValue: number;
 }
 
 export interface StockHistoryEntry {
@@ -507,45 +536,58 @@ export class StockService {
   }
 
   /**
-   * The Overview tab's summary cards. Stock value/expected sales value
-   * are current-balance snapshots (not range-bound -- "what do I have
-   * right now"); everything else is bucketed to `range` (what moved
-   * during that window). All monetary figures read straight off each
-   * movement's OWN unit_cost_snapshot/unit_price_snapshot (migration
-   * 0067) -- never the product's live price -- so a price change
-   * partway through the range can't retroactively skew it.
+   * The Overview tab's summary cards, scoped to a single `date` (the
+   * Today/Yesterday/Select Date filter) -- see StockDailyOverviewSummary's
+   * own header comment for which figures are live-only vs. date-scoped.
+   * All monetary figures read straight off each movement's OWN
+   * unit_price_snapshot (migration 0067) -- never the product's live
+   * price -- so a later price change can't retroactively skew a past
+   * date's numbers. Mirrors getReconciliationPreview's own established
+   * "fetch every movement up to and including the date, split in JS on
+   * occurred_on < date vs = date" approach, just aggregated across every
+   * tracked product instead of one.
    */
-  async getOverviewSummary(tenantId: string, range: DateRangeInput): Promise<StockOverviewSummary> {
+  async getDailyOverviewSummary(tenantId: string, date: string): Promise<StockDailyOverviewSummary> {
+    const empty: StockDailyOverviewSummary = {
+      date,
+      productsTracked: 0,
+      lowStockCount: 0,
+      outOfStockCount: 0,
+      currentStockQuantity: 0,
+      currentStockValue: 0,
+      openingStockQuantity: 0,
+      openingStockValue: 0,
+      newStockQuantity: 0,
+      newStockValue: 0,
+      soldQuantity: 0,
+      soldValue: 0,
+      adjustedQuantity: 0,
+      adjustedValue: 0,
+      closingStockQuantity: 0,
+      closingStockValue: 0,
+      expectedSalesValue: 0,
+      actualSalesValue: 0,
+      varianceValue: 0,
+    };
+
     const { data: products, error: productsError } = await this.supabase
       .from("products")
-      .select("id, cost_price, expected_price, low_stock_threshold")
+      .select("id, cost_price, low_stock_threshold")
       .eq("tenant_id", tenantId)
       .eq("tracks_inventory", true)
       .eq("status", "active");
 
     if (productsError) {
-      throw new Error(`StockService.getOverviewSummary: ${productsError.message}`);
+      throw new Error(`StockService.getDailyOverviewSummary: ${productsError.message}`);
     }
 
     const productIds = (products ?? []).map((p) => p.id);
     if (productIds.length === 0) {
-      return {
-        productsTracked: 0,
-        currentStockUnits: 0,
-        stockValue: 0,
-        expectedSalesValue: 0,
-        lowStockCount: 0,
-        outOfStockCount: 0,
-        stockAddedValue: 0,
-        stockSoldValue: 0,
-        damagedLostAdjustedValue: 0,
-        actualSalesValue: 0,
-        stockVarianceValue: 0,
-      };
+      return empty;
     }
 
-    const productById = new Map((products ?? []).map((p) => [p.id, p]));
-
+    // Live-only: current balance and low/out-of-stock counts, unaffected
+    // by whichever date is selected -- "how much do I have right now."
     const { data: balances, error: balancesError } = await this.supabase
       .from("stock_balances")
       .select("product_id, balance")
@@ -553,7 +595,7 @@ export class StockService {
       .in("product_id", productIds);
 
     if (balancesError) {
-      throw new Error(`StockService.getOverviewSummary: ${balancesError.message}`);
+      throw new Error(`StockService.getDailyOverviewSummary: ${balancesError.message}`);
     }
 
     const balanceByProduct = new Map<string, number>();
@@ -561,50 +603,76 @@ export class StockService {
       balanceByProduct.set(row.product_id, (balanceByProduct.get(row.product_id) ?? 0) + Number(row.balance));
     }
 
-    let currentStockUnits = 0;
-    let stockValue = 0;
-    let expectedSalesValue = 0;
+    let currentStockQuantity = 0;
+    let currentStockValue = 0;
     let lowStockCount = 0;
     let outOfStockCount = 0;
-
     for (const p of products ?? []) {
       const balance = balanceByProduct.get(p.id) ?? 0;
-      currentStockUnits += balance;
-      stockValue += balance * (p.cost_price ?? 0);
-      expectedSalesValue += balance * (p.expected_price ?? 0);
+      currentStockQuantity += balance;
+      currentStockValue += balance * (p.cost_price ?? 0);
       if (balance <= 0) outOfStockCount += 1;
       else if (p.low_stock_threshold !== null && balance <= p.low_stock_threshold) lowStockCount += 1;
     }
 
+    // Date-scoped: every movement up to and including `date`, split into
+    // "before" (opening balance) and "on this date" (new/sold/adjusted).
     const { data: movements, error: movementsError } = await this.supabase
       .from("stock_movements")
-      .select("product_id, movement_type, quantity, unit_cost_snapshot, unit_price_snapshot")
+      .select("movement_type, quantity, unit_price_snapshot, occurred_on")
       .eq("tenant_id", tenantId)
       .in("product_id", productIds)
-      .gte("occurred_on", range.from)
-      .lte("occurred_on", range.to);
+      .lte("occurred_on", date);
 
     if (movementsError) {
-      throw new Error(`StockService.getOverviewSummary: ${movementsError.message}`);
+      throw new Error(`StockService.getDailyOverviewSummary: ${movementsError.message}`);
     }
 
-    let stockAddedValue = 0;
-    let stockSoldValue = 0;
-    let damagedLostAdjustedValue = 0;
+    const NEW_TYPES = new Set(["opening_stock", "stock_in"]);
+    const SOLD_TYPES = new Set(["sale", "stock_out"]);
+    const ADJUSTED_TYPES = new Set([
+      "adjustment_increase",
+      "adjustment_decrease",
+      "damaged",
+      "expired",
+      "lost",
+      "reconciliation_variance",
+    ]);
+
+    let openingStockQuantity = 0;
+    let openingStockValue = 0;
+    let newStockQuantity = 0;
+    let newStockValue = 0;
+    let soldQuantity = 0;
+    let soldValue = 0;
+    let adjustedQuantity = 0;
+    let adjustedValue = 0;
 
     for (const m of movements ?? []) {
       const qty = Number(m.quantity);
-      const costBasis = m.unit_cost_snapshot !== null ? Number(m.unit_cost_snapshot) : 0;
       const priceBasis = m.unit_price_snapshot !== null ? Number(m.unit_price_snapshot) : 0;
+      const value = qty * priceBasis;
 
-      if (m.movement_type === "opening_stock" || m.movement_type === "stock_in") {
-        stockAddedValue += qty * costBasis;
-      } else if (m.movement_type === "sale" || m.movement_type === "stock_out") {
-        stockSoldValue += Math.abs(qty) * priceBasis;
-      } else if (["damaged", "expired", "lost", "adjustment_decrease"].includes(m.movement_type)) {
-        damagedLostAdjustedValue += Math.abs(qty) * costBasis;
+      if (m.occurred_on < date) {
+        openingStockQuantity += qty;
+        openingStockValue += value;
+        continue;
+      }
+      if (NEW_TYPES.has(m.movement_type)) {
+        newStockQuantity += qty;
+        newStockValue += value;
+      } else if (SOLD_TYPES.has(m.movement_type)) {
+        soldQuantity += -qty;
+        soldValue += -value;
+      } else if (ADJUSTED_TYPES.has(m.movement_type)) {
+        adjustedQuantity += qty;
+        adjustedValue += value;
       }
     }
+
+    const closingStockQuantity = openingStockQuantity + newStockQuantity - soldQuantity + adjustedQuantity;
+    const closingStockValue = openingStockValue + newStockValue - soldValue + adjustedValue;
+    const expectedSalesValue = openingStockValue + newStockValue;
 
     const { data: sales, error: salesError } = await this.supabase
       .from("sales")
@@ -613,49 +681,34 @@ export class StockService {
       .in("product_id", productIds)
       .neq("status", "voided")
       .neq("status", "corrected")
-      .gte("sale_date", range.from)
-      .lte("sale_date", range.to);
+      .eq("sale_date", date);
 
     if (salesError) {
-      throw new Error(`StockService.getOverviewSummary: ${salesError.message}`);
+      throw new Error(`StockService.getDailyOverviewSummary: ${salesError.message}`);
     }
 
     const actualSalesValue = (sales ?? []).reduce((sum, s) => sum + Number(s.actual_amount), 0);
 
-    const { data: reconciliations, error: reconciliationsError } = await this.supabase
-      .from("stock_reconciliations")
-      .select("product_id, variance, unexplained_variance_value")
-      .eq("tenant_id", tenantId)
-      .in("product_id", productIds)
-      .gte("reconciliation_date", range.from)
-      .lte("reconciliation_date", range.to);
-
-    if (reconciliationsError) {
-      throw new Error(`StockService.getOverviewSummary: ${reconciliationsError.message}`);
-    }
-
-    let stockVarianceValue = 0;
-    for (const r of reconciliations ?? []) {
-      if (r.unexplained_variance_value !== null) {
-        stockVarianceValue += Math.abs(Number(r.unexplained_variance_value));
-      } else {
-        const product = productById.get(r.product_id);
-        stockVarianceValue += Math.abs(Number(r.variance)) * (product?.cost_price ?? 0);
-      }
-    }
-
     return {
+      date,
       productsTracked: productIds.length,
-      currentStockUnits,
-      stockValue,
-      expectedSalesValue,
       lowStockCount,
       outOfStockCount,
-      stockAddedValue,
-      stockSoldValue,
-      damagedLostAdjustedValue,
+      currentStockQuantity,
+      currentStockValue,
+      openingStockQuantity,
+      openingStockValue,
+      newStockQuantity,
+      newStockValue,
+      soldQuantity,
+      soldValue,
+      adjustedQuantity,
+      adjustedValue,
+      closingStockQuantity,
+      closingStockValue,
+      expectedSalesValue,
       actualSalesValue,
-      stockVarianceValue,
+      varianceValue: expectedSalesValue - actualSalesValue,
     };
   }
 

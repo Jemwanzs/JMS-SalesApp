@@ -7,159 +7,183 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ProductPhotoThumbnail } from "@/features/products/components/product-photo-viewer";
-import type { StockBalanceRow, StockOverviewSummary, VarianceReportRow } from "@/services/StockService";
+import type { StockBalanceRow, StockDailyOverviewSummary } from "@/services/StockService";
 
-type MetricKey =
-  | "currentStock"
-  | "stockValue"
-  | "productsTracked"
-  | "lowStock"
-  | "outOfStock"
-  | "stockAdded"
-  | "stockSold"
-  | "damaged"
-  | "expectedSales"
-  | "actualSales"
-  | "variance";
+type MainCardKey = "current" | "opening" | "new" | "closing" | "adjusted" | "expectedSales" | "actualSales" | "variance";
+type StatusCardKey = "tracked" | "lowStock" | "outOfStock";
 
-interface MetricDef {
+interface CardDef {
   label: string;
   value: string;
   tone?: "default" | "warning" | "destructive";
   explanation: string;
 }
 
-function Tile({ def, onClick }: { def: MetricDef; onClick: () => void }) {
+function Tile({ def, onClick }: { def: CardDef; onClick?: () => void }) {
+  const body = (
+    <Card size="sm" className={`h-full ${onClick ? "cursor-pointer transition-shadow hover:border-primary/50 hover:shadow-md" : ""}`}>
+      <CardContent>
+        <CardDescription>{def.label}</CardDescription>
+        <CardTitle
+          className={`mt-1 text-xl tabular-nums ${
+            def.tone === "destructive" ? "text-destructive" : def.tone === "warning" ? "text-amber-600 dark:text-amber-400" : ""
+          }`}
+        >
+          {def.value}
+        </CardTitle>
+      </CardContent>
+    </Card>
+  );
+
+  if (!onClick) return body;
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="text-left transition-transform hover:-translate-y-0.5 active:translate-y-0"
-    >
-      <Card
-        size="sm"
-        className="h-full cursor-pointer transition-shadow hover:border-primary/50 hover:shadow-md"
-      >
-        <CardContent>
-          <CardDescription>{def.label}</CardDescription>
-          <CardTitle
-            className={`mt-1 text-xl tabular-nums ${
-              def.tone === "destructive" ? "text-destructive" : def.tone === "warning" ? "text-amber-600 dark:text-amber-400" : ""
-            }`}
-          >
-            {def.value}
-          </CardTitle>
-        </CardContent>
-      </Card>
+    <button type="button" onClick={onClick} className="text-left transition-transform hover:-translate-y-0.5 active:translate-y-0">
+      {body}
     </button>
   );
 }
 
 /**
- * Stock module spec's Overview cards -- the set explicitly asked for,
- * not every number StockService could theoretically produce ("do not
- * fill the page with unnecessary charts/cards"). Every card is tappable:
- * a hover/press affordance plus a detail dialog that either explains how
- * the figure is calculated or, where the underlying rows are already on
- * hand (low stock, out of stock, variance), shows them directly rather
- * than making the tenant hunt for the same list on another tab.
+ * The Overview's redesigned card set (Product Enhancements: "Inventory
+ * Module — Configuration & Stock Overview Enhancements"). Two visually
+ * separate groups, deliberately not blended into one grid:
+ *
+ * 1. The main stock cards, in the exact order specified, switching
+ *    between quantity and currency for the first five depending on the
+ *    tenant's stock_control_method -- Expected/Actual Sales and their
+ *    Variance stay in currency regardless of method, since a "sale" is
+ *    always a monetary event.
+ * 2. A clear visual break, then product-STATUS counts (Tracked/Low/Out
+ *    of stock) -- deliberately never mixed into the stock-value KPI
+ *    group above, and never date-filtered (a live/current-state concept
+ *    only -- you can't retroactively know a past day's low-stock state
+ *    from today's threshold).
  */
 export function StockOverviewCards({
   summary,
+  stockControlMethod,
   balances,
   lowStock,
-  varianceReport,
   tenantSlug,
 }: {
-  summary: StockOverviewSummary;
+  summary: StockDailyOverviewSummary;
+  stockControlMethod: "quantity" | "value";
   balances: StockBalanceRow[];
   lowStock: StockBalanceRow[];
-  varianceReport: VarianceReportRow[];
   tenantSlug: string;
 }) {
-  const [openMetric, setOpenMetric] = useState<MetricKey | null>(null);
+  const [openMain, setOpenMain] = useState<MainCardKey | null>(null);
+  const [openStatus, setOpenStatus] = useState<StatusCardKey | null>(null);
+  const byQuantity = stockControlMethod === "quantity";
   const outOfStock = balances.filter((b) => b.balance <= 0);
+  const hasLowOrOut = summary.lowStockCount > 0 || summary.outOfStockCount > 0;
 
-  const defs: Record<MetricKey, MetricDef> = {
-    currentStock: {
-      label: "Current stock",
-      value: summary.currentStockUnits.toFixed(0),
-      explanation: "Total units on hand right now, summed across every tracked product's own unit of measure.",
+  const fmt = (n: number) => n.toFixed(byQuantity ? 0 : 2);
+
+  const mainDefs: Record<MainCardKey, CardDef> = {
+    current: {
+      label: "Current Stock",
+      value: fmt(byQuantity ? summary.currentStockQuantity : summary.currentStockValue),
+      tone: hasLowOrOut ? "destructive" : "default",
+      explanation: byQuantity
+        ? "Total units on hand right now, across every tracked product. Turns red when at least one product is low or out of stock."
+        : "Total stock value on hand right now (balance × cost price), across every tracked product. Turns red when at least one product is low or out of stock.",
     },
-    stockValue: {
-      label: "Stock value",
-      value: summary.stockValue.toFixed(2),
-      explanation:
-        "Current balance × each product's cost price, summed across every tracked product. A product with no cost price set contributes 0 here -- add one in Products to include it.",
+    opening: {
+      label: "Opening Stock",
+      value: fmt(byQuantity ? summary.openingStockQuantity : summary.openingStockValue),
+      explanation: `Stock on hand at the start of ${summary.date}, carried over from every movement before that date.`,
     },
-    productsTracked: {
-      label: "Products tracked",
+    new: {
+      label: "New Stock",
+      value: fmt(byQuantity ? summary.newStockQuantity : summary.newStockValue),
+      explanation: `Opening Stock and Stock In movements recorded on ${summary.date}.`,
+    },
+    closing: {
+      label: "Closing Stock",
+      value: fmt(byQuantity ? summary.closingStockQuantity : summary.closingStockValue),
+      explanation: "Opening Stock + New Stock − Stock Sold ± Stock Adjustments, for this date.",
+    },
+    adjusted: {
+      label: "Stock Adjusted",
+      value: fmt(byQuantity ? summary.adjustedQuantity : summary.adjustedValue),
+      explanation: "Net of damages, losses, expiry, manual adjustments, and reconciliation corrections recorded on this date.",
+    },
+    expectedSales: {
+      label: "Expected Sales",
+      value: summary.expectedSalesValue.toFixed(2),
+      explanation: "Opening Stock Value + New Stock Value -- what the stock available on this date would sell for if all of it moved.",
+    },
+    actualSales: {
+      label: "Actual Sales",
+      value: summary.actualSalesValue.toFixed(2),
+      explanation: "Real recorded revenue (excluding voided/corrected sales) for tracked products on this date.",
+    },
+    variance: {
+      label: "Variance",
+      value: summary.varianceValue.toFixed(2),
+      tone: Math.abs(summary.varianceValue) > 0 ? "warning" : "default",
+      explanation: "Expected Sales − Actual Sales. A positive figure is stock that should have sold but didn't yet (or was lost/adjusted) -- check Reconcile for the per-product breakdown.",
+    },
+  };
+
+  const statusDefs: Record<StatusCardKey, CardDef> = {
+    tracked: {
+      label: "Products Tracked",
       value: String(summary.productsTracked),
       explanation: "Active products with stock tracking turned on (Products → edit → Track inventory).",
     },
     lowStock: {
-      label: "Low stock",
+      label: "Low Stock Products",
       value: String(summary.lowStockCount),
       tone: summary.lowStockCount > 0 ? "warning" : "default",
       explanation: "Tracked products at or below their own configured low-stock alert threshold, but not yet at zero.",
     },
     outOfStock: {
-      label: "Out of stock",
+      label: "Out of Stock Products",
       value: String(summary.outOfStockCount),
       tone: summary.outOfStockCount > 0 ? "destructive" : "default",
       explanation: "Tracked products whose current balance has reached zero or below.",
-    },
-    stockAdded: {
-      label: "Stock added",
-      value: summary.stockAddedValue.toFixed(2),
-      explanation: "Value of Opening Stock and Stock In movements in the last 30 days, at each movement's own cost price.",
-    },
-    stockSold: {
-      label: "Stock sold",
-      value: summary.stockSoldValue.toFixed(2),
-      explanation: "Value of stock consumed by sales (and manual stock-out) in the last 30 days, at each movement's own selling price.",
-    },
-    damaged: {
-      label: "Damaged / lost / adjusted",
-      value: summary.damagedLostAdjustedValue.toFixed(2),
-      explanation: "Value of damaged, expired, lost, and downward adjustment movements in the last 30 days, at cost price.",
-    },
-    expectedSales: {
-      label: "Expected sales value",
-      value: summary.expectedSalesValue.toFixed(2),
-      explanation: "Current balance × each product's selling price -- what the stock on hand right now would sell for if all of it moved.",
-    },
-    actualSales: {
-      label: "Actual sales value",
-      value: summary.actualSalesValue.toFixed(2),
-      explanation: "Real recorded revenue (excluding voided/corrected sales) for tracked products in the last 30 days.",
-    },
-    variance: {
-      label: "Stock variance",
-      value: summary.stockVarianceValue.toFixed(2),
-      tone: summary.stockVarianceValue > 0 ? "warning" : "default",
-      explanation: "Unexplained variance from reconciliations in the last 30 days, after accounting for recorded sales and valid adjustments.",
     },
   };
 
   return (
     <>
       <div className="grid grid-cols-2 gap-3">
-        {(Object.keys(defs) as MetricKey[]).map((key) => (
-          <Tile key={key} def={defs[key]} onClick={() => setOpenMetric(key)} />
+        {(Object.keys(mainDefs) as MainCardKey[]).map((key) => (
+          <Tile key={key} def={mainDefs[key]} onClick={() => setOpenMain(key)} />
         ))}
       </div>
 
-      <Dialog open={openMetric !== null} onOpenChange={(open) => !open && setOpenMetric(null)}>
+      <div className="my-2 border-t" />
+
+      <div className="grid grid-cols-3 gap-3">
+        {(Object.keys(statusDefs) as StatusCardKey[]).map((key) => (
+          <Tile key={key} def={statusDefs[key]} onClick={() => setOpenStatus(key)} />
+        ))}
+      </div>
+
+      <Dialog open={openMain !== null} onOpenChange={(open) => !open && setOpenMain(null)}>
         <DialogContent>
-          {openMetric && (
+          {openMain && (
+            <DialogHeader>
+              <DialogTitle>{mainDefs[openMain].label}</DialogTitle>
+              <DialogDescription>{mainDefs[openMain].explanation}</DialogDescription>
+            </DialogHeader>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={openStatus !== null} onOpenChange={(open) => !open && setOpenStatus(null)}>
+        <DialogContent>
+          {openStatus && (
             <>
               <DialogHeader>
-                <DialogTitle>{defs[openMetric].label}</DialogTitle>
-                <DialogDescription>{defs[openMetric].explanation}</DialogDescription>
+                <DialogTitle>{statusDefs[openStatus].label}</DialogTitle>
+                <DialogDescription>{statusDefs[openStatus].explanation}</DialogDescription>
               </DialogHeader>
 
-              {openMetric === "lowStock" &&
+              {openStatus === "lowStock" &&
                 (lowStock.length === 0 ? (
                   <p className="text-sm text-muted-foreground">Nothing is currently low on stock.</p>
                 ) : (
@@ -180,7 +204,7 @@ export function StockOverviewCards({
                   </div>
                 ))}
 
-              {openMetric === "outOfStock" &&
+              {openStatus === "outOfStock" &&
                 (outOfStock.length === 0 ? (
                   <p className="text-sm text-muted-foreground">Nothing is currently out of stock.</p>
                 ) : (
@@ -198,29 +222,6 @@ export function StockOverviewCards({
                         </Badge>
                       </Link>
                     ))}
-                  </div>
-                ))}
-
-              {openMetric === "variance" &&
-                (varianceReport.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No reconciliation variances in the last 30 days.</p>
-                ) : (
-                  <div className="max-h-80 space-y-2 overflow-y-auto">
-                    {varianceReport.map((row) => {
-                      const over = row.variance > 0;
-                      return (
-                        <div key={row.reconciliationId} className="rounded-lg border p-2">
-                          <div className="flex items-baseline justify-between gap-2 text-sm">
-                            <span className="truncate font-medium">{row.productName}</span>
-                            <span className={`shrink-0 tabular-nums ${over ? "text-emerald-600 dark:text-emerald-400" : "text-destructive"}`}>
-                              {over ? "+" : ""}
-                              {row.variance} {row.unitOfMeasure ?? ""}
-                            </span>
-                          </div>
-                          {row.varianceReason && <p className="mt-0.5 text-xs text-muted-foreground">{row.varianceReason}</p>}
-                        </div>
-                      );
-                    })}
                   </div>
                 ))}
             </>

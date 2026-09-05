@@ -31,14 +31,15 @@ export async function setStockControlMethodAction(
     const tenantService = new TenantService(supabase);
     await tenantService.setSetting(tenantId, "stock_control_method", method, user.id);
 
-    // Quantity mode requires the Quantity field toggle locked ON (see
-    // quantity-field-card.tsx's own `locked` prop) -- flip it here too
-    // so a tenant switching TO quantity mode doesn't land in the
-    // inconsistent state of "mandatory but the toggle still says off"
-    // until they happen to revisit that other card.
-    if (method === "quantity") {
-      await tenantService.setSetting(tenantId, "quantity_enabled", true, user.id);
-    }
+    // The Quantity field toggle always follows the method being
+    // switched TO, in both directions -- this is the one setting whose
+    // whole point is being driven by Record Stock By, not left for the
+    // tenant to separately remember to flip. Quantity mode requires it
+    // locked ON (quantity-field-card.tsx's own `locked` prop); switching
+    // back to Monetary Value resets it to its off-by-default posture
+    // (matching that method's own default) and unlocks it -- from then
+    // on it's a free, ordinary preference again until the method changes.
+    await tenantService.setSetting(tenantId, "quantity_enabled", method === "quantity", user.id);
 
     await new AuditService(createServiceRoleClient())
       .log({

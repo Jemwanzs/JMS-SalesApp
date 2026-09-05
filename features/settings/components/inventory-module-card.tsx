@@ -22,8 +22,6 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import type { AddonPlanView } from "@/services/BillingService";
 
-const SUCCESS_REDIRECT_DELAY_MS = 1800;
-
 /**
  * Settings -> Modules toggle (Product Enhancements #3), same shape as
  * QuantityFieldCard (optimistic Switch, useTransition, toast) except
@@ -37,10 +35,14 @@ const SUCCESS_REDIRECT_DELAY_MS = 1800;
  *
  * On a real success (trial started, re-enabled, or credit-activated --
  * anything that doesn't redirect to Paystack), the same dialog swaps to
- * a success state showing the server-computed message, then auto-
- * navigates into the new Stock tab after a short pause -- one
- * continuous flow instead of leaving the tenant on Settings to find the
- * new tab themselves.
+ * a success state showing the server-computed message -- the tenant
+ * stays right here on Settings (an earlier version auto-navigated into
+ * Stock after a short pause; reverted after feedback: enabling the
+ * module should just light up the Stock tab in the bottom nav, not pull
+ * the admin away from whatever else they were configuring).
+ * router.refresh() re-fetches the tenant layout (which computes
+ * inventoryEnabled for the bottom nav) so that tab appears immediately
+ * without an actual navigation.
  */
 export function InventoryModuleCard({
   tenantId,
@@ -99,7 +101,7 @@ export function InventoryModuleCard({
       }
       setEnabled(true);
       setSuccessMessage(result.successMessage ?? "Inventory Management is on.");
-      window.setTimeout(() => router.push(`/t/${tenantSlug}/stock`), SUCCESS_REDIRECT_DELAY_MS);
+      router.refresh();
     });
   }
 
@@ -137,7 +139,7 @@ export function InventoryModuleCard({
                       <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                       You&apos;re all set
                     </DialogTitle>
-                    <DialogDescription>{successMessage} Taking you to Stock…</DialogDescription>
+                    <DialogDescription>{successMessage} The Stock tab is now available in your navigation.</DialogDescription>
                   </DialogHeader>
                 </>
               ) : (
