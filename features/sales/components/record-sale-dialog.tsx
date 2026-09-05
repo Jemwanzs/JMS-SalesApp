@@ -62,32 +62,26 @@ export function RecordSaleDialog({
     }
   }, [product]);
 
-  // A QUANTITY-controlled tracked product forces this field visible/
-  // required, overriding the tenant's own quantityEnabled preference the
-  // other way. A VALUE-controlled one is the opposite override: the
-  // tenant has explicitly said "measure this product's stock by value,
-  // not count," so quantity is irrelevant to it and the field is HIDDEN
-  // outright, even if quantityEnabled is on for every other product --
-  // this isn't merely "not required," it genuinely doesn't apply here.
-  // The deduction trigger (migration 0069) infers an implied quantity
-  // from the sale amount and the product's own selling price. Only an
-  // untracked product (or a tracked one with neither control method
-  // forcing an answer -- there is none today, but keeps this legible)
-  // falls back to the tenant's own quantityEnabled toggle.
-  const tracksInventory = product?.tracksInventory ?? false;
-  const quantityRequiredForProduct = tracksInventory && product?.stockControlMethod === "quantity";
-  const quantityIrrelevantForProduct = tracksInventory && product?.stockControlMethod === "value";
-  const showQuantity = !quantityIrrelevantForProduct && (quantityEnabled || quantityRequiredForProduct);
+  // The tenant's own Settings -> Quantity field toggle is the sole
+  // authority here, for every product regardless of tracks_inventory or
+  // stock_control_method -- a tenant who has decided they don't want to
+  // ask staff for a quantity meant that, full stop, not "except for
+  // tracked products." An earlier version of this let a tracked
+  // product's own configuration override the toggle in both directions
+  // (forcing it visible+required for a quantity-controlled product,
+  // forcing it hidden for a value-controlled one) -- reverted after
+  // live feedback: that's the toggle's decision to make, not a per-
+  // product one. Stock deduction (migration 0071) no longer depends on
+  // an explicit quantity either way -- it infers one from the sale
+  // amount and the product's own selling price whenever none is given,
+  // for any tracked product, regardless of control method.
+  const showQuantity = quantityEnabled;
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!product) return;
     if (product.isSystem && !manualProductName.trim()) {
       setError(t("enterProductNameError"));
-      return;
-    }
-    if (quantityRequiredForProduct && (!quantity || Number(quantity) <= 0)) {
-      setError(t("enterQuantityForTracked", { name: product.name }));
       return;
     }
     setError(null);
@@ -101,13 +95,7 @@ export function RecordSaleDialog({
     // sale.ts), but FormData.get() on a key that was never set() returns
     // null, which fails that schema on both branches. Omitting the key
     // entirely (rather than sending "") would break every submission
-    // while quantityEnabled is false. A quantity-controlled tracked
-    // product forces the field visible (see showQuantity above)
-    // regardless of the tenant-wide quantityEnabled preference, since
-    // SalesService rejects such a sale with no quantity -- stock has
-    // nothing to deduct otherwise. A value-controlled tracked product
-    // never forces it -- omitted entirely unless the tenant's own
-    // preference already shows it.
+    // while quantityEnabled is false.
     formData.set("quantity", showQuantity ? quantity : "");
     formData.set("notes", notesEnabled ? notes : "");
     formData.set("idempotencyKey", idempotencyKey);
@@ -183,10 +171,7 @@ export function RecordSaleDialog({
 
               {showQuantity && (
                 <div className="space-y-2">
-                  <Label htmlFor="quantity">
-                    {t("quantity")}
-                    {quantityRequiredForProduct && " *"}
-                  </Label>
+                  <Label htmlFor="quantity">{t("quantity")}</Label>
                   <Input
                     id="quantity"
                     type="number"
@@ -194,7 +179,6 @@ export function RecordSaleDialog({
                     step="1"
                     value={quantity}
                     onChange={(e) => setQuantity(e.target.value)}
-                    required={quantityRequiredForProduct}
                   />
                 </div>
               )}

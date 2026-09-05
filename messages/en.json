@@ -33,7 +33,6 @@
     "today": "today",
 
     "enterProductNameError": "Enter a product name for this sale.",
-    "enterQuantityForTracked": "Enter a quantity -- \"{name}\" tracks stock.",
     "expectedPrice": "Expected price: {price}",
     "enterProductName": "Enter Product Name",
     "whatDidCustomerBuy": "What did the customer buy?",

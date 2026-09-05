@@ -92,7 +92,7 @@ export class SalesService {
 
     const { data: product, error: productError } = await this.supabase
       .from("products")
-      .select("name, image_url, expected_price, is_system, tracks_inventory, stock_control_method")
+      .select("name, image_url, expected_price, is_system")
       .eq("id", input.productId)
       .eq("tenant_id", input.tenantId)
       .single();
@@ -106,24 +106,14 @@ export class SalesService {
       throw new Error("Enter a product name for this sale.");
     }
 
-    // Stock deduction (the AFTER INSERT trigger, migration 0067/0069) is
-    // keyed on a real quantity for a QUANTITY-controlled tracked product
-    // -- one with none entered would silently never deduct anything,
-    // quietly drifting the stock ledger. The trigger itself also rejects
-    // this as a hard backstop against a direct API call bypassing this
-    // service; failing fast here just gives a friendlier, pre-insert
-    // error message. A VALUE-controlled tracked product needs no such
-    // check -- the trigger infers an implied quantity from the sale
-    // amount and the product's own selling price when none is given,
-    // per the tenant's own "measure this product by value, not count"
-    // choice (stock_control_method).
-    if (
-      product.tracks_inventory &&
-      product.stock_control_method === "quantity" &&
-      (input.quantity === null || input.quantity === undefined || input.quantity === 0)
-    ) {
-      throw new Error(`Enter a quantity -- "${product.name}" tracks stock.`);
-    }
+    // No quantity requirement here, for any product, regardless of
+    // tracks_inventory/stock_control_method -- the tenant's own Settings
+    // -> Quantity field toggle is the sole authority over whether this
+    // is even asked for (features/sales/components/record-sale-dialog.tsx),
+    // never overridden by a product's own configuration. Stock deduction
+    // (the AFTER INSERT trigger, migration 0071) copes without one: it
+    // infers an implied quantity from the sale amount and the product's
+    // own selling price whenever none is given.
 
     const { data: inserted, error: insertError } = await this.supabase
       .from("sales")

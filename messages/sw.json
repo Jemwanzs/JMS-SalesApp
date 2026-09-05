@@ -33,7 +33,6 @@
     "today": "leo",
 
     "enterProductNameError": "Ingiza jina la bidhaa kwa mauzo haya.",
-    "enterQuantityForTracked": "Ingiza idadi -- \"{name}\" inafuatiliwa kwenye stoo.",
     "expectedPrice": "Bei inayotarajiwa: {price}",
     "enterProductName": "Ingiza Jina la Bidhaa",
     "whatDidCustomerBuy": "Mteja alinunua nini?",
