@@ -33,6 +33,7 @@
     "today": "اليوم",
 
     "enterProductNameError": "أدخل اسم المنتج لهذه العملية.",
+    "enterQuantityForTracked": "أدخل الكمية -- يتم تتبع مخزون \"{name}\" وهذا النشاط التجاري يسجل المخزون بالكمية.",
     "expectedPrice": "السعر المتوقع: {price}",
     "enterProductName": "أدخل اسم المنتج",
     "whatDidCustomerBuy": "ماذا اشترى العميل؟",

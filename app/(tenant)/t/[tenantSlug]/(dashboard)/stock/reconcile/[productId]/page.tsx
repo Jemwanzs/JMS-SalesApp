@@ -7,6 +7,7 @@ import { BusinessDayService } from "@/services/BusinessDayService";
 import { ProductService } from "@/services/ProductService";
 import { StockService } from "@/services/StockService";
 import { assertInventoryEnabled } from "@/lib/inventory/entitlement";
+import { getStockControlMethod } from "@/lib/inventory/stock-control-method";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { resolveActiveLocationId } from "@/lib/tenant/resolve-active-location";
@@ -54,9 +55,10 @@ export default async function ReconcileProductPage({
     : todayString(tenant!.timezone);
 
   const stockService = new StockService(supabase);
+  const stockControlMethod = await getStockControlMethod(supabase, tenantId);
   const [preview, actualRecordedSales] = await Promise.all([
     stockService.getReconciliationPreview(tenantId, productId, today),
-    product.stockControlMethod === "value" ? stockService.getActualRecordedSales(tenantId, productId, today) : Promise.resolve(0),
+    stockControlMethod === "value" ? stockService.getActualRecordedSales(tenantId, productId, today) : Promise.resolve(0),
   ]);
 
   return (
@@ -70,7 +72,7 @@ export default async function ReconcileProductPage({
         productId={productId}
         productName={product.name}
         unitOfMeasure={product.unitOfMeasure}
-        stockControlMethod={product.stockControlMethod}
+        stockControlMethod={stockControlMethod}
         date={today}
         preview={preview}
         actualRecordedSales={actualRecordedSales}

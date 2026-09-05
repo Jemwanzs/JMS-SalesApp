@@ -55,7 +55,6 @@ export function EditProductDialog({
   );
   const [showNameInPhotoView, setShowNameInPhotoView] = useState(product.showNameInPhotoView);
   const [tracksInventory, setTracksInventory] = useState(product.tracksInventory);
-  const [stockControlMethod, setStockControlMethod] = useState(product.stockControlMethod);
   const [costPrice, setCostPrice] = useState(product.costPrice !== null ? String(product.costPrice) : "");
   const [unitOfMeasure, setUnitOfMeasure] = useState(product.unitOfMeasure);
   const [unitOfMeasureIsCustom, setUnitOfMeasureIsCustom] = useState(product.unitOfMeasureIsCustom);
@@ -72,7 +71,6 @@ export function EditProductDialog({
     expectedPrice !== (product.expectedPrice !== null ? String(product.expectedPrice) : "0") ||
     showNameInPhotoView !== product.showNameInPhotoView ||
     tracksInventory !== product.tracksInventory ||
-    stockControlMethod !== product.stockControlMethod ||
     costPrice !== (product.costPrice !== null ? String(product.costPrice) : "") ||
     unitOfMeasure !== product.unitOfMeasure ||
     unitOfMeasureIsCustom !== product.unitOfMeasureIsCustom ||
@@ -125,7 +123,6 @@ export function EditProductDialog({
     formData.set("showNameInPhotoView", String(showNameInPhotoView));
     if (inventoryEnabled) {
       formData.set("tracksInventory", String(tracksInventory));
-      formData.set("stockControlMethod", stockControlMethod);
       formData.set("costPrice", costPrice);
       formData.set("unitOfMeasure", unitOfMeasure ?? "");
       formData.set("unitOfMeasureIsCustom", String(unitOfMeasureIsCustom));
@@ -246,34 +243,6 @@ export function EditProductDialog({
                       onChange={(e) => setCostPrice(e.target.value)}
                       placeholder="What this costs you per unit"
                     />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="font-normal">Stock control method</Label>
-                    <div className="flex gap-2">
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant={stockControlMethod === "quantity" ? "default" : "outline"}
-                        onClick={() => setStockControlMethod("quantity")}
-                        className="flex-1"
-                      >
-                        Quantity
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant={stockControlMethod === "value" ? "default" : "outline"}
-                        onClick={() => setStockControlMethod("value")}
-                        className="flex-1"
-                      >
-                        Value
-                      </Button>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {stockControlMethod === "quantity"
-                        ? "Reconciliation compares counted units against expected units."
-                        : "Reconciliation compares estimated remaining value against expected sales value."}
-                    </p>
                   </div>
                 </>
               )}

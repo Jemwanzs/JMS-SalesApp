@@ -34,9 +34,9 @@ export async function submitReconciliationAction(
   const actualRemainingValueRaw = formData.get("actualRemainingValue");
   const validAdjustmentsValueRaw = formData.get("validAdjustmentsValue");
 
-  // Omitted entirely for a value-controlled product (no physical unit
-  // count) -- the RPC itself enforces that a quantity-controlled product
-  // still requires one (migration 0068), so no client-side requirement
+  // Omitted entirely for a value-controlled tenant (no physical unit
+  // count) -- the RPC itself enforces that a quantity-controlled tenant
+  // still requires one (migration 0072), so no client-side requirement
   // is duplicated here.
   const actualQuantity = actualQuantityRaw && actualQuantityRaw !== "" ? Number(actualQuantityRaw) : null;
 

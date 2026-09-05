@@ -24,6 +24,7 @@ export function RecordSaleDialog({
   locationId,
   businessDayId,
   quantityEnabled,
+  quantityMandatory,
   notesEnabled,
   onOpenChange,
   onRecorded,
@@ -34,6 +35,8 @@ export function RecordSaleDialog({
   locationId: string;
   businessDayId: string;
   quantityEnabled: boolean;
+  /** True when the tenant's Settings -> Inventory Configuration -> "Record Stock By" is set to Quantity -- forces the field visible for every product and required for a tracks_inventory one, per that tenant-wide policy (not a per-product setting). */
+  quantityMandatory: boolean;
   notesEnabled: boolean;
   onOpenChange: (open: boolean) => void;
   onRecorded: (sale: NonNullable<RecordSaleState["sale"]>) => void;
@@ -62,26 +65,32 @@ export function RecordSaleDialog({
     }
   }, [product]);
 
-  // The tenant's own Settings -> Quantity field toggle is the sole
-  // authority here, for every product regardless of tracks_inventory or
-  // stock_control_method -- a tenant who has decided they don't want to
-  // ask staff for a quantity meant that, full stop, not "except for
-  // tracked products." An earlier version of this let a tracked
-  // product's own configuration override the toggle in both directions
-  // (forcing it visible+required for a quantity-controlled product,
-  // forcing it hidden for a value-controlled one) -- reverted after
-  // live feedback: that's the toggle's decision to make, not a per-
-  // product one. Stock deduction (migration 0071) no longer depends on
-  // an explicit quantity either way -- it infers one from the sale
-  // amount and the product's own selling price whenever none is given,
-  // for any tracked product, regardless of control method.
-  const showQuantity = quantityEnabled;
+  // quantityMandatory reflects the tenant-wide Settings -> Inventory
+  // Configuration -> "Record Stock By" choice (Quantity vs Monetary
+  // Value), never a per-product override -- an earlier version let a
+  // tracked product's own configuration override the Quantity field
+  // toggle in both directions, reverted after live feedback: that's the
+  // tenant's own business decision, not a per-product one. When Quantity
+  // is the chosen method, the field is forced visible for every product
+  // (matching Settings' own locked-ON toggle) and required specifically
+  // for a tracks_inventory product (an untracked one has no stock ledger
+  // to need it for). Under Monetary Value (the default), the tenant's
+  // own quantityEnabled preference decides visibility, same as always,
+  // and the field is never required -- stock deduction infers an implied
+  // quantity from the sale amount and the product's own selling price
+  // whenever none is given.
+  const showQuantity = quantityEnabled || quantityMandatory;
+  const quantityRequired = quantityMandatory && (product?.tracksInventory ?? false);
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!product) return;
     if (product.isSystem && !manualProductName.trim()) {
       setError(t("enterProductNameError"));
+      return;
+    }
+    if (quantityRequired && (!quantity || Number(quantity) <= 0)) {
+      setError(t("enterQuantityForTracked", { name: product.name }));
       return;
     }
     setError(null);
@@ -171,7 +180,10 @@ export function RecordSaleDialog({
 
               {showQuantity && (
                 <div className="space-y-2">
-                  <Label htmlFor="quantity">{t("quantity")}</Label>
+                  <Label htmlFor="quantity">
+                    {t("quantity")}
+                    {quantityRequired && " *"}
+                  </Label>
                   <Input
                     id="quantity"
                     type="number"
@@ -179,6 +191,7 @@ export function RecordSaleDialog({
                     step="1"
                     value={quantity}
                     onChange={(e) => setQuantity(e.target.value)}
+                    required={quantityRequired}
                   />
                 </div>
               )}

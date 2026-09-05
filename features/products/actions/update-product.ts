@@ -50,8 +50,6 @@ export async function updateProductAction(
   // ProductService.update() treats as "leave unchanged", not "clear".
   const hasInventoryFields = formData.has("tracksInventory");
   const tracksInventory = hasInventoryFields ? formData.get("tracksInventory") === "true" : undefined;
-  const rawStockControlMethod = hasInventoryFields ? formData.get("stockControlMethod") : undefined;
-  const stockControlMethod = rawStockControlMethod === "value" ? "value" : rawStockControlMethod === "quantity" ? "quantity" : undefined;
   const rawCostPrice = hasInventoryFields ? String(formData.get("costPrice") ?? "").trim() : undefined;
   const costPrice = hasInventoryFields ? (rawCostPrice ? Number(rawCostPrice) : null) : undefined;
   const unitOfMeasureIsCustom = hasInventoryFields ? formData.get("unitOfMeasureIsCustom") === "true" : undefined;
@@ -78,7 +76,6 @@ export async function updateProductAction(
       showExpectedPrice,
       showNameInPhotoView,
       tracksInventory,
-      stockControlMethod,
       costPrice,
       unitOfMeasure,
       unitOfMeasureIsCustom,

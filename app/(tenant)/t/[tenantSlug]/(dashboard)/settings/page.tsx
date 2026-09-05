@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { AnniversaryWishCard } from "@/features/settings/components/anniversary-wish-card";
 import { BranchesCard } from "@/features/settings/components/branches-card";
 import { ExpensesModuleCard } from "@/features/settings/components/expenses-module-card";
+import { InventoryConfigurationCard } from "@/features/settings/components/inventory-configuration-card";
 import { InventoryModuleCard } from "@/features/settings/components/inventory-module-card";
 import { NotesFieldCard } from "@/features/settings/components/notes-field-card";
 import { ProductRankingCard } from "@/features/settings/components/product-ranking-card";
@@ -17,6 +18,7 @@ import { BillingService } from "@/services/BillingService";
 import { LocationService } from "@/services/LocationService";
 import { TenantService } from "@/services/TenantService";
 import { getInventoryEntitlement } from "@/lib/inventory/entitlement";
+import { getStockControlMethod } from "@/lib/inventory/stock-control-method";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
@@ -81,6 +83,7 @@ export default async function SettingsPage({
     stockVarianceTolerancePercent,
     stockVarianceToleranceAmount,
     inventoryEntitlement,
+    stockControlMethod,
   ] = await Promise.all([
     new AnniversaryService(supabase).getWishMode(tenantId),
     tenantService.getSetting<string>(tenantId, "sale_number_template"),
@@ -102,6 +105,7 @@ export default async function SettingsPage({
     tenantService.getSetting<number>(tenantId, "stock_variance_tolerance_percent"),
     tenantService.getSetting<number>(tenantId, "stock_variance_tolerance_amount"),
     getInventoryEntitlement(tenantId),
+    getStockControlMethod(supabase, tenantId),
   ]);
 
   // Matches features/settings/actions/set-inventory-enabled.ts's own
@@ -143,7 +147,12 @@ export default async function SettingsPage({
         initialShowDailyVolume={showDailySalesVolume ?? false}
         initialShowProductPrice={showProductPrice ?? true}
       />
-      <QuantityFieldCard tenantId={tenantId} tenantSlug={tenantSlug} initialEnabled={quantityEnabled ?? true} />
+      <QuantityFieldCard
+        tenantId={tenantId}
+        tenantSlug={tenantSlug}
+        initialEnabled={quantityEnabled ?? true}
+        locked={inventoryEntitlement.enabled && stockControlMethod === "quantity"}
+      />
       <NotesFieldCard tenantId={tenantId} tenantSlug={tenantSlug} initialEnabled={notesFieldEnabled ?? true} />
       <TabsVisibilityCard
         tenantId={tenantId}
@@ -153,6 +162,9 @@ export default async function SettingsPage({
         initialReportsEnabled={reportsEnabled ?? true}
       />
       <ExpensesModuleCard tenantId={tenantId} tenantSlug={tenantSlug} initialEnabled={expensesEnabled ?? false} />
+      {inventoryEntitlement.enabled && (
+        <InventoryConfigurationCard tenantId={tenantId} tenantSlug={tenantSlug} initialMethod={stockControlMethod} />
+      )}
       {inventoryEntitlement.enabled && (
         <StockVarianceToleranceCard
           tenantId={tenantId}

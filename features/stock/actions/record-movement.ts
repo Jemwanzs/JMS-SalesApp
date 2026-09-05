@@ -34,11 +34,24 @@ export async function recordMovementAction(
   formData: FormData
 ): Promise<RecordMovementState> {
   const movementType = String(formData.get("movementType")) as RecordableMovementType;
-  const quantity = Number(formData.get("quantity"));
+  // Exactly one of these is ever sent by the form (quick-stock-entry-
+  // dialog.tsx switches which field it shows based on the tenant's
+  // Inventory Configuration -> Record Stock By choice) -- the other
+  // arrives as "" and is treated as absent, not zero.
+  const quantityRaw = formData.get("quantity");
+  const valueRaw = formData.get("value");
+  const quantity = quantityRaw && quantityRaw !== "" ? Number(quantityRaw) : undefined;
+  const value = valueRaw && valueRaw !== "" ? Number(valueRaw) : undefined;
   const reason = String(formData.get("reason") ?? "").trim();
 
-  if (!Number.isFinite(quantity) || quantity <= 0) {
+  if (quantity === undefined && value === undefined) {
+    return { error: "Enter a quantity or a value" };
+  }
+  if (quantity !== undefined && (!Number.isFinite(quantity) || quantity <= 0)) {
     return { error: "Enter a quantity greater than zero" };
+  }
+  if (value !== undefined && (!Number.isFinite(value) || value <= 0)) {
+    return { error: "Enter a value greater than zero" };
   }
   if (REASON_REQUIRED.has(movementType) && !reason) {
     return { error: "A reason is required for this type of movement" };
@@ -72,6 +85,7 @@ export async function recordMovementAction(
       locationId,
       movementType,
       quantity,
+      value,
       reason: reason || null,
       recordedBy: user.id,
       occurredOn,
@@ -84,7 +98,7 @@ export async function recordMovementAction(
         action: AUDIT_ACTION.STOCK_MOVEMENT_RECORDED,
         entityType: "stock_movements",
         entityId: productId,
-        newValues: { movementType, quantity, reason: reason || null },
+        newValues: { movementType, quantity, value, reason: reason || null },
       })
       .catch(() => {});
 

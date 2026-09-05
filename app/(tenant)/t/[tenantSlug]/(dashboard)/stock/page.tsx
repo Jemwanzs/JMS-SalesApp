@@ -5,6 +5,7 @@ import { StockTabs } from "@/features/stock/components/stock-tabs";
 import { BusinessDayService } from "@/services/BusinessDayService";
 import { StockService } from "@/services/StockService";
 import { getInventoryEntitlement } from "@/lib/inventory/entitlement";
+import { getStockControlMethod } from "@/lib/inventory/stock-control-method";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { resolveActiveLocationId } from "@/lib/tenant/resolve-active-location";
@@ -53,15 +54,17 @@ export default async function StockPage({ params }: { params: Promise<{ tenantSl
     ? (await new BusinessDayService(supabase).getEffectiveBusinessDate(tenantId, activeLocationId)).date
     : todayString(tenant!.timezone);
 
-  const [summary, movementTrend, varianceReport, lowStock, balances, pendingReconciliation, historyEntries] = await Promise.all([
-    stockService.getOverviewSummary(tenantId, overviewRange),
-    stockService.getMovementTrend(tenantId, overviewRange),
-    stockService.getVarianceReport(tenantId, overviewRange),
-    stockService.listLowStock(tenantId),
-    stockService.listBalances(tenantId),
-    canReconcile ? stockService.listPendingReconciliation(tenantId, today) : Promise.resolve([]),
-    stockService.listHistory(tenantId),
-  ]);
+  const [summary, movementTrend, varianceReport, lowStock, balances, pendingReconciliation, historyEntries, stockControlMethod] =
+    await Promise.all([
+      stockService.getOverviewSummary(tenantId, overviewRange),
+      stockService.getMovementTrend(tenantId, overviewRange),
+      stockService.getVarianceReport(tenantId, overviewRange),
+      stockService.listLowStock(tenantId),
+      stockService.listBalances(tenantId),
+      canReconcile ? stockService.listPendingReconciliation(tenantId, today) : Promise.resolve([]),
+      stockService.listHistory(tenantId),
+      getStockControlMethod(supabase, tenantId),
+    ]);
 
   return (
     <div className="flex flex-1 flex-col p-6">
@@ -78,6 +81,7 @@ export default async function StockPage({ params }: { params: Promise<{ tenantSl
         historyEntries={historyEntries}
         canRecord={canRecord}
         canReconcile={canReconcile}
+        stockControlMethod={stockControlMethod}
       />
     </div>
   );

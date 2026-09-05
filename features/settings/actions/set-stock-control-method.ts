@@ -5,17 +5,18 @@ import { revalidatePath } from "next/cache";
 import { AuditService } from "@/services/AuditService";
 import { TenantService } from "@/services/TenantService";
 import { AUDIT_ACTION } from "@/lib/audit/actions";
-import { getStockControlMethod } from "@/lib/inventory/stock-control-method";
+import { assertInventoryEnabled } from "@/lib/inventory/entitlement";
 import { assertCan } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
-export async function setQuantityEnabledAction(
+export async function setStockControlMethodAction(
   tenantId: string,
   tenantSlug: string,
-  enabled: boolean
+  method: "quantity" | "value"
 ): Promise<{ error?: string }> {
   await assertCan("settings.manage", { tenantId });
+  await assertInventoryEnabled(tenantId, "write");
 
   const supabase = await createClient();
   const {
@@ -26,20 +27,18 @@ export async function setQuantityEnabledAction(
     return { error: "Not signed in" };
   }
 
-  // Backstop against the Settings UI being bypassed directly -- when
-  // Inventory Configuration records stock by quantity, this toggle is
-  // locked ON in the UI (quantity-field-card.tsx); reject a direct
-  // attempt to turn it off rather than silently letting the ledger
-  // start missing quantities again.
-  if (!enabled) {
-    const method = await getStockControlMethod(supabase, tenantId);
-    if (method === "quantity") {
-      return { error: "Quantity can't be turned off while Inventory Configuration records stock by quantity." };
-    }
-  }
-
   try {
-    await new TenantService(supabase).setSetting(tenantId, "quantity_enabled", enabled, user.id);
+    const tenantService = new TenantService(supabase);
+    await tenantService.setSetting(tenantId, "stock_control_method", method, user.id);
+
+    // Quantity mode requires the Quantity field toggle locked ON (see
+    // quantity-field-card.tsx's own `locked` prop) -- flip it here too
+    // so a tenant switching TO quantity mode doesn't land in the
+    // inconsistent state of "mandatory but the toggle still says off"
+    // until they happen to revisit that other card.
+    if (method === "quantity") {
+      await tenantService.setSetting(tenantId, "quantity_enabled", true, user.id);
+    }
 
     await new AuditService(createServiceRoleClient())
       .log({
@@ -47,13 +46,14 @@ export async function setQuantityEnabledAction(
         actorProfileId: user.id,
         action: AUDIT_ACTION.TENANT_SETTING_CHANGED,
         entityType: "tenant_settings",
-        entityId: "quantity_enabled",
-        newValues: { quantity_enabled: enabled },
+        entityId: "stock_control_method",
+        newValues: { stock_control_method: method },
       })
       .catch(() => {});
 
     revalidatePath(`/t/${tenantSlug}/settings`);
     revalidatePath(`/t/${tenantSlug}/sales`);
+    revalidatePath(`/t/${tenantSlug}/stock`);
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Could not save this setting" };

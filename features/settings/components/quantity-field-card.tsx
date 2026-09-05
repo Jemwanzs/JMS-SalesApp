@@ -12,12 +12,15 @@ export function QuantityFieldCard({
   tenantId,
   tenantSlug,
   initialEnabled,
+  locked = false,
 }: {
   tenantId: string;
   tenantSlug: string;
   initialEnabled: boolean;
+  /** Inventory Configuration -> Record Stock By is set to Quantity: the field is mandatory for tracked products, so this toggle is locked ON and can't be turned off here. */
+  locked?: boolean;
 }) {
-  const [enabled, setEnabled] = useState(initialEnabled);
+  const [enabled, setEnabled] = useState(locked ? true : initialEnabled);
   const [isPending, startTransition] = useTransition();
 
   function onToggle(next: boolean) {
@@ -38,7 +41,7 @@ export function QuantityFieldCard({
       <CardHeader>
         <CardTitle>Quantity field</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-2">
         <div className="flex items-center justify-between gap-3">
           <Label htmlFor="quantity-toggle" className="font-normal text-muted-foreground">
             Ask for a quantity when recording a sale. When off, only the sale amount is recorded.
@@ -46,10 +49,15 @@ export function QuantityFieldCard({
           <Switch
             id="quantity-toggle"
             checked={enabled}
-            disabled={isPending}
+            disabled={isPending || locked}
             onCheckedChange={onToggle}
           />
         </div>
+        {locked && (
+          <p className="text-xs text-muted-foreground">
+            Locked on because Inventory Configuration records stock by quantity -- switch that to Monetary Value to make this optional again.
+          </p>
+        )}
       </CardContent>
     </Card>
   );

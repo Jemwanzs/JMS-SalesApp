@@ -46,9 +46,15 @@ The sign convention lives in exactly one place (`StockService.recordMovement`'s 
 
 Every row also carries `unit_cost_snapshot`/`unit_price_snapshot` (migration `0067`), copied from the product's `cost_price`/`expected_price` **at the moment of the movement**, never re-derived from the product's current price later. This is what lets every monetary figure downstream (Overview cards, value-based reconciliation, reports) stay accurate even after a product's price changes — the movement already knows what it was worth when it happened.
 
-## Cost price & per-product control method
+## Cost price & tenant-wide control method
 
-`products.cost_price` (nullable) is the acquisition/purchase cost per unit — distinct from the existing `expected_price` (selling price). `products.stock_control_method` (`'quantity'` default, or `'value'`) is a per-product **reporting preference, not a second ledger**: both methods write to the exact same `stock_movements` table with the exact same signed `quantity` column. A quantity-controlled product's Reconciliation/Overview views foreground units (opening/in/out/expected-closing in the product's own unit of measure); a value-controlled product's views foreground currency, computed by multiplying each movement's own quantity by its own snapshot price — never a duplicate source of truth for the balance itself.
+`products.cost_price` (nullable) is the acquisition/purchase cost per unit — distinct from the existing `expected_price` (selling price), and still a per-product field (some products cost more than others).
+
+`stock_control_method` (`tenant_settings`, `'value'` default when unset, or `'quantity'`) is a **tenant-wide policy, not a per-product one** (migration `0072`) — set once under Settings → Inventory Configuration → "Record Stock By", it governs every tracked product uniformly. An earlier revision made this a per-product column; reverted after live feedback, since a business tracks its stock by value or by count as one coherent decision, not product-by-product, and a per-product setting was exactly what let a product's own configuration silently override the tenant's own Settings toggle. `lib/inventory/stock-control-method.ts`'s `getStockControlMethod()` is the one place the `'value'` default is decided — every reader (Sales, Stock In/Adjust, Reconciliation, Settings) goes through it.
+
+Both methods still write to the exact same `stock_movements` table with the exact same signed `quantity` column — this is a **reporting/input lens, not a second ledger**. A quantity tenant's Reconciliation/Stock In/Adjust screens foreground units; a value tenant's screens foreground currency (Stock In/Adjust ask for a value directly, converted to the ledger's underlying quantity via the product's own selling price — the same conversion Sales already uses, see below) — computed by multiplying each movement's own quantity by its own snapshot price, never a duplicate source of truth for the balance itself.
+
+Choosing Quantity locks the Settings → "Quantity field" toggle ON (`quantity-field-card.tsx`'s `locked` prop, enforced again server-side in `set-quantity-enabled.ts` as a backstop) — quantity becomes mandatory for a tracked product's sale under that policy. Choosing Monetary Value (the default) leaves that toggle a free, ordinary preference.
 
 ## Daily reconciliation
 
@@ -68,7 +74,7 @@ Expected Sales Value − Actual Recorded Sales − Actual Remaining Value − Va
 
 `Actual Recorded Sales` is real revenue (`sales.actual_amount`, excluding voided/corrected originals — the same exclusion every gross-sales aggregate in this app already applies), not a theoretical full-price figure — so a legitimate discount shows up as an accounted-for gap, not phantom variance. `Actual Remaining Value` and `Valid Adjustments` (discounts/damage/spoilage/complimentary/etc., already reflected in the ledger for the day) are what the reconciler enters; only what's left over after subtracting both becomes the real, unexplained variance — the reconciliation never assumes every difference is theft or loss.
 
-A quantity variance of exactly zero needs no reason and writes no offsetting ledger row; any nonzero variance requires a reason. `stock_reconciliations.actual_quantity` is nullable (migration `0068`) — required and enforced server-side for a quantity-controlled product, left null for a value-controlled one (which has no physical unit count at all).
+A quantity variance of exactly zero needs no reason and writes no offsetting ledger row; any nonzero variance requires a reason. `stock_reconciliations.actual_quantity` is nullable (migration `0068`) — required and enforced server-side for a quantity-controlled tenant, left null for a value-controlled one (which has no physical unit count at all).
 
 Every reconciliation also gets a `status` (`balanced` / `within_tolerance` / `variance` / `material_variance`), computed and **stored** at write time against whatever the tenant's variance-tolerance setting was at that moment (`tenant_settings.stock_variance_tolerance_percent`/`_amount`, sensible built-in defaults when unset) — never recomputed on read, so a later tolerance change can't retroactively reclassify old history.
 
@@ -83,7 +89,12 @@ Recording, voiding, correcting, or reversing a sale of a `tracks_inventory` prod
 
 A partial unique index (`tenant_id, product_id, reference_id, movement_type` where `reference_type = 'sale'`) makes both triggers idempotent via `on conflict do nothing` — a retried write can never deduct or restore the same sale's stock twice.
 
-`sales.quantity` stays exactly what it always was — optional, "informational only" (`08-sales-engine.md`), shown or hidden purely by the tenant's own Settings → Quantity field toggle (`quantity_enabled`). Two earlier revisions of this integration let a product's own `stock_control_method` override that toggle (forcing the field visible/required for a quantity-controlled product, or hidden for a value-controlled one) — both reverted after live feedback: the toggle is the tenant's own business decision, never a per-product override in either direction. Stock deduction copes without a quantity for ANY tracked product regardless of control method (migration `0071`): a given quantity is used as-is; when none is given, the insert trigger infers an implied quantity from `actual_amount / products.expected_price` (raising a clear error only if the product has no selling price to convert from). The tenant's one system "Others" product (free-text sales) can never be `tracks_inventory = true`, so ad-hoc sales are automatically excluded with no special-casing anywhere in this integration.
+`sales.quantity` — optional, "informational only" (`08-sales-engine.md`) by default — is governed by two settings working together, both tenant-wide, neither ever overridden by a product's own configuration (that was tried per-product in two earlier revisions and reverted both times after live feedback):
+
+- **Monetary Value** (the default): the ordinary Settings → Quantity field toggle (`quantity_enabled`) decides visibility, exactly as before Inventory existed. Never required. Stock deduction copes fine without one — the insert trigger infers an implied quantity from `actual_amount / products.expected_price` (raising a clear error only if the product has no selling price to convert from).
+- **QTY**: the field is forced visible for every product (the toggle is locked ON in Settings) and **required specifically for a `tracks_inventory` product** — an untracked one has no stock ledger to need it for. The insert trigger enforces this as a hard backstop (migration `0072`) against a direct API call bypassing the UI/`SalesService` layers.
+
+The tenant's one system "Others" product (free-text sales) can never be `tracks_inventory = true`, so ad-hoc sales are automatically excluded from the mandatory-quantity rule with no special-casing anywhere in this integration.
 
 ## Permissions
 
@@ -92,15 +103,16 @@ A partial unique index (`tenant_id, product_id, reference_id, movement_type` whe
 ## UI surface
 
 - **Settings → Modules** — the on/off toggle, gated behind a confirmation dialog whose copy (trial vs. re-enable vs. real checkout) is computed server-side using the exact same branching the enable action itself uses, so the dialog never promises a free trial the action won't actually grant.
+- **Settings → Inventory Configuration** (shown only once genuinely entitled) — the tenant-wide "Record Stock By" choice (`inventory-configuration-card.tsx`); switching to Quantity also locks the Quantity field toggle on (`quantity-field-card.tsx`'s `locked` prop) and flips `quantity_enabled` on server-side (`set-stock-control-method.ts`) so the two settings can never drift apart.
 - **Bottom nav "Stock"** — still exactly one nav item (unchanged) — appears only once both `inventory.view` and the entitlement above are satisfied; a direct URL hit without entitlement redirects cleanly (`assertInventoryEnabled`), it doesn't error.
 - **`/stock`** — a single page with six internal sub-tabs (`components/ui/tabs.tsx`, the same Base UI wrapper Analytics already uses for its Products/User-Performance tabs), all data fetched server-side up front so tab switching is instant, no per-tab round trip:
   - **Overview** — summary cards (`StockService.getOverviewSummary`: current stock, stock value, products tracked, low/out of stock, stock added/sold, damaged-lost-adjusted, expected vs. actual sales, stock variance — the set the spec explicitly asked for, not every number that could theoretically be shown), plus the trend chart, variance list, and low-stock list that used to live on the separate `/stock/reports` page (that route still works, just no longer linked — nothing was deleted).
   - **Items** — the original per-product balance list, unchanged (`StockDashboardList`).
-  - **Stock In** / **Adjust** — a searchable product picker; tapping a product opens the same `QuickStockEntryDialog` every per-product quick action already uses (`StockActionList`), scoped to the tab's relevant movement types (opening stock/stock in vs. stock out/adjust/damaged/expired/lost).
+  - **Stock In** / **Adjust** — a searchable product picker; tapping a product opens the same `QuickStockEntryDialog` every per-product quick action already uses (`StockActionList`), scoped to the tab's relevant movement types (opening stock/stock in vs. stock out/adjust/damaged/expired/lost). The dialog's one amount field asks for a quantity or a value depending on the tenant's `stock_control_method` (`StockService.recordMovement` accepts either, converting a value to the ledger's quantity via the product's selling price when given one).
   - **Reconcile** — today's queue (`ReconciliationQueueList`, shared with the still-working standalone `/stock/reconcile` route), tapping through to the full-screen reconciliation form.
   - **History** — a tenant-wide, filterable feed of every stock-changing event across every tracked product (`StockService.listHistory` / `StockHistoryList`) — search by product, filter by event type.
 - **`/stock/[productId]`** — unchanged: balance, quick-action buttons, movement history for one product.
-- **`/stock/reconcile/[productId]`** — the full-screen reconciliation form, now branching on the product's `stock_control_method`: the original quantity form for `'quantity'`, a new value form (Opening/Added/Expected Sales Value, real recorded sales, an "actual remaining value" + "valid adjustments" entry, unexplained variance) for `'value'`.
+- **`/stock/reconcile/[productId]`** — the full-screen reconciliation form, branching on the tenant's `stock_control_method`: the original quantity form for `'quantity'`, a value form (Opening/Added/Expected Sales Value, real recorded sales, an "actual remaining value" + "valid adjustments" entry, unexplained variance) for `'value'`.
 
 ## Barcode/QR readiness
 

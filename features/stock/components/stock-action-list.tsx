@@ -23,12 +23,14 @@ export function StockActionList({
   balances,
   actions,
   emptyLabel,
+  stockControlMethod,
 }: {
   tenantId: string;
   tenantSlug: string;
   balances: StockBalanceRow[];
   actions: { type: RecordableMovementType; label: string }[];
   emptyLabel: string;
+  stockControlMethod: "quantity" | "value";
 }) {
   const [search, setSearch] = useState("");
   const [pickerProduct, setPickerProduct] = useState<StockBalanceRow | null>(null);
@@ -110,6 +112,7 @@ export function StockActionList({
         productId={activeProduct?.productId ?? ""}
         productName={activeProduct?.productName ?? ""}
         unitOfMeasure={activeProduct?.unitOfMeasure ?? null}
+        stockControlMethod={stockControlMethod}
         movementType={activeProduct ? activeType : null}
         onOpenChange={(open) => {
           if (!open) {

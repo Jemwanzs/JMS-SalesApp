@@ -350,7 +350,6 @@ export interface Database {
           low_stock_threshold: number | null;
           /** Robust Stock Management (migration 0067). */
           cost_price: number | null;
-          stock_control_method: "quantity" | "value";
         };
         Insert: Partial<Database["public"]["Tables"]["products"]["Row"]> & {
           tenant_id: string;
@@ -430,13 +429,13 @@ export interface Database {
           stock_in_quantity: number;
           stock_out_quantity: number;
           expected_closing_quantity: number;
-          /** Nullable since migration 0068 -- a value-controlled product's reconciliation has no physical unit count. */
+          /** Nullable since migration 0068 -- a value-tenant's reconciliation has no physical unit count. */
           actual_quantity: number | null;
           variance: number | null;
           variance_reason: string | null;
           recorded_by: string;
           created_at: string;
-          /** Robust Stock Management (migration 0067) -- value-side, populated only for stock_control_method = 'value' products. */
+          /** Robust Stock Management (migration 0067/0072) -- value-side, populated only when the tenant's stock_control_method setting is 'value'. */
           opening_value: number | null;
           stock_added_value: number | null;
           expected_sales_value: number | null;

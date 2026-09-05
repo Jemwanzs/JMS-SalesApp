@@ -7,6 +7,7 @@ import { StockProductDetail } from "@/features/stock/components/stock-product-de
 import { ProductService } from "@/services/ProductService";
 import { StockService } from "@/services/StockService";
 import { assertInventoryEnabled } from "@/lib/inventory/entitlement";
+import { getStockControlMethod } from "@/lib/inventory/stock-control-method";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { getTenantBySlug } from "@/lib/tenant/resolve-tenant-by-slug";
@@ -49,9 +50,10 @@ export default async function StockProductDetailPage({
     notFound();
   }
 
-  const [balance, movements] = await Promise.all([
+  const [balance, movements, stockControlMethod] = await Promise.all([
     stockService.getBalance(tenantId, productId),
     stockService.listMovementHistory(tenantId, productId),
+    getStockControlMethod(supabase, tenantId),
   ]);
 
   return (
@@ -71,6 +73,7 @@ export default async function StockProductDetailPage({
         balance={balance}
         movements={movements}
         canRecord={canRecord}
+        stockControlMethod={stockControlMethod}
       />
     </div>
   );

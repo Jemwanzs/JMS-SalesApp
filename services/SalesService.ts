@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database, SaleStatus, VoidOrCorrectResult } from "@/types/database.types";
+import { getStockControlMethod } from "@/lib/inventory/stock-control-method";
 import { cleanProductName } from "@/lib/utils/normalize-product-name";
 
 /**
@@ -92,7 +93,7 @@ export class SalesService {
 
     const { data: product, error: productError } = await this.supabase
       .from("products")
-      .select("name, image_url, expected_price, is_system")
+      .select("name, image_url, expected_price, is_system, tracks_inventory")
       .eq("id", input.productId)
       .eq("tenant_id", input.tenantId)
       .single();
@@ -106,14 +107,23 @@ export class SalesService {
       throw new Error("Enter a product name for this sale.");
     }
 
-    // No quantity requirement here, for any product, regardless of
-    // tracks_inventory/stock_control_method -- the tenant's own Settings
-    // -> Quantity field toggle is the sole authority over whether this
-    // is even asked for (features/sales/components/record-sale-dialog.tsx),
-    // never overridden by a product's own configuration. Stock deduction
-    // (the AFTER INSERT trigger, migration 0071) copes without one: it
-    // infers an implied quantity from the sale amount and the product's
-    // own selling price whenever none is given.
+    // The tenant's own Settings -> Inventory Configuration -> "Record
+    // Stock By" choice, not a per-product setting, decides whether a
+    // quantity is mandatory -- and only for a tracked product, since an
+    // untracked one has no stock ledger to deduct from either way. The
+    // insert trigger (migration 0072) enforces this same rule as a hard
+    // backstop against a direct API call bypassing this service.
+    if (product.tracks_inventory && (input.quantity === null || input.quantity === undefined || input.quantity === 0)) {
+      const method = await getStockControlMethod(this.supabase, input.tenantId);
+      if (method === "quantity") {
+        throw new Error(`Enter a quantity -- "${product.name}" tracks stock and this tenant records stock by quantity.`);
+      }
+    }
+
+    // For a value-controlled tenant (the default), stock deduction copes
+    // fine without a quantity here -- the insert trigger infers one from
+    // the sale amount and the product's own selling price when none is
+    // given.
 
     const { data: inserted, error: insertError } = await this.supabase
       .from("sales")

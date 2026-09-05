@@ -33,6 +33,7 @@
     "today": "aujourd'hui",
 
     "enterProductNameError": "Saisissez un nom de produit pour cette vente.",
+    "enterQuantityForTracked": "Saisissez une quantité -- « {name} » fait l'objet d'un suivi de stock et cette entreprise enregistre le stock par quantité.",
     "expectedPrice": "Prix prévu : {price}",
     "enterProductName": "Saisir le nom du produit",
     "whatDidCustomerBuy": "Qu'est-ce que le client a acheté ?",

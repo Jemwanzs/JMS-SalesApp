@@ -18,6 +18,8 @@ import { PlatformAdminService } from "@/services/PlatformAdminService";
 import { ProductService } from "@/services/ProductService";
 import { TenantService } from "@/services/TenantService";
 import { LOCALE_BCP47, type SupportedLocale } from "@/lib/i18n/config";
+import { getInventoryEntitlement } from "@/lib/inventory/entitlement";
+import { getStockControlMethod } from "@/lib/inventory/stock-control-method";
 import { can } from "@/lib/permissions/can";
 import { todayString, trailingDaysRange } from "@/lib/utils/date-ranges";
 import { rankProducts } from "@/lib/utils/product-ranking";
@@ -277,7 +279,7 @@ async function SalesCaptureBody({
   const productService = new ProductService(supabase);
   const tenantService = new TenantService(supabase);
 
-  const [products, settings] = await Promise.all([
+  const [products, settings, inventoryEntitlement, stockControlMethod] = await Promise.all([
     productService.listActive(tenantId),
     tenantService.getSettings(tenantId, [
       "product_ranking_enabled",
@@ -286,6 +288,8 @@ async function SalesCaptureBody({
       "quantity_enabled",
       "notes_field_enabled",
     ]),
+    getInventoryEntitlement(tenantId),
+    getStockControlMethod(supabase, tenantId),
   ]);
 
   const rankingEnabled = (settings.product_ranking_enabled as boolean | undefined) ?? true;
@@ -293,6 +297,12 @@ async function SalesCaptureBody({
   const showProductPrice = (settings.show_product_price_on_landing as boolean | undefined) ?? true;
   const quantityEnabled = (settings.quantity_enabled as boolean | undefined) ?? true;
   const notesEnabled = (settings.notes_field_enabled as boolean | undefined) ?? true;
+  // Settings -> Inventory Configuration -> "Record Stock By": the
+  // tenant-wide policy, not a per-product one (docs/21). Only meaningful
+  // once Inventory is genuinely entitled -- a tenant without the module
+  // enabled at all sees exactly the pre-Inventory Sales experience,
+  // regardless of whatever this setting happens to hold.
+  const quantityMandatory = inventoryEntitlement.enabled && stockControlMethod === "quantity";
 
   let rankedProducts: ReturnType<typeof rankProducts> = products.map((p) => ({
     ...p,
@@ -350,6 +360,7 @@ async function SalesCaptureBody({
         todayRevenue={todayRevenue}
         showProductPrice={showProductPrice}
         quantityEnabled={quantityEnabled}
+        quantityMandatory={quantityMandatory}
         notesEnabled={notesEnabled}
         tenantId={tenantId}
         tenantSlug={tenantSlug}

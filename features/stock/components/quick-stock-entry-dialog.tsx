@@ -51,6 +51,7 @@ export function QuickStockEntryDialog({
   productId,
   productName,
   unitOfMeasure,
+  stockControlMethod,
   movementType,
   onOpenChange,
 }: {
@@ -59,16 +60,19 @@ export function QuickStockEntryDialog({
   productId: string;
   productName: string;
   unitOfMeasure: string | null;
+  /** Settings -> Inventory Configuration's tenant-wide choice -- decides whether this dialog asks for a unit count or a currency value. */
+  stockControlMethod: "quantity" | "value";
   movementType: RecordableMovementType | null;
   onOpenChange: (open: boolean) => void;
 }) {
   const [isPending, startTransition] = useTransition();
-  const [quantity, setQuantity] = useState("");
+  const [amount, setAmount] = useState("");
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const byValue = stockControlMethod === "value";
 
   function reset() {
-    setQuantity("");
+    setAmount("");
     setReason("");
     setError(null);
   }
@@ -86,7 +90,8 @@ export function QuickStockEntryDialog({
 
     const formData = new FormData();
     formData.set("movementType", movementType);
-    formData.set("quantity", quantity);
+    formData.set(byValue ? "value" : "quantity", amount);
+    formData.set(byValue ? "quantity" : "value", "");
     formData.set("reason", reason);
 
     startTransition(async () => {
@@ -121,15 +126,15 @@ export function QuickStockEntryDialog({
 
             <form onSubmit={onSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="stock-quantity">Quantity{unitOfMeasure ? ` (${unitOfMeasure})` : ""}</Label>
+                <Label htmlFor="stock-amount">{byValue ? "Value" : `Quantity${unitOfMeasure ? ` (${unitOfMeasure})` : ""}`}</Label>
                 <Input
-                  id="stock-quantity"
+                  id="stock-amount"
                   type="number"
                   inputMode="decimal"
                   min="0.001"
-                  step="0.001"
-                  value={quantity}
-                  onChange={(e) => setQuantity(e.target.value)}
+                  step={byValue ? "0.01" : "0.001"}
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
                   autoFocus
                   required
                 />

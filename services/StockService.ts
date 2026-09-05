@@ -31,8 +31,18 @@ export interface RecordMovementInput {
   productId: string;
   locationId?: string | null;
   movementType: RecordableMovementType;
-  /** Always a positive magnitude -- the sign is derived from movementType, never supplied by the caller. */
-  quantity: number;
+  /**
+   * Always a positive magnitude -- the sign is derived from
+   * movementType, never supplied by the caller. Exactly one of
+   * quantity/value must be given: under the tenant's Monetary Value
+   * policy (Settings -> Inventory Configuration), the caller sends
+   * `value` instead, and this converts it to the ledger's underlying
+   * quantity via the product's own selling price -- same conversion
+   * migration 0072's sale-insert trigger already uses, so a value
+   * entered here and a sale of the same amount deduct identically.
+   */
+  quantity?: number;
+  value?: number;
   reason?: string | null;
   recordedBy: string;
   /**
@@ -159,8 +169,14 @@ export class StockService {
   constructor(private readonly supabase: SupabaseClient<Database>) {}
 
   async recordMovement(tenantId: string, input: RecordMovementInput): Promise<void> {
-    if (input.quantity <= 0) {
+    if (input.quantity === undefined && input.value === undefined) {
+      throw new Error("StockService.recordMovement: enter a quantity or a value");
+    }
+    if (input.quantity !== undefined && input.quantity <= 0) {
       throw new Error("StockService.recordMovement: quantity must be a positive magnitude");
+    }
+    if (input.value !== undefined && input.value <= 0) {
+      throw new Error("StockService.recordMovement: value must be a positive magnitude");
     }
 
     const { data: product, error: productError } = await this.supabase
@@ -177,7 +193,15 @@ export class StockService {
       throw new Error("The system catch-all product doesn't carry stock -- pick a real product.");
     }
 
-    const signedQuantity = INCREASES_BALANCE.has(input.movementType) ? input.quantity : -input.quantity;
+    let quantityMagnitude = input.quantity;
+    if (quantityMagnitude === undefined) {
+      if (!product.expected_price) {
+        throw new Error(`Set a selling price for "${product.name}" so its value can be converted to stock quantity.`);
+      }
+      quantityMagnitude = input.value! / product.expected_price;
+    }
+
+    const signedQuantity = INCREASES_BALANCE.has(input.movementType) ? quantityMagnitude : -quantityMagnitude;
 
     const { error } = await this.supabase.from("stock_movements").insert({
       tenant_id: tenantId,

@@ -27,6 +27,7 @@ export function StockProductDetail({
   balance,
   movements,
   canRecord,
+  stockControlMethod,
 }: {
   tenantId: string;
   tenantSlug: string;
@@ -36,6 +37,7 @@ export function StockProductDetail({
   balance: number;
   movements: StockMovementRow[];
   canRecord: boolean;
+  stockControlMethod: "quantity" | "value";
 }) {
   const [activeType, setActiveType] = useState<RecordableMovementType | null>(null);
 
@@ -69,6 +71,7 @@ export function StockProductDetail({
         productId={productId}
         productName={productName}
         unitOfMeasure={unitOfMeasure}
+        stockControlMethod={stockControlMethod}
         movementType={activeType}
         onOpenChange={(open) => !open && setActiveType(null)}
       />

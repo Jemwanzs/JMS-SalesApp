@@ -42,6 +42,7 @@ export function StockTabs({
   historyEntries,
   canRecord,
   canReconcile,
+  stockControlMethod,
 }: {
   tenantId: string;
   tenantSlug: string;
@@ -54,6 +55,7 @@ export function StockTabs({
   historyEntries: StockHistoryEntry[];
   canRecord: boolean;
   canReconcile: boolean;
+  stockControlMethod: "quantity" | "value";
 }) {
   return (
     <Tabs defaultValue="overview">
@@ -114,6 +116,7 @@ export function StockTabs({
             balances={balances}
             actions={STOCK_IN_ACTIONS}
             emptyLabel="No tracked products yet -- add one from Products first."
+            stockControlMethod={stockControlMethod}
           />
         </TabsContent>
       )}
@@ -126,6 +129,7 @@ export function StockTabs({
             balances={balances}
             actions={ADJUST_ACTIONS}
             emptyLabel="No tracked products yet -- add one from Products first."
+            stockControlMethod={stockControlMethod}
           />
         </TabsContent>
       )}
