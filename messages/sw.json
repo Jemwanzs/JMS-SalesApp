@@ -71,13 +71,11 @@
     "heading": "Historia ya Mauzo",
 
     "today": "Leo",
+    "yesterday": "Jana",
     "showingTodayDefault": "Inaonyesha mauzo ya leo kwa default",
-    "from": "Kutoka",
-    "to": "Hadi",
-    "searchLabel": "Tafuta (namba ya mauzo au bidhaa)",
-    "searchPlaceholder": "SALE-2026-000012 au jina la bidhaa",
-    "applying": "Inatuma...",
-    "apply": "Tuma",
+    "selectDate": "Chagua tarehe",
+    "filterByProduct": "Chuja kwa bidhaa",
+    "allProducts": "Bidhaa zote",
     "clear": "Futa",
 
     "exporting": "Inahamisha...",

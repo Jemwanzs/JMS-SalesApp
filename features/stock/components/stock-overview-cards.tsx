@@ -115,15 +115,23 @@ export function StockOverviewCards({
       explanation: "Opening Stock Value + New Stock Value -- what the stock available on this date would sell for if all of it moved.",
     },
     actualSales: {
-      label: "Actual Sales",
+      // Deliberately scoped to tracked products only -- a sale recorded
+      // through the free-text "Others" catch-all has no stock ledger to
+      // compare against (it can never be tracks_inventory), so including
+      // it here would make Variance meaningless for real stock analysis.
+      // Labeled explicitly so this never reads as a mismatch against the
+      // business's overall sales total shown elsewhere (Reports/
+      // Analytics/Sales History) -- it's a real, permanent subset, not a
+      // bug when the two numbers differ.
+      label: "Actual Sales (Tracked)",
       value: summary.actualSalesValue.toFixed(2),
-      explanation: "Real recorded revenue (excluding voided/corrected sales) for tracked products on this date.",
+      explanation: "Real recorded revenue (excluding voided/corrected sales) for TRACKED products only, on this date -- a sale of an untracked or \"Others\" free-text product isn't included, since there's no stock movement to compare it against. The business's overall sales total (Reports/Analytics/Sales History) can be higher than this figure; that's expected, not a mismatch.",
     },
     variance: {
-      label: "Variance",
+      label: "Variance (Tracked)",
       value: summary.varianceValue.toFixed(2),
       tone: Math.abs(summary.varianceValue) > 0 ? "warning" : "default",
-      explanation: "Expected Sales − Actual Sales. A positive figure is stock that should have sold but didn't yet (or was lost/adjusted) -- check Reconcile for the per-product breakdown.",
+      explanation: "Expected Sales − Actual Sales, both scoped to tracked products. A positive figure is stock that should have sold but didn't yet (or was lost/adjusted) -- check Reconcile for the per-product breakdown.",
     },
   };
 

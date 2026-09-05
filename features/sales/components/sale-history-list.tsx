@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 
@@ -44,7 +44,7 @@ function ExportCsvButton({
   requiresPasscode,
 }: {
   tenantId: string;
-  filters: { from?: string; to?: string; q?: string };
+  filters: { from?: string; to?: string; productId?: string };
   requiresPasscode: boolean;
 }) {
   const [isPending, startTransition] = useTransition();
@@ -147,10 +147,24 @@ export function SaleHistoryList({
   canEditWindow: boolean;
   canCorrectHistorical: boolean;
   requiresDownloadPasscode: boolean;
-  filters: { from?: string; to?: string; q?: string };
+  filters: { from?: string; to?: string; productId?: string };
 }) {
   const [items, setItems] = useState(sales);
   const t = useTranslations("SalesHistory");
+
+  // `items` starts as a local copy of `sales` so void/correct can update a
+  // row optimistically without waiting on a round trip -- but that means
+  // it goes stale the moment the SERVER sends a genuinely new `sales`
+  // array (changing the date/product filter, which re-renders this whole
+  // page server-side): useState's initializer only runs once, so without
+  // this the list kept showing whatever was on screen when the component
+  // first mounted, "No sales match" included, even after a filter change
+  // brought back real rows. Resyncing on every new `sales` reference is
+  // correct here since a fresh filter result should always win over an
+  // in-flight optimistic edit.
+  useEffect(() => {
+    setItems(sales);
+  }, [sales]);
 
   function onResolved(saleId: string, result: VoidOrCorrectResult) {
     if (result.status === "pending_approval") {

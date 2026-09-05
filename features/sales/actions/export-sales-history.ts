@@ -32,7 +32,7 @@ export interface ExportSalesHistoryState {
  */
 export async function exportSalesHistoryCsvAction(
   tenantId: string,
-  filters: { from?: string; to?: string; q?: string },
+  filters: { from?: string; to?: string; productId?: string },
   passcode: string | null
 ): Promise<ExportSalesHistoryState> {
   const supabase = await createClient();
@@ -76,12 +76,12 @@ export async function exportSalesHistoryCsvAction(
     passcodeVerifiedAt = new Date().toISOString();
   }
 
-  const hasFilters = Boolean(filters.from || filters.to || filters.q);
+  const hasFilters = Boolean(filters.from || filters.to || filters.productId);
   const sales = await new SalesService(supabase).listRecent(tenantId, {
     limit: hasFilters ? 500 : 100,
     dateFrom: filters.from,
     dateTo: filters.to,
-    search: filters.q,
+    productId: filters.productId,
   });
 
   const csv = toCsv([

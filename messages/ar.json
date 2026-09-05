@@ -71,13 +71,11 @@
     "heading": "سجل المبيعات",
 
     "today": "اليوم",
+    "yesterday": "أمس",
     "showingTodayDefault": "يعرض مبيعات اليوم افتراضيًا",
-    "from": "من",
-    "to": "إلى",
-    "searchLabel": "بحث (رقم البيع أو المنتج)",
-    "searchPlaceholder": "SALE-2026-000012 أو اسم المنتج",
-    "applying": "جارٍ التطبيق...",
-    "apply": "تطبيق",
+    "selectDate": "اختر التاريخ",
+    "filterByProduct": "تصفية حسب المنتج",
+    "allProducts": "كل المنتجات",
     "clear": "مسح",
 
     "exporting": "جارٍ التصدير...",

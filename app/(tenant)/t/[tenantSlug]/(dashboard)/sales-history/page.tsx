@@ -5,10 +5,11 @@ import { notFound, redirect } from "next/navigation";
 import { SaleHistoryFilters } from "@/features/sales/components/sale-history-filters";
 import { SaleHistoryList } from "@/features/sales/components/sale-history-list";
 import { BusinessDayService } from "@/services/BusinessDayService";
+import { ProductService } from "@/services/ProductService";
 import { SalesService } from "@/services/SalesService";
 import { TenantService } from "@/services/TenantService";
 import { can } from "@/lib/permissions/can";
-import { todayString } from "@/lib/utils/date-ranges";
+import { subtractDays, todayString } from "@/lib/utils/date-ranges";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
 import { resolveActiveLocationId } from "@/lib/tenant/resolve-active-location";
@@ -45,10 +46,10 @@ export default async function SalesHistoryPage({
   searchParams,
 }: {
   params: Promise<{ tenantSlug: string }>;
-  searchParams: Promise<{ from?: string; to?: string; q?: string }>;
+  searchParams: Promise<{ from?: string; to?: string; productId?: string }>;
 }) {
   const { tenantSlug } = await params;
-  const { from, to, q } = await searchParams;
+  const { from, to, productId } = await searchParams;
   const supabase = await createClient();
   const t = await getTranslations("SalesHistory");
 
@@ -88,27 +89,34 @@ export default async function SalesHistoryPage({
   const today = activeLocationId
     ? (await new BusinessDayService(supabase).getEffectiveBusinessDate(tenantId, activeLocationId)).date
     : todayString(tenant.timezone);
-  const hasFilters = Boolean(from || to || q);
+  const yesterday = subtractDays(today, 1);
+  const hasFilters = Boolean(from || to || productId);
   const hasDateFilter = Boolean(from || to);
 
-  const [sales, canVoid, canReverse, canEditWindow, canCorrectHistorical, requiresDownloadPasscode] = await Promise.all([
+  const [sales, canVoid, canReverse, canEditWindow, canCorrectHistorical, requiresDownloadPasscode, products] = await Promise.all([
     new SalesService(supabase).listRecent(tenantId, {
       limit: hasFilters ? 500 : 100,
       dateFrom: hasDateFilter ? from : today,
       dateTo: hasDateFilter ? to : today,
-      search: q,
+      productId,
     }),
     can("sales.void", { tenantId }),
     can("sales.reverse", { tenantId }),
     can("sales.edit_window", { tenantId }),
     can("sales.correct_historical", { tenantId }),
     new TenantService(supabase).getSetting<boolean>(tenantId, "require_download_passcode"),
+    new ProductService(supabase).listAll(tenantId),
   ]);
 
   return (
     <div className="flex flex-1 flex-col p-6">
       <h1 className="mb-4 text-xl font-semibold">{t("heading")}</h1>
-      <SaleHistoryFilters tenantId={tenantId} todayDate={today} />
+      <SaleHistoryFilters
+        tenantId={tenantId}
+        todayDate={today}
+        yesterdayDate={yesterday}
+        products={products.map((p) => ({ id: p.id, name: p.name }))}
+      />
       <SaleHistoryList
         sales={sales}
         tenantId={tenantId}
@@ -119,7 +127,7 @@ export default async function SalesHistoryPage({
         canEditWindow={canEditWindow}
         canCorrectHistorical={canCorrectHistorical}
         requiresDownloadPasscode={requiresDownloadPasscode === true}
-        filters={{ from, to, q }}
+        filters={{ from, to, productId }}
       />
     </div>
   );

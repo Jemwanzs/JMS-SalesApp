@@ -71,13 +71,11 @@
     "heading": "Historique des ventes",
 
     "today": "Aujourd'hui",
+    "yesterday": "Hier",
     "showingTodayDefault": "Affiche les ventes d'aujourd'hui par défaut",
-    "from": "Du",
-    "to": "Au",
-    "searchLabel": "Rechercher (numéro de vente ou produit)",
-    "searchPlaceholder": "VENTE-2026-000012 ou nom du produit",
-    "applying": "Application...",
-    "apply": "Appliquer",
+    "selectDate": "Choisir une date",
+    "filterByProduct": "Filtrer par produit",
+    "allProducts": "Tous les produits",
     "clear": "Effacer",
 
     "exporting": "Exportation...",

@@ -71,13 +71,11 @@
     "heading": "Sales History",
 
     "today": "Today",
+    "yesterday": "Yesterday",
     "showingTodayDefault": "Showing today's sales by default",
-    "from": "From",
-    "to": "To",
-    "searchLabel": "Search (sale number or product)",
-    "searchPlaceholder": "SALE-2026-000012 or product name",
-    "applying": "Applying...",
-    "apply": "Apply",
+    "selectDate": "Select date",
+    "filterByProduct": "Filter by product",
+    "allProducts": "All products",
     "clear": "Clear",
 
     "exporting": "Exporting...",
