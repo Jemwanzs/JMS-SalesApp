@@ -131,7 +131,13 @@ export function QuickStockEntryDialog({
                   id="stock-amount"
                   type="number"
                   inputMode="decimal"
-                  min="0.001"
+                  // HTML5 number-input validation requires (value - min) to
+                  // be an exact multiple of step -- min and step must share
+                  // the same base or an ordinary round value (e.g. 500 for
+                  // a currency amount) gets rejected as "invalid" by the
+                  // browser itself, found live: min="0.001" paired with a
+                  // currency step of "0.01" failed on every whole number.
+                  min={byValue ? "0.01" : "0.001"}
                   step={byValue ? "0.01" : "0.001"}
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
