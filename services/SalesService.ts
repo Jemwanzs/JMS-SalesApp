@@ -59,6 +59,7 @@ export interface RecordedSale {
 export interface SaleListItem {
   id: string;
   saleNumber: string | null;
+  productId: string;
   productNameSnapshot: string;
   actualAmount: number;
   quantity: number | null;
@@ -193,6 +194,7 @@ export class SalesService {
     newAmount: number;
     newQuantity?: number | null;
     newNotes?: string | null;
+    newProductId: string;
     reason: string;
   }): Promise<VoidOrCorrectResult> {
     const { data, error } = await this.supabase.rpc("correct_sale", {
@@ -200,6 +202,7 @@ export class SalesService {
       p_new_amount: input.newAmount,
       p_new_quantity: input.newQuantity ?? null,
       p_new_notes: input.newNotes ?? null,
+      p_new_product_id: input.newProductId,
       p_reason: input.reason,
     });
 
@@ -218,6 +221,25 @@ export class SalesService {
 
     if (error || !data) {
       throw new Error(`SalesService.reverseSale: ${error?.message}`);
+    }
+
+    return data;
+  }
+
+  /**
+   * Deliberately simpler than void/correct/reverse: no mandatory reason,
+   * self-service only (recorded_by = actor), gated by a short tenant-
+   * configurable window -- see delete_sale() (migration 0074) for the
+   * enforcement itself, which this only thinly wraps.
+   */
+  async deleteSale(saleId: string, reason?: string): Promise<VoidOrCorrectResult> {
+    const { data, error } = await this.supabase.rpc("delete_sale", {
+      p_sale_id: saleId,
+      p_reason: reason ?? null,
+    });
+
+    if (error || !data) {
+      throw new Error(`SalesService.deleteSale: ${error?.message}`);
     }
 
     return data;
@@ -251,8 +273,12 @@ export class SalesService {
   ): Promise<SaleListItem[]> {
     let query = this.supabase
       .from("sales")
-      .select("id, sale_number, product_name_snapshot, actual_amount, quantity, status, sale_time, recorded_by")
+      .select("id, sale_number, product_id, product_name_snapshot, actual_amount, quantity, status, sale_time, recorded_by")
       .eq("tenant_id", tenantId)
+      // Deleted sales genuinely disappear from Sales History (unlike
+      // voided/corrected, which stay visible with a status badge for
+      // audit continuity) -- see migration 0074's own header comment.
+      .neq("status", "deleted")
       .order("sale_time", { ascending: false })
       .limit(opts.limit ?? 50);
 
@@ -281,6 +307,7 @@ export class SalesService {
     return (data ?? []).map((row) => ({
       id: row.id,
       saleNumber: row.sale_number,
+      productId: row.product_id,
       productNameSnapshot: row.product_name_snapshot,
       actualAmount: row.actual_amount,
       quantity: row.quantity,

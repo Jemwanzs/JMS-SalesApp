@@ -10,6 +10,7 @@ import { InventoryModuleCard } from "@/features/settings/components/inventory-mo
 import { NotesFieldCard } from "@/features/settings/components/notes-field-card";
 import { ProductRankingCard } from "@/features/settings/components/product-ranking-card";
 import { QuantityFieldCard } from "@/features/settings/components/quantity-field-card";
+import { SaleEditingDeletionCard } from "@/features/settings/components/sale-editing-deletion-card";
 import { SaleNumberTemplateCard } from "@/features/settings/components/sale-number-template-card";
 import { StockVarianceToleranceCard } from "@/features/settings/components/stock-variance-tolerance-card";
 import { TabsVisibilityCard } from "@/features/settings/components/tabs-visibility-card";
@@ -84,6 +85,10 @@ export default async function SettingsPage({
     stockVarianceToleranceAmount,
     inventoryEntitlement,
     stockControlMethod,
+    saleEditWindowMode,
+    saleEditWindowHours,
+    saleDeletionEnabled,
+    saleDeleteWindowMinutes,
   ] = await Promise.all([
     new AnniversaryService(supabase).getWishMode(tenantId),
     tenantService.getSetting<string>(tenantId, "sale_number_template"),
@@ -106,6 +111,10 @@ export default async function SettingsPage({
     tenantService.getSetting<number>(tenantId, "stock_variance_tolerance_amount"),
     getInventoryEntitlement(tenantId),
     getStockControlMethod(supabase, tenantId),
+    tenantService.getSetting<"business_day" | "hours">(tenantId, "sale_edit_window_mode"),
+    tenantService.getSetting<number>(tenantId, "sale_edit_window_hours"),
+    tenantService.getSetting<boolean>(tenantId, "sale_deletion_enabled"),
+    tenantService.getSetting<number>(tenantId, "sale_delete_window_minutes"),
   ]);
 
   // Matches features/settings/actions/set-inventory-enabled.ts's own
@@ -154,6 +163,14 @@ export default async function SettingsPage({
         locked={inventoryEntitlement.enabled && stockControlMethod === "quantity"}
       />
       <NotesFieldCard tenantId={tenantId} tenantSlug={tenantSlug} initialEnabled={notesFieldEnabled ?? true} />
+      <SaleEditingDeletionCard
+        tenantId={tenantId}
+        tenantSlug={tenantSlug}
+        initialEditWindowMode={saleEditWindowMode ?? "business_day"}
+        initialEditWindowHours={saleEditWindowHours ?? 2}
+        initialDeletionEnabled={saleDeletionEnabled ?? true}
+        initialDeleteWindowMinutes={saleDeleteWindowMinutes ?? 2}
+      />
       <TabsVisibilityCard
         tenantId={tenantId}
         tenantSlug={tenantSlug}

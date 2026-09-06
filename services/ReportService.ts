@@ -153,7 +153,8 @@ export class ReportService {
       .eq("tenant_id", tenantId)
       .eq("sale_date", businessDate)
       .neq("status", "voided")
-      .neq("status", "corrected");
+      .neq("status", "corrected")
+      .neq("status", "deleted");
     if (locationId) {
       query = query.eq("location_id", locationId);
     }
@@ -241,7 +242,8 @@ export class ReportService {
       .eq("tenant_id", tenantId)
       .eq("sale_date", date)
       .neq("status", "voided")
-      .neq("status", "corrected");
+      .neq("status", "corrected")
+      .neq("status", "deleted");
 
     if (error) {
       throw new Error(`ReportService.getDailySalesSummary: ${error.message}`);

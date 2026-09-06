@@ -1,0 +1,21 @@
+-- ============================================================================
+-- 0073_sale_status_add_deleted.sql
+--
+-- Adds 'deleted' to sale_status, alone, in its own migration/transaction --
+-- NOT bundled with migration 0074 (which actually uses this value in a
+-- trigger's WHEN clause). This split is required, not stylistic: Postgres
+-- allows ALTER TYPE ... ADD VALUE inside a transaction, but a freshly
+-- added enum value cannot be used in a DDL expression that gets bound
+-- immediately (a CREATE TRIGGER ... WHEN (...) clause, in particular)
+-- within that SAME transaction -- confirmed live ("unsafe use of new
+-- value 'deleted' ... New enum values must be committed before they can
+-- be used") when 0074's original draft tried to do both in one file.
+-- Plain function BODIES referencing 'deleted' (correct_sale, delete_sale,
+-- etc. in 0074) are fine even uncommitted, since plpgsql bodies are
+-- opaque text bound at CALL time, not CREATE time -- only the trigger's
+-- WHEN clause needed this separation. Migration 0026's 'reversed' never
+-- hit this because it was added in 0026 and only ever used in a trigger
+-- by 0067, a later, separately-committed migration.
+-- ============================================================================
+
+alter type public.sale_status add value 'deleted';

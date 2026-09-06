@@ -9,7 +9,8 @@
   },
   "Common": {
     "close": "Funga",
-    "checkEntries": "Tafadhali kagua ulichoingiza"
+    "checkEntries": "Tafadhali kagua ulichoingiza",
+    "cancel": "Ghairi"
   },
   "Sales": {
     "greeting": "Habari za leo, {name}",
@@ -92,6 +93,8 @@
     "replacementRecorded": "Mauzo mbadala yamerekodiwa kwa kiasi kipya.",
     "saleReversed": "Mauzo yamerudishwa nyuma",
     "offsettingRecorded": "Kiingilio cha kufidia kimerekodiwa kwa kiasi sawa.",
+    "saleDeleted": "Mauzo yamefutwa",
+    "stockAndReportsRestored": "Hisa na ripoti zimehesabiwa upya kana kwamba haikutokea kamwe.",
     "noSalesMatch": "Hakuna mauzo yanayolingana na vichujio hivi.",
     "saleCount": "Mauzo {count}",
 
@@ -100,6 +103,7 @@
     "statusCorrected": "Imerekebishwa",
     "statusVoided": "Imebatilishwa",
     "statusReversed": "Imerudishwa nyuma",
+    "statusDeleted": "Imefutwa",
 
     "void": "Batilisha",
     "voidThisSale": "Batilisha mauzo haya",
@@ -110,6 +114,7 @@
     "correct": "Rekebisha",
     "correctThisSale": "Rekebisha mauzo haya",
     "correctDescription": "Ya asili inahifadhiwa na kuwekwa alama ya kurekebishwa; mauzo mapya yanarekodiwa kwa kiasi kilichorekebishwa, yakiunganishwa na haya.",
+    "product": "Bidhaa",
     "correctedAmount": "Kiasi kilichorekebishwa",
     "submitting": "Inatuma...",
     "correctSale": "Rekebisha mauzo",
@@ -119,6 +124,11 @@
     "reverseDescription": "Mauzo yanabaki kwenye rekodi. Kiingilio kipya cha kufidia kwa kiasi sawa kitarekodiwa pamoja nayo, na kufanya jumla kuwa sifuri. Hii haiwezi kutenduliwa.",
     "reversing": "Inarudisha nyuma...",
     "reverseSale": "Rudisha nyuma mauzo",
+
+    "deleteThisSale": "Futa mauzo haya?",
+    "deleteSaleDescription": "Mauzo yataondolewa kwenye rekodi zako za mauzo za uendeshaji. Ripoti na uchambuzi vinavyohusiana vitahesabiwa upya, na athari zozote za hisa zitarudishwa nyuma.",
+    "deleting": "Inafuta...",
+    "deleteSale": "Futa mauzo",
 
     "couldNotLoadReport": "Imeshindwa kupakia ripoti ya siku",
     "shareTitle": "Mauzo ya Leo — {tenantName}",

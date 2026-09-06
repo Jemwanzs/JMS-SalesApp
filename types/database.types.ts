@@ -16,7 +16,7 @@ export type MembershipStatus = "active" | "invited" | "disabled";
 export type PlatformAdminRole = "super_admin" | "support" | "billing_ops";
 export type ProductStatus = "active" | "inactive" | "archived";
 export type BusinessDayStatus = "scheduled" | "open" | "closing" | "closed" | "reopened";
-export type SaleStatus = "open" | "locked" | "corrected" | "voided" | "reversed";
+export type SaleStatus = "open" | "locked" | "corrected" | "voided" | "reversed" | "deleted";
 export type ApprovalRequestStatus = "pending" | "approved" | "rejected" | "expired" | "auto_approved";
 export type SaleCorrectionType = "void" | "correct" | "reverse";
 export type ImportType = "sales_history" | "products";
@@ -29,7 +29,7 @@ export type TenantCreditStatus = "available" | "applied" | "expired";
 export type AddonKey = "inventory";
 
 export interface VoidOrCorrectResult {
-  status: "voided" | "corrected" | "reversed" | "pending_approval";
+  status: "voided" | "corrected" | "reversed" | "deleted" | "pending_approval";
   approvalRequestId?: string;
   replacementSaleId?: string;
 }
@@ -1141,12 +1141,17 @@ export interface Database {
           p_new_amount: number;
           p_new_quantity: number | null;
           p_new_notes: string | null;
+          p_new_product_id: string;
           p_reason: string;
         };
         Returns: VoidOrCorrectResult;
       };
       reverse_sale: {
         Args: { p_sale_id: string; p_reason: string };
+        Returns: VoidOrCorrectResult;
+      };
+      delete_sale: {
+        Args: { p_sale_id: string; p_reason: string | null };
         Returns: VoidOrCorrectResult;
       };
       resolve_approval_request: {

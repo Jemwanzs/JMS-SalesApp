@@ -296,7 +296,8 @@ export class BusinessDayService {
       .select("actual_amount")
       .eq("business_day_id", businessDayId)
       .neq("status", "voided")
-      .neq("status", "corrected");
+      .neq("status", "corrected")
+      .neq("status", "deleted");
 
     const grossSales = (sales ?? []).reduce((sum, s) => sum + Number(s.actual_amount), 0);
     const transactionCount = sales?.length ?? 0;

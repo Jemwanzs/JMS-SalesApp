@@ -30,10 +30,21 @@ export const correctSaleSchema = z.object({
   newAmount: z.coerce.number().nonnegative("Enter an amount of 0 or more"),
   newQuantity: z.union([z.coerce.number().positive(), z.literal("")]),
   newNotes: z.string().trim().max(500).optional(),
+  newProductId: z.uuid("Select a product"),
   reason: z.string().trim().min(1, "A reason is required"),
 });
 
 export type CorrectSaleInput = z.infer<typeof correctSaleSchema>;
+
+// Deliberately no mandatory reason -- see delete_sale (migration 0074)'s
+// own header comment: Delete is an instant "undo my own mistake", not an
+// audited correction like void/correct/reverse.
+export const deleteSaleSchema = z.object({
+  saleId: z.uuid(),
+  reason: z.string().trim().max(500).optional(),
+});
+
+export type DeleteSaleInput = z.infer<typeof deleteSaleSchema>;
 
 export const reverseSaleSchema = z.object({
   saleId: z.uuid(),

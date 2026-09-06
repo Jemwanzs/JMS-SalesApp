@@ -6,8 +6,11 @@ import { toast } from "sonner";
 
 import { exportSalesHistoryCsvAction } from "@/features/sales/actions/export-sales-history";
 import { CorrectSaleDialog } from "@/features/sales/components/correct-sale-dialog";
+import { DeleteSaleDialog } from "@/features/sales/components/delete-sale-dialog";
+import type { ProductComboboxItem } from "@/features/sales/components/product-combobox";
 import { ReverseSaleDialog } from "@/features/sales/components/reverse-sale-dialog";
 import { VoidSaleDialog } from "@/features/sales/components/void-sale-dialog";
+import { useWindowExpired } from "@/features/sales/lib/use-window-expired";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -115,16 +118,147 @@ const STATUS_VARIANT: Record<
   corrected: "secondary",
   voided: "destructive",
   reversed: "secondary",
+  deleted: "destructive",
 };
 
 /** Keys into the "SalesHistory" namespace -- see the status Badge's own usage below. */
-const STATUS_LABEL_KEY: Record<SaleListItem["status"], "statusOpen" | "statusLocked" | "statusCorrected" | "statusVoided" | "statusReversed"> = {
+const STATUS_LABEL_KEY: Record<
+  SaleListItem["status"],
+  "statusOpen" | "statusLocked" | "statusCorrected" | "statusVoided" | "statusReversed" | "statusDeleted"
+> = {
   open: "statusOpen",
   locked: "statusLocked",
   corrected: "statusCorrected",
   voided: "statusVoided",
   reversed: "statusReversed",
+  deleted: "statusDeleted",
 };
+
+interface EditDeleteWindowConfig {
+  editWindowMode: "business_day" | "hours";
+  editWindowHours: number;
+  deletionEnabled: boolean;
+  deleteWindowMinutes: number;
+  quantityEnabled: boolean;
+  quantityMandatory: boolean;
+}
+
+/**
+ * One sale row -- its own component (not inline in the list's .map())
+ * because it needs useWindowExpired, a hook, and hook-call count must
+ * stay stable across renders of the SAME component; a variable-length
+ * list of rows can't share one component's hook calls.
+ */
+function SaleHistoryRow({
+  sale,
+  tenantSlug,
+  currentUserId,
+  canVoid,
+  canReverse,
+  canEditWindow,
+  canCorrectHistorical,
+  canDelete,
+  products,
+  config,
+  onResolved,
+}: {
+  sale: SaleListItem;
+  tenantSlug: string;
+  currentUserId: string;
+  canVoid: boolean;
+  canReverse: boolean;
+  canEditWindow: boolean;
+  canCorrectHistorical: boolean;
+  canDelete: boolean;
+  products: ProductComboboxItem[];
+  config: EditDeleteWindowConfig;
+  onResolved: (saleId: string, result: VoidOrCorrectResult) => void;
+}) {
+  const t = useTranslations("SalesHistory");
+
+  const isOwnSale = sale.recordedBy === currentUserId;
+
+  // Business-day mode's real expiry is server-computed (the day
+  // closing), not a fixed duration -- only 'hours' mode gets a live
+  // client-side countdown; business-day mode just reflects permission
+  // state as of the last page load, same as every other flag here.
+  const editHoursExpired = useWindowExpired(
+    sale.saleTime,
+    config.editWindowMode === "hours" ? config.editWindowHours : null
+  );
+  const selfServeEditAvailable = canEditWindow && isOwnSale && !(config.editWindowMode === "hours" && editHoursExpired);
+  const canCorrectThis = selfServeEditAvailable || canCorrectHistorical;
+
+  const deleteWindowActive = config.deletionEnabled && config.deleteWindowMinutes > 0;
+  const deleteExpired = useWindowExpired(sale.saleTime, deleteWindowActive ? config.deleteWindowMinutes : null);
+  const canDeleteThis = canDelete && isOwnSale && deleteWindowActive && !deleteExpired;
+
+  return (
+    <div className="flex flex-col gap-2 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium">
+            {sale.productNameSnapshot}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {sale.saleNumber ?? "—"} ·{" "}
+            {new Date(sale.saleTime).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </p>
+        </div>
+        <div className="shrink-0 text-right">
+          <p className="text-sm font-medium tabular-nums">
+            {sale.actualAmount.toFixed(2)}
+          </p>
+          <Badge variant={STATUS_VARIANT[sale.status]}>
+            {t(STATUS_LABEL_KEY[sale.status])}
+          </Badge>
+        </div>
+      </div>
+
+      {sale.status === "open" && (canVoid || canReverse || canCorrectThis || canDeleteThis) && (
+        <div className="flex items-center gap-2">
+          {canCorrectThis && (
+            <CorrectSaleDialog
+              saleId={sale.id}
+              currentAmount={sale.actualAmount}
+              currentQuantity={sale.quantity}
+              currentProductId={sale.productId}
+              products={products}
+              quantityEnabled={config.quantityEnabled}
+              quantityMandatory={config.quantityMandatory}
+              tenantSlug={tenantSlug}
+              onResolved={(result) => onResolved(sale.id, result)}
+            />
+          )}
+          {canVoid && (
+            <VoidSaleDialog
+              saleId={sale.id}
+              tenantSlug={tenantSlug}
+              onResolved={(result) => onResolved(sale.id, result)}
+            />
+          )}
+          {canReverse && (
+            <ReverseSaleDialog
+              saleId={sale.id}
+              tenantSlug={tenantSlug}
+              onResolved={(result) => onResolved(sale.id, result)}
+            />
+          )}
+          {canDeleteThis && (
+            <DeleteSaleDialog
+              saleId={sale.id}
+              tenantSlug={tenantSlug}
+              onResolved={(result) => onResolved(sale.id, result)}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function SaleHistoryList({
   sales,
@@ -135,6 +269,14 @@ export function SaleHistoryList({
   canReverse,
   canEditWindow,
   canCorrectHistorical,
+  canDelete,
+  products,
+  quantityEnabled,
+  quantityMandatory,
+  editWindowMode,
+  editWindowHours,
+  deletionEnabled,
+  deleteWindowMinutes,
   requiresDownloadPasscode,
   filters,
 }: {
@@ -146,6 +288,14 @@ export function SaleHistoryList({
   canReverse: boolean;
   canEditWindow: boolean;
   canCorrectHistorical: boolean;
+  canDelete: boolean;
+  products: ProductComboboxItem[];
+  quantityEnabled: boolean;
+  quantityMandatory: boolean;
+  editWindowMode: "business_day" | "hours";
+  editWindowHours: number;
+  deletionEnabled: boolean;
+  deleteWindowMinutes: number;
   requiresDownloadPasscode: boolean;
   filters: { from?: string; to?: string; productId?: string };
 }) {
@@ -199,6 +349,17 @@ export function SaleHistoryList({
       toast.success(t("saleReversed"), {
         description: t("offsettingRecorded"),
       });
+      return;
+    }
+
+    if (result.status === "deleted") {
+      // A deleted sale genuinely disappears from Sales History (unlike
+      // void/correct/reverse, which stay visible with a status badge) --
+      // see SalesService.listRecent's own .neq("status","deleted").
+      setItems((prev) => prev.filter((s) => s.id !== saleId));
+      toast.success(t("saleDeleted"), {
+        description: t("stockAndReportsRestored"),
+      });
     }
   }
 
@@ -212,6 +373,15 @@ export function SaleHistoryList({
     );
   }
 
+  const config: EditDeleteWindowConfig = {
+    editWindowMode,
+    editWindowHours,
+    deletionEnabled,
+    deleteWindowMinutes,
+    quantityEnabled,
+    quantityMandatory,
+  };
+
   return (
     <div>
       <div className="mb-2 flex items-center justify-between">
@@ -221,66 +391,22 @@ export function SaleHistoryList({
         <ExportCsvButton tenantId={tenantId} filters={filters} requiresPasscode={requiresDownloadPasscode} />
       </div>
       <div className="divide-y rounded-lg border">
-        {items.map((sale) => {
-          const canCorrectThis =
-            (canEditWindow && sale.recordedBy === currentUserId) ||
-            canCorrectHistorical;
-
-          return (
-            <div key={sale.id} className="flex flex-col gap-2 p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">
-                    {sale.productNameSnapshot}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {sale.saleNumber ?? "—"} ·{" "}
-                    {new Date(sale.saleTime).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </p>
-                </div>
-                <div className="shrink-0 text-right">
-                  <p className="text-sm font-medium tabular-nums">
-                    {sale.actualAmount.toFixed(2)}
-                  </p>
-                  <Badge variant={STATUS_VARIANT[sale.status]}>
-                    {t(STATUS_LABEL_KEY[sale.status])}
-                  </Badge>
-                </div>
-              </div>
-
-              {sale.status === "open" && (canVoid || canReverse || canCorrectThis) && (
-                <div className="flex gap-2">
-                  {canCorrectThis && (
-                    <CorrectSaleDialog
-                      saleId={sale.id}
-                      currentAmount={sale.actualAmount}
-                      currentQuantity={sale.quantity}
-                      tenantSlug={tenantSlug}
-                      onResolved={(result) => onResolved(sale.id, result)}
-                    />
-                  )}
-                  {canVoid && (
-                    <VoidSaleDialog
-                      saleId={sale.id}
-                      tenantSlug={tenantSlug}
-                      onResolved={(result) => onResolved(sale.id, result)}
-                    />
-                  )}
-                  {canReverse && (
-                    <ReverseSaleDialog
-                      saleId={sale.id}
-                      tenantSlug={tenantSlug}
-                      onResolved={(result) => onResolved(sale.id, result)}
-                    />
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
+        {items.map((sale) => (
+          <SaleHistoryRow
+            key={sale.id}
+            sale={sale}
+            tenantSlug={tenantSlug}
+            currentUserId={currentUserId}
+            canVoid={canVoid}
+            canReverse={canReverse}
+            canEditWindow={canEditWindow}
+            canCorrectHistorical={canCorrectHistorical}
+            canDelete={canDelete}
+            products={products}
+            config={config}
+            onResolved={onResolved}
+          />
+        ))}
       </div>
     </div>
   );

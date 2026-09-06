@@ -9,7 +9,8 @@
   },
   "Common": {
     "close": "Fermer",
-    "checkEntries": "Veuillez vérifier vos saisies"
+    "checkEntries": "Veuillez vérifier vos saisies",
+    "cancel": "Annuler"
   },
   "Sales": {
     "greeting": "Bonjour, {name}",
@@ -92,6 +93,8 @@
     "replacementRecorded": "Une vente de remplacement a été enregistrée avec le nouveau montant.",
     "saleReversed": "Vente inversée",
     "offsettingRecorded": "Une écriture de compensation a été enregistrée pour le même montant.",
+    "saleDeleted": "Vente supprimée",
+    "stockAndReportsRestored": "Le stock et les rapports ont été recalculés comme si cela ne s'était jamais produit.",
     "noSalesMatch": "Aucune vente ne correspond à ces filtres.",
     "saleCount": "{count, plural, one {# vente} other {# ventes}}",
 
@@ -100,6 +103,7 @@
     "statusCorrected": "Corrigée",
     "statusVoided": "Annulée",
     "statusReversed": "Inversée",
+    "statusDeleted": "Supprimée",
 
     "void": "Annuler",
     "voidThisSale": "Annuler cette vente",
@@ -110,6 +114,7 @@
     "correct": "Corriger",
     "correctThisSale": "Corriger cette vente",
     "correctDescription": "L'original est conservé et marqué comme corrigé ; une nouvelle vente est enregistrée avec le montant corrigé, liée à celle-ci.",
+    "product": "Produit",
     "correctedAmount": "Montant corrigé",
     "submitting": "Envoi en cours...",
     "correctSale": "Corriger la vente",
@@ -119,6 +124,11 @@
     "reverseDescription": "La vente reste enregistrée. Une nouvelle écriture de compensation pour le même montant sera enregistrée en parallèle, ramenant le total à zéro. Cette action est irréversible.",
     "reversing": "Inversion...",
     "reverseSale": "Inverser la vente",
+
+    "deleteThisSale": "Supprimer cette vente ?",
+    "deleteSaleDescription": "La vente sera retirée de vos registres de ventes opérationnels. Les rapports et analyses associés seront recalculés, et tout effet sur le stock sera annulé.",
+    "deleting": "Suppression...",
+    "deleteSale": "Supprimer la vente",
 
     "couldNotLoadReport": "Impossible de charger le rapport journalier",
     "shareTitle": "Ventes du jour — {tenantName}",

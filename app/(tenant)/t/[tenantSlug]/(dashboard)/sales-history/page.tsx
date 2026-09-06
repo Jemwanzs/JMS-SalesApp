@@ -8,6 +8,8 @@ import { BusinessDayService } from "@/services/BusinessDayService";
 import { ProductService } from "@/services/ProductService";
 import { SalesService } from "@/services/SalesService";
 import { TenantService } from "@/services/TenantService";
+import { getInventoryEntitlement } from "@/lib/inventory/entitlement";
+import { getStockControlMethod } from "@/lib/inventory/stock-control-method";
 import { can } from "@/lib/permissions/can";
 import { subtractDays, todayString } from "@/lib/utils/date-ranges";
 import { createClient } from "@/lib/supabase/server";
@@ -93,7 +95,23 @@ export default async function SalesHistoryPage({
   const hasFilters = Boolean(from || to || productId);
   const hasDateFilter = Boolean(from || to);
 
-  const [sales, canVoid, canReverse, canEditWindow, canCorrectHistorical, requiresDownloadPasscode, products] = await Promise.all([
+  const [
+    sales,
+    canVoid,
+    canReverse,
+    canEditWindow,
+    canCorrectHistorical,
+    canDelete,
+    requiresDownloadPasscode,
+    products,
+    editWindowMode,
+    editWindowHours,
+    deletionEnabled,
+    deleteWindowMinutes,
+    quantityEnabled,
+    inventoryEntitlement,
+    stockControlMethod,
+  ] = await Promise.all([
     new SalesService(supabase).listRecent(tenantId, {
       limit: hasFilters ? 500 : 100,
       dateFrom: hasDateFilter ? from : today,
@@ -104,9 +122,33 @@ export default async function SalesHistoryPage({
     can("sales.reverse", { tenantId }),
     can("sales.edit_window", { tenantId }),
     can("sales.correct_historical", { tenantId }),
+    can("sales.delete", { tenantId }),
     new TenantService(supabase).getSetting<boolean>(tenantId, "require_download_passcode"),
     new ProductService(supabase).listAll(tenantId),
+    new TenantService(supabase).getSetting<"business_day" | "hours">(tenantId, "sale_edit_window_mode"),
+    new TenantService(supabase).getSetting<number>(tenantId, "sale_edit_window_hours"),
+    new TenantService(supabase).getSetting<boolean>(tenantId, "sale_deletion_enabled"),
+    new TenantService(supabase).getSetting<number>(tenantId, "sale_delete_window_minutes"),
+    new TenantService(supabase).getSetting<boolean>(tenantId, "quantity_enabled"),
+    getInventoryEntitlement(tenantId),
+    getStockControlMethod(supabase, tenantId),
   ]);
+
+  // Correcting a sale into free-text has no mechanism today -- the
+  // system "Others" product is excluded from the combobox catalog, same
+  // reasoning as _apply_sale_correction's own defensive check (migration
+  // 0074).
+  const correctableProducts = products
+    .filter((p) => !p.isSystem)
+    .map((p) => ({ id: p.id, name: p.name, expectedPrice: p.expectedPrice, tracksInventory: p.tracksInventory }));
+
+  // Mirrors the Record Sale flow's own quantityMandatory computation
+  // (app/.../sales/page.tsx) exactly -- a tracked product only actually
+  // REQUIRES a quantity when Inventory is entitled AND the tenant records
+  // stock by quantity (not value). Getting this wrong made Correct force
+  // a quantity for every tracked product regardless of the tenant's real
+  // control method -- confirmed live against a value-controlled tenant.
+  const quantityMandatory = inventoryEntitlement.enabled && stockControlMethod === "quantity";
 
   return (
     <div className="flex flex-1 flex-col p-6">
@@ -126,6 +168,14 @@ export default async function SalesHistoryPage({
         canReverse={canReverse}
         canEditWindow={canEditWindow}
         canCorrectHistorical={canCorrectHistorical}
+        canDelete={canDelete}
+        products={correctableProducts}
+        quantityEnabled={quantityEnabled ?? true}
+        quantityMandatory={quantityMandatory}
+        editWindowMode={editWindowMode ?? "business_day"}
+        editWindowHours={editWindowHours ?? 2}
+        deletionEnabled={deletionEnabled ?? true}
+        deleteWindowMinutes={deleteWindowMinutes ?? 2}
         requiresDownloadPasscode={requiresDownloadPasscode === true}
         filters={{ from, to, productId }}
       />

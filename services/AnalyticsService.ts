@@ -143,7 +143,8 @@ export class AnalyticsService {
       .gte("sale_date", range.from)
       .lte("sale_date", range.to)
       .neq("status", "voided")
-      .neq("status", "corrected");
+      .neq("status", "corrected")
+      .neq("status", "deleted");
 
     if (!perms.viewAll) {
       query = query.eq("recorded_by", currentUserId);
@@ -423,7 +424,8 @@ export class AnalyticsService {
       .gte("sale_date", windowRange.from)
       .lte("sale_date", windowRange.to)
       .neq("status", "voided")
-      .neq("status", "corrected");
+      .neq("status", "corrected")
+      .neq("status", "deleted");
 
     // The "Others" system product is never a rankable catalog product
     // (Product Enhancements #2) -- exclude it here so it never earns a
@@ -473,6 +475,7 @@ export class AnalyticsService {
       .lt("sale_date", beforeDate)
       .neq("status", "voided")
       .neq("status", "corrected")
+      .neq("status", "deleted")
       .order("sale_date", { ascending: false })
       .limit(1)
       .maybeSingle();

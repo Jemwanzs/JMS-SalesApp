@@ -251,7 +251,7 @@ export class PlatformAdminService {
     ] = await Promise.all([
       this.supabase.from("tenants").select("id, name, currency, status"),
       this.supabase.from("subscriptions").select("tenant_id, status, plan_id"),
-      this.supabase.from("sales").select("tenant_id, actual_amount").neq("status", "voided").neq("status", "corrected"),
+      this.supabase.from("sales").select("tenant_id, actual_amount").neq("status", "voided").neq("status", "corrected").neq("status", "deleted"),
       this.supabase.from("products").select("tenant_id").neq("status", "archived"),
       this.supabase.from("imports").select("tenant_id, imported_rows"),
       this.supabase.from("report_jobs").select("tenant_id").eq("status", "completed"),
@@ -528,7 +528,8 @@ export class PlatformAdminService {
         .select("product_id")
         .eq("tenant_id", tenantId)
         .neq("status", "voided")
-        .neq("status", "corrected"),
+        .neq("status", "corrected")
+        .neq("status", "deleted"),
       tenant.billing_owner_profile_id
         ? this.supabase.from("platform_admins").select("id").eq("profile_id", tenant.billing_owner_profile_id).maybeSingle()
         : Promise.resolve({ data: null }),

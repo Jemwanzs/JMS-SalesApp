@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 
 import { correctSaleAction } from "@/features/sales/actions/correct-sale";
+import { ProductCombobox, type ProductComboboxItem } from "@/features/sales/components/product-combobox";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -22,19 +23,31 @@ export function CorrectSaleDialog({
   saleId,
   currentAmount,
   currentQuantity,
+  currentProductId,
+  products,
+  quantityEnabled,
+  quantityMandatory,
   tenantSlug,
   onResolved,
 }: {
   saleId: string;
   currentAmount: number;
-  /** The original sale's own quantity -- a tracks_inventory product always has one (enforced at record time, migration 0067), so its presence here is what tells this form the quantity field must stay filled, not just optionally editable. */
+  /** Seeds the field's initial value; whether it's shown/required now depends on the tenant's quantity settings and whichever product is currently selected (see showQuantity/quantityRequired below), since correcting into/out of a tracked product -- or a tenant that doesn't use quantity by control method at all -- changes that. */
   currentQuantity: number | null;
+  currentProductId: string;
+  /** The tenant's real catalog, excluding the system "Others" product -- correcting a sale into free-text has no mechanism today. */
+  products: ProductComboboxItem[];
+  /** Settings -> Show Quantity. */
+  quantityEnabled: boolean;
+  /** Settings -> Inventory Configuration -> "Record Stock By" = Quantity, AND Inventory is entitled -- mirrors record-sale-dialog.tsx's own quantityMandatory exactly. A value-controlled tenant's tracked products still don't require one, so this must be checked alongside tracksInventory, not tracksInventory alone. */
+  quantityMandatory: boolean;
   tenantSlug: string;
   onResolved: (result: VoidOrCorrectResult) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [newAmount, setNewAmount] = useState(String(currentAmount));
   const [newQuantity, setNewQuantity] = useState(currentQuantity !== null ? String(currentQuantity) : "");
+  const [newProductId, setNewProductId] = useState(currentProductId);
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -42,7 +55,19 @@ export function CorrectSaleDialog({
   const tCommon = useTranslations("Common");
   const tSales = useTranslations("Sales");
 
-  const quantityRequired = currentQuantity !== null;
+  const selectedProduct = products.find((p) => p.id === newProductId);
+  const showQuantity = quantityEnabled || quantityMandatory;
+  const quantityRequired = quantityMandatory && (selectedProduct?.tracksInventory ?? false);
+
+  function onProductChange(item: ProductComboboxItem) {
+    setNewProductId(item.id);
+    if (item.expectedPrice !== null) {
+      setNewAmount(String(item.expectedPrice));
+    }
+    if (!item.tracksInventory) {
+      setNewQuantity("");
+    }
+  }
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -56,7 +81,8 @@ export function CorrectSaleDialog({
     formData.set("saleId", saleId);
     formData.set("newAmount", newAmount);
     formData.set("newQuantity", newQuantity);
-    formData.set("newNotes", "");
+    formData.set("newNotes", reason);
+    formData.set("newProductId", newProductId);
     formData.set("reason", reason);
 
     startTransition(async () => {
@@ -90,6 +116,10 @@ export function CorrectSaleDialog({
         </DialogHeader>
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="space-y-2">
+            <Label htmlFor="correct-product">{t("product")}</Label>
+            <ProductCombobox id="correct-product" items={products} value={newProductId} onChange={onProductChange} />
+          </div>
+          <div className="space-y-2">
             <Label htmlFor="correct-amount">{t("correctedAmount")}</Label>
             <Input
               id="correct-amount"
@@ -102,7 +132,7 @@ export function CorrectSaleDialog({
               required
             />
           </div>
-          {quantityRequired && (
+          {showQuantity && (
             <div className="space-y-2">
               <Label htmlFor="correct-quantity">{tSales("quantity")}</Label>
               <Input
@@ -112,7 +142,7 @@ export function CorrectSaleDialog({
                 step="1"
                 value={newQuantity}
                 onChange={(e) => setNewQuantity(e.target.value)}
-                required
+                required={quantityRequired}
               />
             </div>
           )}

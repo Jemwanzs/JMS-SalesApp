@@ -23,7 +23,19 @@ import type { Database } from "@/types/database.types";
  * ProductService.update, not the actual enforcement boundary.
  */
 export const DEFAULT_ROLE_GRANTS: Record<string, string[]> = {
-  "Sales User": ["sales.create", "sales.view_own", "analytics.view_own"],
+  "Sales User": [
+    "sales.create",
+    "sales.view_own",
+    "analytics.view_own",
+    // Sales Record Correction & Deletion: "if Create Sales is ON,
+    // default Edit/Correct and Delete ON too" -- a deliberate exception
+    // to this table's usual "new mutation permissions are admin-only by
+    // default" convention (sales.reverse, added in migration 0026, was
+    // NOT auto-granted here even though Sales User already had
+    // sales.create), because the spec explicitly requires it this time.
+    "sales.edit_window",
+    "sales.delete",
+  ],
   Supervisor: [
     "sales.create",
     "sales.view_own",
@@ -37,6 +49,9 @@ export const DEFAULT_ROLE_GRANTS: Record<string, string[]> = {
     // Daily Expenses: read-only visibility, same reasoning as
     // inventory.view above -- Sales User gets nothing here either.
     "expenses.view",
+    // Sales Record Correction & Deletion: see the Sales User comment above.
+    "sales.edit_window",
+    "sales.delete",
   ],
   // Tenant Administrator gets every permission in the catalog — computed
   // from the live permission list at seed time (see seedDefaultRoles)

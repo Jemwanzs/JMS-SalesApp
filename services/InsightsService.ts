@@ -178,7 +178,8 @@ export class InsightsService {
       .gte("sale_date", from)
       .lte("sale_date", to)
       .neq("status", "voided")
-      .neq("status", "corrected");
+      .neq("status", "corrected")
+      .neq("status", "deleted");
 
     if (systemProduct) {
       query = query.neq("product_id", systemProduct.id);

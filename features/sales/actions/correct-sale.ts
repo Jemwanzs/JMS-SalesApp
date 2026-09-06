@@ -27,6 +27,7 @@ export async function correctSaleAction(
     newAmount: formData.get("newAmount"),
     newQuantity: formData.get("newQuantity"),
     newNotes: formData.get("newNotes"),
+    newProductId: formData.get("newProductId"),
     reason: formData.get("reason"),
   });
 
@@ -45,6 +46,7 @@ export async function correctSaleAction(
       newAmount: parsed.data.newAmount,
       newQuantity: parsed.data.newQuantity === "" ? null : parsed.data.newQuantity,
       newNotes: parsed.data.newNotes || null,
+      newProductId: parsed.data.newProductId,
       reason: parsed.data.reason,
     });
 
@@ -60,7 +62,11 @@ export async function correctSaleAction(
           action: AUDIT_ACTION.SALE_EDITED,
           entityType: "sale",
           entityId: parsed.data.saleId,
-          newValues: { newAmount: parsed.data.newAmount, newQuantity: parsed.data.newQuantity },
+          newValues: {
+            newAmount: parsed.data.newAmount,
+            newQuantity: parsed.data.newQuantity,
+            newProductId: parsed.data.newProductId,
+          },
           reason: parsed.data.reason,
           metadata: result.replacementSaleId ? { replacementSaleId: result.replacementSaleId } : null,
         })

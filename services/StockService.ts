@@ -399,7 +399,8 @@ export class StockService {
       .eq("product_id", productId)
       .eq("sale_date", date)
       .neq("status", "voided")
-      .neq("status", "corrected");
+      .neq("status", "corrected")
+      .neq("status", "deleted");
 
     if (error) {
       throw new Error(`StockService.getActualRecordedSales: ${error.message}`);
@@ -681,6 +682,7 @@ export class StockService {
       .in("product_id", productIds)
       .neq("status", "voided")
       .neq("status", "corrected")
+      .neq("status", "deleted")
       .eq("sale_date", date);
 
     if (salesError) {

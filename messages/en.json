@@ -9,7 +9,8 @@
   },
   "Common": {
     "close": "Close",
-    "checkEntries": "Please check your entries"
+    "checkEntries": "Please check your entries",
+    "cancel": "Cancel"
   },
   "Sales": {
     "greeting": "Good day, {name}",
@@ -92,6 +93,8 @@
     "replacementRecorded": "A replacement sale was recorded with the new amount.",
     "saleReversed": "Sale reversed",
     "offsettingRecorded": "An offsetting entry was recorded for the same amount.",
+    "saleDeleted": "Sale deleted",
+    "stockAndReportsRestored": "Stock and reports have been recalculated as if it never happened.",
     "noSalesMatch": "No sales match these filters.",
     "saleCount": "{count, plural, one {# sale} other {# sales}}",
 
@@ -100,6 +103,7 @@
     "statusCorrected": "Corrected",
     "statusVoided": "Voided",
     "statusReversed": "Reversed",
+    "statusDeleted": "Deleted",
 
     "void": "Void",
     "voidThisSale": "Void this sale",
@@ -110,6 +114,7 @@
     "correct": "Correct",
     "correctThisSale": "Correct this sale",
     "correctDescription": "The original is kept and marked corrected; a new sale is recorded with the fixed amount, linked back to this one.",
+    "product": "Product",
     "correctedAmount": "Corrected amount",
     "submitting": "Submitting...",
     "correctSale": "Correct sale",
@@ -119,6 +124,11 @@
     "reverseDescription": "The sale stays on record. A new offsetting entry for the same amount will be recorded alongside it, netting to zero in your totals. This cannot be undone.",
     "reversing": "Reversing...",
     "reverseSale": "Reverse sale",
+
+    "deleteThisSale": "Delete this sale?",
+    "deleteSaleDescription": "The sale will be removed from your operational sales records. Related reports and analytics will be recalculated, and any stock effects will be reversed.",
+    "deleting": "Deleting...",
+    "deleteSale": "Delete sale",
 
     "couldNotLoadReport": "Could not load the daily report",
     "shareTitle": "Daily Sales — {tenantName}",

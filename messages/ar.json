@@ -9,7 +9,8 @@
   },
   "Common": {
     "close": "إغلاق",
-    "checkEntries": "يرجى التحقق من إدخالاتك"
+    "checkEntries": "يرجى التحقق من إدخالاتك",
+    "cancel": "إلغاء"
   },
   "Sales": {
     "greeting": "نهارك سعيد، {name}",
@@ -92,6 +93,8 @@
     "replacementRecorded": "تم تسجيل عملية بيع بديلة بالمبلغ الجديد.",
     "saleReversed": "تم عكس البيع",
     "offsettingRecorded": "تم تسجيل قيد معاكس بنفس المبلغ.",
+    "saleDeleted": "تم حذف البيع",
+    "stockAndReportsRestored": "تمت إعادة احتساب المخزون والتقارير وكأن ذلك لم يحدث.",
     "noSalesMatch": "لا توجد مبيعات مطابقة لهذه المرشحات.",
     "saleCount": "{count, plural, one {عملية بيع واحدة} two {عمليتا بيع} few {# عمليات بيع} many {# عملية بيع} other {# عملية بيع}}",
 
@@ -100,6 +103,7 @@
     "statusCorrected": "مصححة",
     "statusVoided": "ملغاة",
     "statusReversed": "معكوسة",
+    "statusDeleted": "محذوفة",
 
     "void": "إلغاء",
     "voidThisSale": "إلغاء هذا البيع",
@@ -110,6 +114,7 @@
     "correct": "تصحيح",
     "correctThisSale": "تصحيح هذا البيع",
     "correctDescription": "يُحتفظ بالأصل ويُعلَّم كمصحح؛ تُسجَّل عملية بيع جديدة بالمبلغ المصحح، مرتبطة بهذه العملية.",
+    "product": "المنتج",
     "correctedAmount": "المبلغ المصحح",
     "submitting": "جارٍ الإرسال...",
     "correctSale": "تصحيح البيع",
@@ -119,6 +124,11 @@
     "reverseDescription": "يبقى البيع مسجلاً. سيتم تسجيل قيد معاكس بنفس المبلغ إلى جانبه، بحيث يصبح الصافي صفرًا في إجمالياتك. لا يمكن التراجع عن هذا.",
     "reversing": "جارٍ العكس...",
     "reverseSale": "عكس البيع",
+
+    "deleteThisSale": "حذف هذا البيع؟",
+    "deleteSaleDescription": "ستتم إزالة عملية البيع من سجلات مبيعاتك التشغيلية. سيُعاد احتساب التقارير والتحليلات المرتبطة بها، وسيتم عكس أي تأثيرات على المخزون.",
+    "deleting": "جارٍ الحذف...",
+    "deleteSale": "حذف البيع",
 
     "couldNotLoadReport": "تعذّر تحميل التقرير اليومي",
     "shareTitle": "مبيعات اليوم — {tenantName}",
