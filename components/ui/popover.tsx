@@ -40,7 +40,20 @@ function PopoverContent({
         anchor={anchor}
         side={side}
         sideOffset={sideOffset}
-        className="z-50"
+        // Strictly above Dialog's own z-50 backdrop (components/ui/
+        // dialog.tsx's DialogOverlay), not just equal to it -- a Popover
+        // opened from inside a Dialog (e.g. ExpenseItemCombobox inside
+        // record-expense-dialog.tsx, ProductCombobox inside
+        // correct-sale-dialog.tsx) portals into the same container at
+        // the same z-index the overlay uses, so which one paints on top
+        // came down to DOM insertion order alone -- and lost often
+        // enough that the overlay's own backdrop-blur rendered ON TOP of
+        // the popover, making it look "fully blurry, nothing seen"
+        // rather than raising any error. A popover triggered from
+        // within a modal should never end up visually behind that
+        // modal's own backdrop, so this is a strict, always-correct
+        // ordering, not a one-off patch for a single caller.
+        className="z-[60]"
       >
         <PopoverPrimitive.Popup
           data-slot="popover-content"
