@@ -116,6 +116,8 @@
     "correctDescription": "The original is kept and marked corrected; a new sale is recorded with the fixed amount, linked back to this one.",
     "product": "Product",
     "correctedAmount": "Corrected amount",
+    "saleDate": "Sale date",
+    "saleDateMoveWarning": "This sale will move from {from} to {to}. Related reports and analytics will be recalculated automatically.",
     "submitting": "Submitting...",
     "correctSale": "Correct sale",
 

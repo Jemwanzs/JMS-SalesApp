@@ -67,7 +67,7 @@ function DialogContent({
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         className={cn(
-          // max-h-[85vh] + overflow-y-auto by default -- without a height
+          // max-h-[85dvh] + overflow-y-auto by default -- without a height
           // cap, a dialog taller than the viewport still centers via
           // top-1/2/-translate-y-1/2 (equal margins top-to-bottom, as
           // intended), but "equal margins" for a box taller than the
@@ -78,6 +78,18 @@ function DialogContent({
           // scroll internally is what actually keeps every dialog
           // centered with equal margins on a small screen, regardless of
           // how much content it holds.
+          //
+          // dvh, not vh -- vh is the LAYOUT viewport, which on mobile
+          // does not shrink when the on-screen keyboard opens (typing
+          // into any field inside a dialog, e.g. Correct Sale's Amount/
+          // Reason). The dialog's max-height was computed against a
+          // viewport taller than what's actually visible, so its own
+          // footer/submit button ended up positioned behind the
+          // keyboard with nothing left to scroll -- the container
+          // believed it already fit. dvh is the DYNAMIC viewport height,
+          // which does react live to the keyboard/toolbar, so the same
+          // scroll-internally mechanism above now actually reaches the
+          // button. Confirmed live on Correct Sale's dialog.
           //
           // grid-cols-1, not bare grid -- Tailwind's grid-cols-N
           // utilities set grid-template-columns: repeat(N, minmax(0,
@@ -92,7 +104,7 @@ function DialogContent({
           // dialog's own grid column had grown to fit the longest
           // permission description in the full catalog, not just
           // whichever fit during a narrower manual test.
-          "fixed top-1/2 left-1/2 z-50 grid grid-cols-1 max-h-[85vh] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          "fixed top-1/2 left-1/2 z-50 grid grid-cols-1 max-h-[85dvh] w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
           className
         )}
         {...props}

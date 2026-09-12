@@ -116,6 +116,8 @@
     "correctDescription": "L'original est conservé et marqué comme corrigé ; une nouvelle vente est enregistrée avec le montant corrigé, liée à celle-ci.",
     "product": "Produit",
     "correctedAmount": "Montant corrigé",
+    "saleDate": "Date de vente",
+    "saleDateMoveWarning": "Cette vente sera déplacée du {from} au {to}. Les rapports et analyses associés seront recalculés automatiquement.",
     "submitting": "Envoi en cours...",
     "correctSale": "Corriger la vente",
 

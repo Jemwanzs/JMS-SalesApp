@@ -65,6 +65,7 @@ export interface SaleListItem {
   quantity: number | null;
   status: SaleStatus;
   saleTime: string;
+  saleDate: string;
   recordedBy: string;
 }
 
@@ -195,6 +196,7 @@ export class SalesService {
     newQuantity?: number | null;
     newNotes?: string | null;
     newProductId: string;
+    newSaleDate: string;
     reason: string;
   }): Promise<VoidOrCorrectResult> {
     const { data, error } = await this.supabase.rpc("correct_sale", {
@@ -203,6 +205,7 @@ export class SalesService {
       p_new_quantity: input.newQuantity ?? null,
       p_new_notes: input.newNotes ?? null,
       p_new_product_id: input.newProductId,
+      p_new_sale_date: input.newSaleDate,
       p_reason: input.reason,
     });
 
@@ -273,7 +276,7 @@ export class SalesService {
   ): Promise<SaleListItem[]> {
     let query = this.supabase
       .from("sales")
-      .select("id, sale_number, product_id, product_name_snapshot, actual_amount, quantity, status, sale_time, recorded_by")
+      .select("id, sale_number, product_id, product_name_snapshot, actual_amount, quantity, status, sale_time, sale_date, recorded_by")
       .eq("tenant_id", tenantId)
       // Deleted sales genuinely disappear from Sales History (unlike
       // voided/corrected, which stay visible with a status badge for
@@ -313,6 +316,7 @@ export class SalesService {
       quantity: row.quantity,
       status: row.status,
       saleTime: row.sale_time,
+      saleDate: row.sale_date,
       recordedBy: row.recorded_by,
     }));
   }

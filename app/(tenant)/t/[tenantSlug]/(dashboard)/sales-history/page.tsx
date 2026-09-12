@@ -172,6 +172,8 @@ export default async function SalesHistoryPage({
         products={correctableProducts}
         quantityEnabled={quantityEnabled ?? true}
         quantityMandatory={quantityMandatory}
+        todayDate={today}
+        yesterdayDate={yesterday}
         editWindowMode={editWindowMode ?? "business_day"}
         editWindowHours={editWindowHours ?? 2}
         deletionEnabled={deletionEnabled ?? true}

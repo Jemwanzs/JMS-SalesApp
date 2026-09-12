@@ -28,6 +28,7 @@ export async function correctSaleAction(
     newQuantity: formData.get("newQuantity"),
     newNotes: formData.get("newNotes"),
     newProductId: formData.get("newProductId"),
+    newSaleDate: formData.get("newSaleDate"),
     reason: formData.get("reason"),
   });
 
@@ -47,6 +48,7 @@ export async function correctSaleAction(
       newQuantity: parsed.data.newQuantity === "" ? null : parsed.data.newQuantity,
       newNotes: parsed.data.newNotes || null,
       newProductId: parsed.data.newProductId,
+      newSaleDate: parsed.data.newSaleDate,
       reason: parsed.data.reason,
     });
 
@@ -66,6 +68,7 @@ export async function correctSaleAction(
             newAmount: parsed.data.newAmount,
             newQuantity: parsed.data.newQuantity,
             newProductId: parsed.data.newProductId,
+            newSaleDate: parsed.data.newSaleDate,
           },
           reason: parsed.data.reason,
           metadata: result.replacementSaleId ? { replacementSaleId: result.replacementSaleId } : null,

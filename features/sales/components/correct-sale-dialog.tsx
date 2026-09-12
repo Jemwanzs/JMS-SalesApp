@@ -24,6 +24,9 @@ export function CorrectSaleDialog({
   currentAmount,
   currentQuantity,
   currentProductId,
+  currentSaleDate,
+  todayDate,
+  yesterdayDate,
   products,
   quantityEnabled,
   quantityMandatory,
@@ -35,6 +38,11 @@ export function CorrectSaleDialog({
   /** Seeds the field's initial value; whether it's shown/required now depends on the tenant's quantity settings and whichever product is currently selected (see showQuantity/quantityRequired below), since correcting into/out of a tracked product -- or a tenant that doesn't use quantity by control method at all -- changes that. */
   currentQuantity: number | null;
   currentProductId: string;
+  /** The sale's own current business date -- seeds the date field and is what the "moving from X to Y" warning compares against. */
+  currentSaleDate: string;
+  /** The tenant/location's effective business date (same value threaded to SaleHistoryFilters elsewhere on this page) -- caps the date picker so a future date can never even be selected client-side; correct_sale() itself re-validates this server-side against the same centralized business-date logic, not a raw client "today". */
+  todayDate: string;
+  yesterdayDate: string;
   /** The tenant's real catalog, excluding the system "Others" product -- correcting a sale into free-text has no mechanism today. */
   products: ProductComboboxItem[];
   /** Settings -> Show Quantity. */
@@ -48,6 +56,7 @@ export function CorrectSaleDialog({
   const [newAmount, setNewAmount] = useState(String(currentAmount));
   const [newQuantity, setNewQuantity] = useState(currentQuantity !== null ? String(currentQuantity) : "");
   const [newProductId, setNewProductId] = useState(currentProductId);
+  const [newSaleDate, setNewSaleDate] = useState(currentSaleDate);
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -83,6 +92,7 @@ export function CorrectSaleDialog({
     formData.set("newQuantity", newQuantity);
     formData.set("newNotes", reason);
     formData.set("newProductId", newProductId);
+    formData.set("newSaleDate", newSaleDate);
     formData.set("reason", reason);
 
     startTransition(async () => {
@@ -146,6 +156,40 @@ export function CorrectSaleDialog({
               />
             </div>
           )}
+          <div className="space-y-2">
+            <Label>{t("saleDate")}</Label>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={newSaleDate === todayDate ? "default" : "outline"}
+                onClick={() => setNewSaleDate(todayDate)}
+              >
+                {t("today")}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={newSaleDate === yesterdayDate ? "default" : "outline"}
+                onClick={() => setNewSaleDate(yesterdayDate)}
+              >
+                {t("yesterday")}
+              </Button>
+              <Input
+                type="date"
+                value={newSaleDate}
+                max={todayDate}
+                onChange={(e) => setNewSaleDate(e.target.value)}
+                className="h-8 w-auto"
+                aria-label={t("saleDate")}
+              />
+            </div>
+            {newSaleDate !== currentSaleDate && (
+              <p className="text-xs text-amber-600 dark:text-amber-400">
+                {t("saleDateMoveWarning", { from: currentSaleDate, to: newSaleDate })}
+              </p>
+            )}
+          </div>
           <div className="space-y-2">
             <Label htmlFor="correct-reason">{tSales("reason")}</Label>
             <Input

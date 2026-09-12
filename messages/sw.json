@@ -116,6 +116,8 @@
     "correctDescription": "Ya asili inahifadhiwa na kuwekwa alama ya kurekebishwa; mauzo mapya yanarekodiwa kwa kiasi kilichorekebishwa, yakiunganishwa na haya.",
     "product": "Bidhaa",
     "correctedAmount": "Kiasi kilichorekebishwa",
+    "saleDate": "Tarehe ya mauzo",
+    "saleDateMoveWarning": "Mauzo haya yatahamishwa kutoka {from} hadi {to}. Ripoti na uchambuzi husika zitahesabiwa upya kiotomatiki.",
     "submitting": "Inatuma...",
     "correctSale": "Rekebisha mauzo",
 

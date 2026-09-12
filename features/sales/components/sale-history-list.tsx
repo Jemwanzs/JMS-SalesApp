@@ -141,6 +141,8 @@ interface EditDeleteWindowConfig {
   deleteWindowMinutes: number;
   quantityEnabled: boolean;
   quantityMandatory: boolean;
+  todayDate: string;
+  yesterdayDate: string;
 }
 
 /**
@@ -226,6 +228,9 @@ function SaleHistoryRow({
               currentAmount={sale.actualAmount}
               currentQuantity={sale.quantity}
               currentProductId={sale.productId}
+              currentSaleDate={sale.saleDate}
+              todayDate={config.todayDate}
+              yesterdayDate={config.yesterdayDate}
               products={products}
               quantityEnabled={config.quantityEnabled}
               quantityMandatory={config.quantityMandatory}
@@ -273,6 +278,8 @@ export function SaleHistoryList({
   products,
   quantityEnabled,
   quantityMandatory,
+  todayDate,
+  yesterdayDate,
   editWindowMode,
   editWindowHours,
   deletionEnabled,
@@ -292,6 +299,8 @@ export function SaleHistoryList({
   products: ProductComboboxItem[];
   quantityEnabled: boolean;
   quantityMandatory: boolean;
+  todayDate: string;
+  yesterdayDate: string;
   editWindowMode: "business_day" | "hours";
   editWindowHours: number;
   deletionEnabled: boolean;
@@ -380,6 +389,8 @@ export function SaleHistoryList({
     deleteWindowMinutes,
     quantityEnabled,
     quantityMandatory,
+    todayDate,
+    yesterdayDate,
   };
 
   return (

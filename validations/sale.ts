@@ -31,6 +31,12 @@ export const correctSaleSchema = z.object({
   newQuantity: z.union([z.coerce.number().positive(), z.literal("")]),
   newNotes: z.string().trim().max(500).optional(),
   newProductId: z.uuid("Select a product"),
+  // Future-date rejection happens server-side in correct_sale() itself
+  // (migration 0077), against the tenant's own effective business date
+  // via resolve_effective_business_date() -- not re-derivable here from
+  // a plain client-side "today" without the same business-day/timezone
+  // logic, so this schema only checks the shape.
+  newSaleDate: z.iso.date("Select a valid date"),
   reason: z.string().trim().min(1, "A reason is required"),
 });
 
