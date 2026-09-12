@@ -8,17 +8,21 @@ import { setExpenseItemStatusAction } from "@/features/expenses/actions/archive-
 import { ExpenseItemFormDialog } from "@/features/expenses/components/expense-item-form-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import type { ExpenseCategory } from "@/services/ExpenseCategoryService";
 import type { ExpenseItem } from "@/services/ExpenseItemService";
 
 export function ExpenseItemManagementList({
   tenantId,
   tenantSlug,
   expenseItems,
+  categories,
 }: {
   tenantId: string;
   tenantSlug: string;
   expenseItems: ExpenseItem[];
+  categories: ExpenseCategory[];
 }) {
+  const categoryNameById = new Map(categories.map((c) => [c.id, c.name]));
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<ExpenseItem | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -66,6 +70,11 @@ export function ExpenseItemManagementList({
                   <Badge variant="outline" className="shrink-0">
                     {item.expenseType === "recurring" ? "Recurring" : "One-Time"}
                   </Badge>
+                  {item.categoryId && categoryNameById.get(item.categoryId) && (
+                    <Badge variant="secondary" className="shrink-0">
+                      {categoryNameById.get(item.categoryId)}
+                    </Badge>
+                  )}
                   {item.status === "archived" && (
                     <Badge variant="secondary" className="shrink-0">
                       Archived
@@ -96,6 +105,7 @@ export function ExpenseItemManagementList({
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         editingItem={editingItem}
+        categories={categories}
       />
     </div>
   );

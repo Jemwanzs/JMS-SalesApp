@@ -3,32 +3,40 @@
 import { revalidatePath } from "next/cache";
 
 import { AuditService } from "@/services/AuditService";
-import { ExpenseService, type ExpenseRecord } from "@/services/ExpenseService";
+import { ExpenseService } from "@/services/ExpenseService";
 import { AUDIT_ACTION } from "@/lib/audit/actions";
 import { assertCan } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
-import { resolveActiveLocationId } from "@/lib/tenant/resolve-active-location";
-import { firstIssuePerField } from "@/lib/utils/form-errors";
 import { todayString } from "@/lib/utils/date-ranges";
-import { recordExpenseSchema, type RecordExpenseInput } from "@/validations/expense";
+import { firstIssuePerField } from "@/lib/utils/form-errors";
+import { correctExpenseSchema, type CorrectExpenseInput } from "@/validations/expense";
 
-export interface RecordExpenseState {
+export interface CorrectExpenseState {
   error?: string;
-  fieldErrors?: Partial<Record<keyof RecordExpenseInput, string>>;
+  fieldErrors?: Partial<Record<keyof CorrectExpenseInput, string>>;
   success?: boolean;
-  expense?: ExpenseRecord;
 }
 
-export async function recordExpenseAction(
+/**
+ * Replaces editExpenseAction -- correction now covers every field
+ * (date/item/category/amount/vendor/payment-method/reference/tax/
+ * reimbursable/notes/receipt), requires a reason, and the DB function
+ * (correct_expense(), migration 0082) writes a structured
+ * expense_corrections row alongside this action's own AuditService call
+ * -- both, matching how sales corrections keep a structured table AND an
+ * action-layer audit log, not either/or.
+ */
+export async function correctExpenseAction(
   tenantId: string,
   tenantSlug: string,
   timezone: string,
-  _prevState: RecordExpenseState,
+  _prevState: CorrectExpenseState,
   formData: FormData
-): Promise<RecordExpenseState> {
-  const parsed = recordExpenseSchema.safeParse({
-    id: formData.get("id") || undefined,
+): Promise<CorrectExpenseState> {
+  const parsed = correctExpenseSchema.safeParse({
+    expenseId: formData.get("expenseId"),
+    reason: formData.get("reason"),
     expenseItemId: formData.get("expenseItemId"),
     categoryId: formData.get("categoryId"),
     paymentMethodId: formData.get("paymentMethodId"),
@@ -44,13 +52,8 @@ export async function recordExpenseAction(
   });
 
   if (!parsed.success) {
-    return { fieldErrors: firstIssuePerField<keyof RecordExpenseInput>(parsed.error.issues) };
+    return { fieldErrors: firstIssuePerField<keyof CorrectExpenseInput>(parsed.error.issues) };
   }
-
-  // Belt-and-suspenders with the DB check constraint (expense_date <=
-  // current_date) -- a friendlier error before the query ever fires,
-  // computed against the tenant's own timezone rather than server UTC,
-  // same principle BusinessDayService applies to "today" everywhere else.
   if (parsed.data.expenseDate > todayString(timezone)) {
     return { fieldErrors: { expenseDate: "The expense date cannot be in the future" } };
   }
@@ -63,18 +66,12 @@ export async function recordExpenseAction(
     return { error: "Not signed in" };
   }
 
-  let expense: ExpenseRecord;
   try {
-    await assertCan("expenses.create", { tenantId });
+    await assertCan("expenses.edit", { tenantId });
 
-    const locationId = await resolveActiveLocationId(supabase, tenantId);
-    if (!locationId) {
-      return { error: "Could not resolve your active branch -- please sign in again." };
-    }
-
-    expense = await new ExpenseService(supabase).recordExpense(tenantId, {
-      id: parsed.data.id,
-      locationId,
+    await new ExpenseService(supabase).correctExpense({
+      expenseId: parsed.data.expenseId,
+      reason: parsed.data.reason,
       expenseItemId: parsed.data.expenseItemId,
       categoryId: parsed.data.categoryId,
       paymentMethodId: parsed.data.paymentMethodId,
@@ -84,27 +81,27 @@ export async function recordExpenseAction(
       referenceNumber: parsed.data.referenceNumber || null,
       taxAmount: parsed.data.taxAmount === "" || parsed.data.taxAmount == null ? null : Number(parsed.data.taxAmount),
       reimbursable: parsed.data.reimbursable ?? false,
+      notes: parsed.data.notes || null,
       receiptStoragePath: parsed.data.receiptStoragePath || null,
       receiptFileType: parsed.data.receiptFileType || null,
-      notes: parsed.data.notes || null,
-      recordedBy: user.id,
     });
 
     await new AuditService(createServiceRoleClient())
       .log({
         tenantId,
         actorProfileId: user.id,
-        action: AUDIT_ACTION.EXPENSE_RECORDED,
+        action: AUDIT_ACTION.EXPENSE_CORRECTED,
         entityType: "expenses",
-        entityId: expense.id,
-        newValues: { expenseItemName: expense.expenseItemName, actualAmount: expense.actualAmount, expenseDate: expense.expenseDate },
+        entityId: parsed.data.expenseId,
+        reason: parsed.data.reason,
+        newValues: { actualAmount: parsed.data.actualAmount, expenseDate: parsed.data.expenseDate },
       })
       .catch(() => {});
   } catch (err) {
-    return { error: err instanceof Error ? err.message : "Could not record this expense" };
+    return { error: err instanceof Error ? err.message : "Could not correct this expense" };
   }
 
   revalidatePath(`/t/${tenantSlug}/expenses`);
   revalidatePath(`/t/${tenantSlug}/expenses/analytics`);
-  return { success: true, expense };
+  return { success: true };
 }

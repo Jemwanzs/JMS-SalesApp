@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import type { ExpenseCategory } from "@/services/ExpenseCategoryService";
 import type { ExpenseItem, ExpenseItemType } from "@/services/ExpenseItemService";
 
 /**
@@ -30,17 +31,20 @@ export function ExpenseItemFormDialog({
   open,
   onOpenChange,
   editingItem,
+  categories,
 }: {
   tenantId: string;
   tenantSlug: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editingItem: ExpenseItem | null;
+  categories: ExpenseCategory[];
 }) {
   const [isPending, startTransition] = useTransition();
   const [name, setName] = useState("");
   const [expenseType, setExpenseType] = useState<ExpenseItemType>("recurring");
   const [estimatedAmount, setEstimatedAmount] = useState("");
+  const [categoryId, setCategoryId] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -48,6 +52,7 @@ export function ExpenseItemFormDialog({
     setName(editingItem?.name ?? "");
     setExpenseType(editingItem?.expenseType ?? "recurring");
     setEstimatedAmount(editingItem?.estimatedAmount != null ? String(editingItem.estimatedAmount) : "");
+    setCategoryId(editingItem?.categoryId ?? "");
     setError(null);
   }, [open, editingItem]);
 
@@ -59,6 +64,7 @@ export function ExpenseItemFormDialog({
     formData.set("name", name);
     formData.set("expenseType", expenseType);
     formData.set("estimatedAmount", estimatedAmount);
+    formData.set("categoryId", categoryId);
     if (editingItem) {
       formData.set("expenseItemId", editingItem.id);
     }
@@ -128,6 +134,23 @@ export function ExpenseItemFormDialog({
               onChange={(e) => setEstimatedAmount(e.target.value)}
               placeholder="A guide only -- never enforced"
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="expense-item-category">Category (optional)</Label>
+            <select
+              id="expense-item-category"
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            >
+              <option value="">No category</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           {error && <p className="text-sm text-destructive">{error}</p>}

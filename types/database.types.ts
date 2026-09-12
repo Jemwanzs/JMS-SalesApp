@@ -462,6 +462,7 @@ export interface Database {
           name: string;
           expense_type: "recurring" | "one_time";
           estimated_amount: number | null;
+          category_id: string | null;
           status: "active" | "archived";
           created_by: string | null;
           created_at: string;
@@ -473,6 +474,65 @@ export interface Database {
           expense_type: Database["public"]["Tables"]["expense_items"]["Row"]["expense_type"];
         };
         Update: Partial<Database["public"]["Tables"]["expense_items"]["Row"]>;
+        Relationships: [];
+      };
+      expense_categories: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          name: string;
+          receipt_required: boolean;
+          status: "active" | "archived";
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["expense_categories"]["Row"]> & {
+          tenant_id: string;
+          name: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["expense_categories"]["Row"]>;
+        Relationships: [];
+      };
+      expense_corrections: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          expense_id: string;
+          correction_type: "void" | "correct";
+          old_values: Record<string, unknown>;
+          new_values: Record<string, unknown> | null;
+          reason: string;
+          corrected_by: string;
+          corrected_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["expense_corrections"]["Row"]> & {
+          tenant_id: string;
+          expense_id: string;
+          correction_type: Database["public"]["Tables"]["expense_corrections"]["Row"]["correction_type"];
+          old_values: Record<string, unknown>;
+          reason: string;
+          corrected_by: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["expense_corrections"]["Row"]>;
+        Relationships: [];
+      };
+      expense_payment_methods: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          name: string;
+          is_default: boolean;
+          status: "active" | "archived";
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["expense_payment_methods"]["Row"]> & {
+          tenant_id: string;
+          name: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["expense_payment_methods"]["Row"]>;
         Relationships: [];
       };
       expenses: {
@@ -493,6 +553,18 @@ export interface Database {
           edited_by: string | null;
           edited_at: string | null;
           created_at: string;
+          category_id: string | null;
+          category_name_snapshot: string | null;
+          payment_method_id: string | null;
+          payment_method_name_snapshot: string | null;
+          vendor: string | null;
+          reference_number: string | null;
+          tax_amount: number | null;
+          reimbursable: boolean;
+          receipt_storage_path: string | null;
+          receipt_file_type: string | null;
+          receipt_extracted_data: Record<string, unknown> | null;
+          expense_number: string | null;
         };
         Insert: Partial<Database["public"]["Tables"]["expenses"]["Row"]> & {
           tenant_id: string;
@@ -1230,12 +1302,22 @@ export interface Database {
         Args: { p_tenant_id: string; p_location_id: string };
         Returns: { business_date: string; is_live: boolean; business_day_id: string | null }[];
       };
-      edit_expense: {
+      correct_expense: {
         Args: {
           p_expense_id: string;
-          p_actual_amount: number;
-          p_expense_date: string;
-          p_notes: string | null;
+          p_reason: string;
+          p_new_expense_date: string;
+          p_new_expense_item_id: string;
+          p_new_category_id: string;
+          p_new_actual_amount: number;
+          p_new_vendor: string | null;
+          p_new_payment_method_id: string;
+          p_new_reference_number: string | null;
+          p_new_tax_amount: number | null;
+          p_new_reimbursable: boolean | null;
+          p_new_notes: string | null;
+          p_new_receipt_storage_path: string | null;
+          p_new_receipt_file_type: string | null;
         };
         Returns: Database["public"]["Tables"]["expenses"]["Row"];
       };

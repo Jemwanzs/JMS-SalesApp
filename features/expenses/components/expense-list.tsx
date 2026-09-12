@@ -3,12 +3,17 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
 
+import { FileText } from "lucide-react";
+
 import { ExpenseDetailDialog } from "@/features/expenses/components/expense-detail-dialog";
 import { RecordExpenseDialog } from "@/features/expenses/components/record-expense-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import type { ExpenseCategory } from "@/services/ExpenseCategoryService";
 import type { ExpenseItem } from "@/services/ExpenseItemService";
 import type { ExpenseRecord } from "@/services/ExpenseService";
+import type { ExpensePaymentMethod } from "@/services/ExpensePaymentMethodService";
+import type { LocationSummary } from "@/services/LocationService";
 
 /**
  * Expense Name | Actual Amount | Date | Recorded By, per spec -- a
@@ -25,9 +30,18 @@ export function ExpenseList({
   viewedDate,
   expenses,
   activeItems,
+  recentlyUsedItemIds,
+  categories,
+  paymentMethods,
+  defaultPaymentMethodId,
+  knownVendors,
+  locations,
   canCreate,
   canEdit,
   canVoid,
+  canViewReceipt,
+  canDownloadReceipt,
+  canViewAll,
 }: {
   tenantId: string;
   tenantSlug: string;
@@ -37,10 +51,20 @@ export function ExpenseList({
   viewedDate: string;
   expenses: ExpenseRecord[];
   activeItems: ExpenseItem[];
+  recentlyUsedItemIds: string[];
+  categories: ExpenseCategory[];
+  paymentMethods: ExpensePaymentMethod[];
+  defaultPaymentMethodId: string;
+  knownVendors: string[];
+  locations: LocationSummary[];
   canCreate: boolean;
   canEdit: boolean;
   canVoid: boolean;
+  canViewReceipt: boolean;
+  canDownloadReceipt: boolean;
+  canViewAll: boolean;
 }) {
+  const locationNameById = new Map(locations.map((l) => [l.id, l.name]));
   const [addOpen, setAddOpen] = useState(false);
   const [selected, setSelected] = useState<ExpenseRecord | null>(null);
 
@@ -73,15 +97,28 @@ export function ExpenseList({
                     <p className={`truncate font-medium ${expense.status === "voided" ? "line-through text-muted-foreground" : ""}`}>
                       {expense.expenseItemName}
                     </p>
+                    {expense.categoryName && (
+                      <Badge variant="outline" className="shrink-0">
+                        {expense.categoryName}
+                      </Badge>
+                    )}
                     {expense.status === "voided" && (
                       <Badge variant="secondary" className="shrink-0">
                         Voided
                       </Badge>
                     )}
+                    {expense.receiptStoragePath && <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
                   </div>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="truncate text-sm text-muted-foreground">
+                    {expense.expenseNumber ? `${expense.expenseNumber} · ` : ""}
                     {expense.expenseDate} &middot; {expense.recordedByName ?? "Unknown"}
+                    {canViewAll && locationNameById.get(expense.locationId) ? ` · ${locationNameById.get(expense.locationId)}` : ""}
                   </p>
+                  {(expense.vendor || expense.paymentMethodName) && (
+                    <p className="truncate text-xs text-muted-foreground">
+                      {[expense.vendor, expense.paymentMethodName].filter(Boolean).join(" · ")}
+                    </p>
+                  )}
                 </div>
                 <p className="shrink-0 font-medium tabular-nums">{expense.actualAmount.toFixed(2)}</p>
               </div>
@@ -106,6 +143,11 @@ export function ExpenseList({
         open={addOpen}
         onOpenChange={setAddOpen}
         activeItems={activeItems}
+        recentlyUsedItemIds={recentlyUsedItemIds}
+        categories={categories}
+        paymentMethods={paymentMethods}
+        defaultPaymentMethodId={defaultPaymentMethodId}
+        knownVendors={knownVendors}
       />
 
       <ExpenseDetailDialog
@@ -114,8 +156,15 @@ export function ExpenseList({
         timezone={timezone}
         todayDate={todayDate}
         expense={selected}
+        activeItems={activeItems}
+        recentlyUsedItemIds={recentlyUsedItemIds}
+        categories={categories}
+        paymentMethods={paymentMethods}
+        knownVendors={knownVendors}
         canEdit={canEdit}
         canVoid={canVoid}
+        canViewReceipt={canViewReceipt}
+        canDownloadReceipt={canDownloadReceipt}
         onOpenChange={(open) => !open && setSelected(null)}
       />
     </div>

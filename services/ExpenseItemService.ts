@@ -5,12 +5,13 @@ import type { Database } from "@/types/database.types";
 export type ExpenseItemType = "recurring" | "one_time";
 export type ExpenseItemStatus = "active" | "archived";
 
-const EXPENSE_ITEM_SELECT = "id, name, expense_type, estimated_amount, status, created_at, updated_at";
+const EXPENSE_ITEM_SELECT = "id, name, expense_type, estimated_amount, category_id, status, created_at, updated_at";
 
 export interface CreateExpenseItemInput {
   name: string;
   expenseType: ExpenseItemType;
   estimatedAmount?: number | null;
+  categoryId?: string | null;
   createdBy: string;
 }
 
@@ -18,6 +19,7 @@ export interface UpdateExpenseItemInput {
   name: string;
   expenseType: ExpenseItemType;
   estimatedAmount?: number | null;
+  categoryId?: string | null;
 }
 
 export interface ExpenseItem {
@@ -25,6 +27,7 @@ export interface ExpenseItem {
   name: string;
   expenseType: ExpenseItemType;
   estimatedAmount: number | null;
+  categoryId: string | null;
   status: ExpenseItemStatus;
   createdAt: string;
   updatedAt: string;
@@ -35,6 +38,7 @@ function toExpenseItem(row: {
   name: string;
   expense_type: string;
   estimated_amount: number | string | null;
+  category_id: string | null;
   status: string;
   created_at: string;
   updated_at: string;
@@ -44,6 +48,7 @@ function toExpenseItem(row: {
     name: row.name,
     expenseType: row.expense_type as ExpenseItemType,
     estimatedAmount: row.estimated_amount === null ? null : Number(row.estimated_amount),
+    categoryId: row.category_id,
     status: row.status as ExpenseItemStatus,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -97,6 +102,7 @@ export class ExpenseItemService {
         name: input.name,
         expense_type: input.expenseType,
         estimated_amount: input.estimatedAmount ?? null,
+        category_id: input.categoryId ?? null,
         created_by: input.createdBy,
       })
       .select(EXPENSE_ITEM_SELECT)
@@ -116,6 +122,7 @@ export class ExpenseItemService {
         name: input.name,
         expense_type: input.expenseType,
         estimated_amount: input.estimatedAmount ?? null,
+        category_id: input.categoryId ?? null,
         updated_at: new Date().toISOString(),
       })
       .eq("tenant_id", tenantId)
@@ -127,6 +134,43 @@ export class ExpenseItemService {
       throw new Error(`ExpenseItemService.update: ${error?.message ?? "no row returned"}`);
     }
     return toExpenseItem(data);
+  }
+
+  /**
+   * Distinct expense_item_ids ordered by most-recent use (their latest
+   * expenses.created_at), backing the combobox's "recently used first"
+   * sort (spec requirement). Reads raw ids off idx_expenses_tenant_date's
+   * leading columns -- the caller joins these ids against listActive()'s
+   * own result rather than this method duplicating item fields.
+   */
+  async listRecentlyUsedIds(tenantId: string, locationId?: string, limit = 10): Promise<string[]> {
+    let query = this.supabase
+      .from("expenses")
+      .select("expense_item_id, created_at")
+      .eq("tenant_id", tenantId)
+      .eq("status", "active")
+      .order("created_at", { ascending: false })
+      .limit(200);
+
+    if (locationId) {
+      query = query.eq("location_id", locationId);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      throw new Error(`ExpenseItemService.listRecentlyUsedIds: ${error.message}`);
+    }
+
+    const seen = new Set<string>();
+    const ordered: string[] = [];
+    for (const row of data ?? []) {
+      if (!seen.has(row.expense_item_id)) {
+        seen.add(row.expense_item_id);
+        ordered.push(row.expense_item_id);
+      }
+      if (ordered.length >= limit) break;
+    }
+    return ordered;
   }
 
   async archive(tenantId: string, expenseItemId: string): Promise<void> {

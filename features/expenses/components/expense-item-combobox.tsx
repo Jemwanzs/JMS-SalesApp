@@ -38,21 +38,37 @@ export function ExpenseItemCombobox({
   value,
   onChange,
   id,
+  recentlyUsedIds,
 }: {
   items: ExpenseItem[];
   value: string;
   onChange: (id: string) => void;
   id?: string;
+  /** Ids in most-recent-use order (ExpenseItemService.listRecentlyUsedIds) -- sorted to the top of the (unfiltered) list, alphabetical otherwise. Omit for a plain alphabetical list. */
+  recentlyUsedIds?: string[];
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const selected = items.find((i) => i.id === value) ?? null;
 
+  const orderedItems = useMemo(() => {
+    if (!recentlyUsedIds || recentlyUsedIds.length === 0) return items;
+    const rank = new Map(recentlyUsedIds.map((id, i) => [id, i]));
+    return [...items].sort((a, b) => {
+      const ra = rank.get(a.id);
+      const rb = rank.get(b.id);
+      if (ra != null && rb != null) return ra - rb;
+      if (ra != null) return -1;
+      if (rb != null) return 1;
+      return a.name.localeCompare(b.name);
+    });
+  }, [items, recentlyUsedIds]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter((i) => i.name.toLowerCase().includes(q));
-  }, [items, query]);
+    if (!q) return orderedItems;
+    return orderedItems.filter((i) => i.name.toLowerCase().includes(q));
+  }, [orderedItems, query]);
 
   function select(item: ExpenseItem) {
     onChange(item.id);

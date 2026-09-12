@@ -2,10 +2,17 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
+import { ChevronDown } from "lucide-react";
 
 import { recordExpenseAction } from "@/features/expenses/actions/record-expense";
+import { ExpenseCategoryCombobox } from "@/features/expenses/components/expense-category-combobox";
 import { ExpenseItemCombobox } from "@/features/expenses/components/expense-item-combobox";
+import { ExpensePaymentMethodSelect } from "@/features/expenses/components/expense-payment-method-select";
+import { ReceiptUpload, type ExpenseReceiptValue } from "@/features/expenses/components/receipt-upload";
+import { VendorAutocompleteInput } from "@/features/expenses/components/vendor-autocomplete-input";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Collapsible, CollapsibleTrigger, CollapsiblePanel } from "@/components/ui/collapsible";
 import {
   Dialog,
   DialogContent,
@@ -16,15 +23,20 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import type { ExpenseCategory } from "@/services/ExpenseCategoryService";
 import type { ExpenseItem } from "@/services/ExpenseItemService";
+import type { ExpensePaymentMethod } from "@/services/ExpensePaymentMethodService";
 
 /**
- * "+ Add Expense" -- select a configured Expense Item, see its
+ * "+ Add Expense" -- select a configured Expense Item, category, and
+ * payment method (required, per the fast-entry spec), see the item's
  * estimated amount as plain reference text (never a constraint on the
- * Actual Amount field, per spec), enter the real amount, and a date
- * that defaults to today and can only move backward (`max` = today,
- * re-checked server-side too). Same "tap an item, get a focused form"
- * idiom RecordSaleDialog/QuickStockEntryDialog already use.
+ * Actual Amount field), enter the real amount, and a date that defaults
+ * to today and can only move backward (`max` = today, re-checked
+ * server-side too). Vendor/reference number/tax/reimbursable/notes sit
+ * under a "More Details" disclosure so the common case -- item, amount,
+ * done -- stays a few taps, not a long form. Same "tap an item, get a
+ * focused form" idiom RecordSaleDialog/QuickStockEntryDialog already use.
  */
 export function RecordExpenseDialog({
   tenantId,
@@ -34,6 +46,11 @@ export function RecordExpenseDialog({
   open,
   onOpenChange,
   activeItems,
+  recentlyUsedItemIds,
+  categories,
+  paymentMethods,
+  defaultPaymentMethodId,
+  knownVendors,
 }: {
   tenantId: string;
   tenantSlug: string;
@@ -42,6 +59,11 @@ export function RecordExpenseDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   activeItems: ExpenseItem[];
+  recentlyUsedItemIds: string[];
+  categories: ExpenseCategory[];
+  paymentMethods: ExpensePaymentMethod[];
+  defaultPaymentMethodId: string;
+  knownVendors: string[];
 }) {
   const [isPending, startTransition] = useTransition();
   // Starts unset (no item pre-selected) -- the searchable combobox
@@ -49,18 +71,38 @@ export function RecordExpenseDialog({
   // first item would make it easy to record an expense against the
   // wrong one without noticing.
   const [expenseItemId, setExpenseItemId] = useState("");
+  const [categoryId, setCategoryId] = useState("");
+  const [paymentMethodId, setPaymentMethodId] = useState(defaultPaymentMethodId);
   const [actualAmount, setActualAmount] = useState("");
   const [expenseDate, setExpenseDate] = useState(todayDate);
+  const [vendor, setVendor] = useState("");
+  const [referenceNumber, setReferenceNumber] = useState("");
+  const [taxAmount, setTaxAmount] = useState("");
+  const [reimbursable, setReimbursable] = useState(false);
+  const [receipt, setReceipt] = useState<ExpenseReceiptValue | null>(null);
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // Generated fresh each time the dialog opens -- lets a receipt upload
+  // to Storage under {expenseId}/... before this row exists in the DB
+  // (ExpenseService.RecordExpenseInput.id, same trick ProductService's
+  // own client-generated id uses).
+  const [pendingExpenseId, setPendingExpenseId] = useState("");
 
   useEffect(() => {
     if (!open) return;
     setExpenseItemId("");
+    setCategoryId("");
+    setPaymentMethodId(defaultPaymentMethodId);
     setActualAmount("");
     setExpenseDate(todayDate);
+    setVendor("");
+    setReferenceNumber("");
+    setTaxAmount("");
+    setReimbursable(false);
+    setReceipt(null);
     setNotes("");
     setError(null);
+    setPendingExpenseId(crypto.randomUUID());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -74,11 +116,30 @@ export function RecordExpenseDialog({
       setError("Select an expense item");
       return;
     }
+    if (!categoryId) {
+      setError("Select a category");
+      return;
+    }
+    if (!paymentMethodId) {
+      setError("Select a payment method");
+      return;
+    }
 
     const formData = new FormData();
+    formData.set("id", pendingExpenseId);
     formData.set("expenseItemId", expenseItemId);
+    formData.set("categoryId", categoryId);
+    formData.set("paymentMethodId", paymentMethodId);
     formData.set("actualAmount", actualAmount);
     formData.set("expenseDate", expenseDate);
+    formData.set("vendor", vendor);
+    formData.set("referenceNumber", referenceNumber);
+    formData.set("taxAmount", taxAmount);
+    formData.set("reimbursable", reimbursable ? "true" : "");
+    if (receipt) {
+      formData.set("receiptStoragePath", receipt.storagePath);
+      formData.set("receiptFileType", receipt.fileType);
+    }
     formData.set("notes", notes);
 
     startTransition(async () => {
@@ -96,24 +157,39 @@ export function RecordExpenseDialog({
     });
   }
 
+  const noConfigYet = activeItems.length === 0 || categories.length === 0 || paymentMethods.length === 0;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Add expense</DialogTitle>
-          {activeItems.length === 0 && (
-            <DialogDescription>No expense items configured yet -- add one under More &rarr; Expense Items first.</DialogDescription>
+          {noConfigYet && (
+            <DialogDescription>
+              Set up at least one expense item, category, and payment method under More &rarr; Expense Setup first.
+            </DialogDescription>
           )}
         </DialogHeader>
 
-        {activeItems.length > 0 && (
+        {!noConfigYet && (
           <form onSubmit={onSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="expense-item">Expense item</Label>
-              <ExpenseItemCombobox id="expense-item" items={activeItems} value={expenseItemId} onChange={setExpenseItemId} />
+              <ExpenseItemCombobox
+                id="expense-item"
+                items={activeItems}
+                value={expenseItemId}
+                onChange={setExpenseItemId}
+                recentlyUsedIds={recentlyUsedItemIds}
+              />
               {selectedItem?.estimatedAmount != null && (
                 <p className="text-xs text-muted-foreground">Estimated: {selectedItem.estimatedAmount.toFixed(2)} (a guide only)</p>
               )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="expense-category">Category</Label>
+              <ExpenseCategoryCombobox id="expense-category" categories={categories} value={categoryId} onChange={setCategoryId} />
             </div>
 
             <div className="space-y-2">
@@ -130,6 +206,16 @@ export function RecordExpenseDialog({
             </div>
 
             <div className="space-y-2">
+              <Label htmlFor="expense-payment-method">Payment method</Label>
+              <ExpensePaymentMethodSelect
+                id="expense-payment-method"
+                paymentMethods={paymentMethods}
+                value={paymentMethodId}
+                onChange={setPaymentMethodId}
+              />
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="expense-date">Date</Label>
               <Input
                 id="expense-date"
@@ -141,10 +227,54 @@ export function RecordExpenseDialog({
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="expense-notes">Notes (optional)</Label>
-              <Input id="expense-notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
-            </div>
+            <Collapsible>
+              <CollapsibleTrigger className="flex w-full items-center justify-between text-sm font-medium text-muted-foreground hover:text-foreground">
+                More details
+                <ChevronDown className="h-4 w-4 transition-transform group-data-open:rotate-180" />
+              </CollapsibleTrigger>
+              <CollapsiblePanel className="space-y-4 pt-3">
+                <div className="space-y-2">
+                  <Label>Receipt (optional)</Label>
+                  {pendingExpenseId && (
+                    <ReceiptUpload tenantId={tenantId} expenseId={pendingExpenseId} value={receipt} onChange={setReceipt} />
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="expense-vendor">Vendor / Merchant (optional)</Label>
+                  <VendorAutocompleteInput id="expense-vendor" value={vendor} onChange={setVendor} knownVendors={knownVendors} />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="expense-reference">Reference number (optional)</Label>
+                  <Input id="expense-reference" value={referenceNumber} onChange={(e) => setReferenceNumber(e.target.value)} />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="expense-tax">Tax amount (optional)</Label>
+                  <Input
+                    id="expense-tax"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={taxAmount}
+                    onChange={(e) => setTaxAmount(e.target.value)}
+                  />
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Checkbox id="expense-reimbursable" checked={reimbursable} onCheckedChange={(v) => setReimbursable(v === true)} />
+                  <Label htmlFor="expense-reimbursable" className="font-normal">
+                    This was paid from personal funds (reimbursable)
+                  </Label>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="expense-notes">Notes (optional)</Label>
+                  <Input id="expense-notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
+                </div>
+              </CollapsiblePanel>
+            </Collapsible>
 
             {error && <p className="text-sm text-destructive">{error}</p>}
 

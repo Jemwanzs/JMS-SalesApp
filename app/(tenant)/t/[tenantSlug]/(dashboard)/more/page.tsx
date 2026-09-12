@@ -74,6 +74,8 @@ export default async function MorePage({
     canManageSettings,
     isPlatformAdmin,
     canConfigureExpenseItems,
+    canManageExpenseCategories,
+    canManageExpensePaymentMethods,
     canViewExpenses,
     expensesEnabled,
   ] =
@@ -87,10 +89,12 @@ export default async function MorePage({
           can("settings.manage", { tenantId: tenant.id }),
           new PlatformAdminService(createServiceRoleClient()).isPlatformAdmin(user.id),
           can("expenses.configure_items", { tenantId: tenant.id }),
+          can("expenses.manage_categories", { tenantId: tenant.id }),
+          can("expenses.manage_payment_methods", { tenantId: tenant.id }),
           can("expenses.view", { tenantId: tenant.id }),
           new TenantService(supabase).getSetting<boolean>(tenant.id, "expenses_enabled"),
         ])
-      : [false, false, false, false, false, false, false, false, false, false];
+      : [false, false, false, false, false, false, false, false, false, false, false, false];
 
   const isBillingOwner = tenant?.billing_owner_profile_id === user?.id;
 
@@ -123,7 +127,9 @@ export default async function MorePage({
     // relevant permission -- hidden, not shown-disabled, same
     // convention every other conditional row here already follows.
     // Placed immediately before Settings per spec.
-    ...(expensesEnabled && canConfigureExpenseItems ? [{ label: "Expense Items", icon: Receipt, href: "expense-items" }] : []),
+    ...(expensesEnabled && (canConfigureExpenseItems || canManageExpenseCategories || canManageExpensePaymentMethods)
+      ? [{ label: "Expense Setup", icon: Receipt, href: "expense-items" }]
+      : []),
     ...(expensesEnabled && canViewExpenses ? [{ label: "Expenses", icon: Wallet, href: "expenses" }] : []),
     ...(canManageSettings ? [{ label: "Settings", icon: Settings, href: "settings" }] : []),
   ];

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 
 import { AnniversaryWishCard } from "@/features/settings/components/anniversary-wish-card";
 import { BranchesCard } from "@/features/settings/components/branches-card";
+import { ExpenseReceiptRequirementCard } from "@/features/settings/components/expense-receipt-requirement-card";
 import { ExpensesModuleCard } from "@/features/settings/components/expenses-module-card";
 import { InventoryConfigurationCard } from "@/features/settings/components/inventory-configuration-card";
 import { InventoryModuleCard } from "@/features/settings/components/inventory-module-card";
@@ -89,6 +90,8 @@ export default async function SettingsPage({
     saleEditWindowHours,
     saleDeletionEnabled,
     saleDeleteWindowMinutes,
+    expenseReceiptRequirementMode,
+    expenseReceiptRequirementAmountThreshold,
   ] = await Promise.all([
     new AnniversaryService(supabase).getWishMode(tenantId),
     tenantService.getSetting<string>(tenantId, "sale_number_template"),
@@ -115,6 +118,8 @@ export default async function SettingsPage({
     tenantService.getSetting<number>(tenantId, "sale_edit_window_hours"),
     tenantService.getSetting<boolean>(tenantId, "sale_deletion_enabled"),
     tenantService.getSetting<number>(tenantId, "sale_delete_window_minutes"),
+    tenantService.getSetting<"never" | "always" | "amount_threshold" | "category">(tenantId, "expense_receipt_requirement_mode"),
+    tenantService.getSetting<number>(tenantId, "expense_receipt_requirement_amount_threshold"),
   ]);
 
   // Matches features/settings/actions/set-inventory-enabled.ts's own
@@ -179,6 +184,14 @@ export default async function SettingsPage({
         initialReportsEnabled={reportsEnabled ?? true}
       />
       <ExpensesModuleCard tenantId={tenantId} tenantSlug={tenantSlug} initialEnabled={expensesEnabled ?? false} />
+      {expensesEnabled && (
+        <ExpenseReceiptRequirementCard
+          tenantId={tenantId}
+          tenantSlug={tenantSlug}
+          initialMode={expenseReceiptRequirementMode ?? null}
+          initialAmountThreshold={expenseReceiptRequirementAmountThreshold ?? null}
+        />
+      )}
       {inventoryEntitlement.enabled && (
         <InventoryConfigurationCard tenantId={tenantId} tenantSlug={tenantSlug} initialMethod={stockControlMethod} />
       )}

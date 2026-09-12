@@ -29,6 +29,7 @@ export async function updateExpenseItemAction(
     name: formData.get("name"),
     expenseType: formData.get("expenseType"),
     estimatedAmount: formData.get("estimatedAmount"),
+    categoryId: formData.get("categoryId"),
   });
 
   if (!parsed.success) {
@@ -51,6 +52,7 @@ export async function updateExpenseItemAction(
       name: parsed.data.name,
       expenseType: parsed.data.expenseType,
       estimatedAmount: parsed.data.estimatedAmount === "" || parsed.data.estimatedAmount == null ? null : Number(parsed.data.estimatedAmount),
+      categoryId: parsed.data.categoryId === "" || parsed.data.categoryId == null ? null : parsed.data.categoryId,
     });
 
     await new AuditService(createServiceRoleClient())
