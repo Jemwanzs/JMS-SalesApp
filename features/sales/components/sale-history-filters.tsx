@@ -37,11 +37,13 @@ export function SaleHistoryFilters({
   todayDate,
   yesterdayDate,
   products,
+  correctedOnly,
 }: {
   tenantId: string;
   todayDate: string;
   yesterdayDate: string;
   products: { id: string; name: string }[];
+  correctedOnly: boolean;
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -56,7 +58,11 @@ export function SaleHistoryFilters({
   );
 
   const hasDateFilter = Boolean(from || to);
-  const isToday = !hasDateFilter || (from === todayDate && to === todayDate);
+  // Corrected Records has no "today" default (a corrected original keeps
+  // its own, possibly much older, sale_date), so an empty date filter
+  // there means "show all of them", not "today" -- the Today button
+  // shouldn't read as active in that state.
+  const isToday = correctedOnly ? hasDateFilter && from === todayDate && to === todayDate : !hasDateFilter || (from === todayDate && to === todayDate);
   const isYesterday = from === yesterdayDate && to === yesterdayDate;
   const hasFilters = hasDateFilter || Boolean(productId);
 
@@ -67,6 +73,10 @@ export function SaleHistoryFilters({
       params.set("to", nextDate);
     }
     if (nextProductId) params.set("productId", nextProductId);
+    // Changing the date/product filter must not silently drop out of the
+    // Corrected Records sub-view -- only the explicit Back/Clear actions
+    // should do that.
+    if (correctedOnly) params.set("view", "corrected");
 
     navigate(params.size ? `${pathname}?${params.toString()}` : pathname);
   }
@@ -113,6 +123,22 @@ export function SaleHistoryFilters({
     navigate(pathname);
   }
 
+  // Corrected Records is a separate sub-view of this same page (`?view=
+  // corrected`), not a new route -- per the request to view them "right
+  // inside this History". It has no meaningful date filter (a corrected
+  // original keeps its OWN sale_date, which could be any day), so
+  // switching into it only carries the product filter forward, not from/to.
+  function viewCorrectedRecords() {
+    const params = new URLSearchParams();
+    params.set("view", "corrected");
+    if (productId) params.set("productId", productId);
+    navigate(`${pathname}?${params.toString()}`);
+  }
+
+  function backToSalesHistory() {
+    navigate(pathname);
+  }
+
   return (
     <div className="mb-4 flex flex-col items-center gap-3 rounded-lg border p-3">
       <div className="flex flex-wrap items-center justify-center gap-2">
@@ -124,7 +150,7 @@ export function SaleHistoryFilters({
         </Button>
         <DailyReportDialog tenantId={tenantId} todayDate={todayDate} />
       </div>
-      {!hasDateFilter && <span className="text-xs text-muted-foreground">{t("showingTodayDefault")}</span>}
+      {!correctedOnly && !hasDateFilter && <span className="text-xs text-muted-foreground">{t("showingTodayDefault")}</span>}
 
       <div className="flex w-full flex-col items-center gap-3">
         <div className="w-full max-w-xs space-y-1 text-center">
@@ -152,6 +178,16 @@ export function SaleHistoryFilters({
             ))}
           </select>
         </div>
+
+        {correctedOnly ? (
+          <Button type="button" variant="outline" size="sm" disabled={isPending} onClick={backToSalesHistory}>
+            {t("backToSalesHistory")}
+          </Button>
+        ) : (
+          <Button type="button" variant="outline" size="sm" disabled={isPending} onClick={viewCorrectedRecords}>
+            {t("correctedRecords")}
+          </Button>
+        )}
       </div>
 
       {hasFilters && (

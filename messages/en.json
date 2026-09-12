@@ -77,6 +77,9 @@
     "selectDate": "Select date",
     "filterByProduct": "Filter by product",
     "allProducts": "All products",
+    "correctedRecords": "Corrected Records",
+    "backToSalesHistory": "Back to Sales History",
+    "correctedRecordsHeading": "Corrected Records",
     "clear": "Clear",
 
     "exporting": "Exporting...",

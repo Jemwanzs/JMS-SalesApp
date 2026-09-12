@@ -48,10 +48,11 @@ export default async function SalesHistoryPage({
   searchParams,
 }: {
   params: Promise<{ tenantSlug: string }>;
-  searchParams: Promise<{ from?: string; to?: string; productId?: string }>;
+  searchParams: Promise<{ from?: string; to?: string; productId?: string; view?: string }>;
 }) {
   const { tenantSlug } = await params;
-  const { from, to, productId } = await searchParams;
+  const { from, to, productId, view } = await searchParams;
+  const correctedOnly = view === "corrected";
   const supabase = await createClient();
   const t = await getTranslations("SalesHistory");
 
@@ -113,10 +114,16 @@ export default async function SalesHistoryPage({
     stockControlMethod,
   ] = await Promise.all([
     new SalesService(supabase).listRecent(tenantId, {
-      limit: hasFilters ? 500 : 100,
-      dateFrom: hasDateFilter ? from : today,
-      dateTo: hasDateFilter ? to : today,
+      limit: correctedOnly || hasFilters ? 500 : 100,
+      // Corrected Records has no "today" default -- a corrected sale
+      // keeps its ORIGINAL sale_date (migration 0074/0078 never touch it
+      // on the old row), which could be any day, so defaulting to today
+      // would hide almost everything that view exists to show. An
+      // explicit from/to still narrows it, same as the normal view.
+      dateFrom: hasDateFilter ? from : correctedOnly ? undefined : today,
+      dateTo: hasDateFilter ? to : correctedOnly ? undefined : today,
       productId,
+      correctedOnly,
     }),
     can("sales.void", { tenantId }),
     can("sales.reverse", { tenantId }),
@@ -152,12 +159,15 @@ export default async function SalesHistoryPage({
 
   return (
     <div className="flex flex-1 flex-col p-6">
-      <h1 className="mb-4 text-xl font-semibold">{t("heading")}</h1>
+      <h1 className="mb-4 text-xl font-semibold">
+        {correctedOnly ? t("correctedRecordsHeading") : t("heading")}
+      </h1>
       <SaleHistoryFilters
         tenantId={tenantId}
         todayDate={today}
         yesterdayDate={yesterday}
         products={products.map((p) => ({ id: p.id, name: p.name }))}
+        correctedOnly={correctedOnly}
       />
       <SaleHistoryList
         sales={sales}

@@ -272,18 +272,31 @@ export class SalesService {
       productId?: string;
       dateFrom?: string;
       dateTo?: string;
+      correctedOnly?: boolean;
     } = {}
   ): Promise<SaleListItem[]> {
     let query = this.supabase
       .from("sales")
       .select("id, sale_number, product_id, product_name_snapshot, actual_amount, quantity, status, sale_time, sale_date, recorded_by")
       .eq("tenant_id", tenantId)
-      // Deleted sales genuinely disappear from Sales History (unlike
-      // voided/corrected, which stay visible with a status badge for
-      // audit continuity) -- see migration 0074's own header comment.
-      .neq("status", "deleted")
       .order("sale_time", { ascending: false })
       .limit(opts.limit ?? 50);
+
+    if (opts.correctedOnly) {
+      // The "Corrected Records" sub-view (right inside Sales History) --
+      // shows ONLY the superseded originals, so someone can still audit
+      // them without them cluttering the default list below.
+      query = query.eq("status", "corrected");
+    } else {
+      // Deleted sales genuinely disappear from Sales History (unlike
+      // voided, which stays visible with a status badge for audit
+      // continuity) -- see migration 0074's own header comment. Corrected
+      // originals are hidden from the default view too now -- they're
+      // superseded, not gone -- and live in the "Corrected Records"
+      // sub-view above instead of cluttering the day's list with rows
+      // that no longer reflect what actually happened.
+      query = query.neq("status", "deleted").neq("status", "corrected");
+    }
 
     if (opts.locationId) {
       query = query.eq("location_id", opts.locationId);

@@ -77,6 +77,9 @@
     "selectDate": "Choisir une date",
     "filterByProduct": "Filtrer par produit",
     "allProducts": "Tous les produits",
+    "correctedRecords": "Ventes corrigées",
+    "backToSalesHistory": "Retour à l'historique des ventes",
+    "correctedRecordsHeading": "Ventes corrigées",
     "clear": "Effacer",
 
     "exporting": "Exportation...",
