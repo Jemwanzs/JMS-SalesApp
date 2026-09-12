@@ -92,7 +92,28 @@ export async function GET(request: Request) {
   let retried = 0;
 
   for (const job of jobs ?? []) {
-    await supabase.from("report_jobs").update({ status: "running" }).eq("id", job.id);
+    // Atomic claim: the WHERE status="pending" guard is load-bearing,
+    // not decorative -- without it, two overlapping invocations of this
+    // route (a slow run still mid-loop when the next cron tick or a
+    // manual retrigger starts) can both select the same still-"pending"
+    // row from the query above and both proceed to process it, each
+    // generating its own duplicate report (confirmed as the real,
+    // already-manifested cause of duplicate Reports-tab entries; see
+    // migration 0076's own header comment for the full trace). Checking
+    // .length on the returned rows tells us whether THIS invocation
+    // actually won the claim; report_jobs/reports now also have their
+    // own unique-index backstops (migration 0076) so this is defense in
+    // depth, not the only thing standing between here and a duplicate.
+    const { data: claimed } = await supabase
+      .from("report_jobs")
+      .update({ status: "running" })
+      .eq("id", job.id)
+      .eq("status", "pending")
+      .select("id");
+
+    if (!claimed || claimed.length === 0) {
+      continue;
+    }
 
     try {
       let reportId: string | null = null;

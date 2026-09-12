@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { MapPin } from "lucide-react";
 
 import { selectBranchAction } from "@/features/auth/actions/select-branch";
+import { signOutAction } from "@/features/auth/actions/sign-out";
 import { Button } from "@/components/ui/button";
 import type { BranchOption } from "@/lib/tenant/resolve-user-branches";
 
@@ -17,6 +18,37 @@ export function SelectBranchForm({
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  // Choosing a branch is mandatory to reach anywhere in the tenant, so
+  // there's no "cancel" affordance here -- the browser's own back button
+  // is the only way out, and it lands somewhere broken: /login (now
+  // already authenticated) bounces back toward the tenant, which
+  // self-heals right back to THIS page since no branch was ever chosen
+  // -- a redirect chain triggered by a popstate traversal rather than a
+  // normal navigation, which this Next.js build's client router doesn't
+  // reliably finish committing (the same class of issue documented for
+  // router.push() elsewhere in this app -- confirmed live: a full page
+  // reload of any point in that chain resolves correctly every time,
+  // only the back-button-triggered client transition goes blank). Rather
+  // than chase that framework defect, treat "the user pressed back here"
+  // as exactly what it obviously means -- they don't want to pick a
+  // branch right now -- and end the incomplete session outright: sign
+  // out and force a real (non-client-router) navigation to /login, which
+  // is also just a cleaner outcome than leaving them mid-login anyway.
+  // A guard entry is pushed on mount so the very first back press is
+  // guaranteed to fire this handler instead of the browser silently
+  // consuming a history entry the user can't see the effect of.
+  useEffect(() => {
+    window.history.pushState(null, "", window.location.href);
+
+    function onPopState() {
+      signOutAction().catch(() => {});
+      window.location.href = "/login";
+    }
+
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();

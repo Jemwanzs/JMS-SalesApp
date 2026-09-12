@@ -100,17 +100,29 @@ export class ReportService {
       businessDay.business_date
     );
 
+    // upsert, not insert -- a business day can end up queued for this
+    // job twice (an automatic close followed by a manual reopen-then-
+    // reclose, each queuing its own report_jobs row independently; see
+    // migration 0076's own header comment for the real duplicate-report
+    // data this caused). report_jobs itself is now guarded against
+    // queuing the same job twice, but this is the actual final artifact
+    // -- upserting here means even a job that predates that guard, or
+    // any other future path that calls this twice, converges on one row
+    // instead of visibly duplicating in the Reports tab.
     const { data: report, error: reportError } = await this.supabase
       .from("reports")
-      .insert({
-        tenant_id: businessDay.tenant_id,
-        location_id: businessDay.location_id,
-        report_type: "daily",
-        period_start: businessDay.business_date,
-        period_end: businessDay.business_date,
-        status: "completed",
-        payload: payload as unknown as Record<string, unknown>,
-      })
+      .upsert(
+        {
+          tenant_id: businessDay.tenant_id,
+          location_id: businessDay.location_id,
+          report_type: "daily",
+          period_start: businessDay.business_date,
+          period_end: businessDay.business_date,
+          status: "completed",
+          payload: payload as unknown as Record<string, unknown>,
+        },
+        { onConflict: "tenant_id,location_id,report_type,period_start" }
+      )
       .select("id")
       .single();
 
@@ -386,17 +398,22 @@ export class ReportService {
       entries,
     };
 
+    // upsert -- see generateDailyReport's identical comment just above
+    // for why (migration 0076).
     const { data: report, error: reportError } = await this.supabase
       .from("reports")
-      .insert({
-        tenant_id: businessDay.tenant_id,
-        location_id: businessDay.location_id,
-        report_type: "corrections_void",
-        period_start: businessDay.business_date,
-        period_end: businessDay.business_date,
-        status: "completed",
-        payload: payload as unknown as Record<string, unknown>,
-      })
+      .upsert(
+        {
+          tenant_id: businessDay.tenant_id,
+          location_id: businessDay.location_id,
+          report_type: "corrections_void",
+          period_start: businessDay.business_date,
+          period_end: businessDay.business_date,
+          status: "completed",
+          payload: payload as unknown as Record<string, unknown>,
+        },
+        { onConflict: "tenant_id,location_id,report_type,period_start" }
+      )
       .select("id")
       .single();
 
