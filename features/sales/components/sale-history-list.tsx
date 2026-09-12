@@ -342,12 +342,26 @@ export function SaleHistoryList({
     }
 
     if (result.status === "corrected") {
-      setItems((prev) =>
-        prev.map((s) => (s.id === saleId ? { ...s, status: "corrected" } : s)),
-      );
-      toast.success(t("saleCorrected"), {
-        description: t("replacementRecorded"),
-      });
+      if (result.replacementSaleId) {
+        // Amount/quantity/product/notes changed -- the usual replacement-row
+        // correction (migration 0074): the original flips to 'corrected'
+        // and a new row carries the fix forward.
+        setItems((prev) =>
+          prev.map((s) => (s.id === saleId ? { ...s, status: "corrected" } : s)),
+        );
+        toast.success(t("saleCorrected"), {
+          description: t("replacementRecorded"),
+        });
+      } else {
+        // Sale Date changed with nothing else -- migration 0078 updates
+        // THIS row in place (same id/sale number, no replacement), so
+        // there's no local field here to patch that reflects the new
+        // date/business day correctly. A full reload is simpler and more
+        // certainly correct than threading the new date back through
+        // this callback just to patch one field locally.
+        toast.success(t("saleCorrected"));
+        window.location.reload();
+      }
       return;
     }
 
