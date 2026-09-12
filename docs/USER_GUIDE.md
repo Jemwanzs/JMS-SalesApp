@@ -190,7 +190,7 @@ Reports and analytics that include "top sales person" reflect who actually recor
 
 ### Filters
 
-Sales History defaults to **today** and can be filtered by any date range or searched by sale number/product name at any time.
+Sales History defaults to **today** and can be narrowed to a single date, or filtered by product using **Filter by product** — a dropdown of your real catalog, not a typed search, so it always matches correctly even if a product is later renamed. A **Corrected Records** button sits right under the product filter: corrected (superseded) sales are hidden from the everyday list to keep it clean, but nothing is ever hidden for good — tap it to see every corrected sale in its own view.
 
 ---
 
@@ -218,7 +218,8 @@ A completely optional, separately-billed module for tracking stock levels — of
 | **More → Approvals** | Review requests that need sign-off — e.g. a sale correction or a temporary access request outside normal restrictions. | Approve or reject pending requests. |
 | **More → Imports** | Bring in historical sales or a product catalog in bulk from a spreadsheet. | Download the template, fill it in, upload, review any flagged rows, then confirm the import. |
 | **More → Settings → Modules** | Turn the optional Inventory/Stock module on or off (see above). | Switch it on when you're ready to start tracking stock levels; nothing else in the app changes if you leave it off. |
-| **Sales History → row actions** | Void, correct, or reverse an individual sale (permission-dependent), with a required reason for the audit trail. | Use this instead of trying to "undo" a sale — every change stays visible in history. |
+| **More → Settings → Daily Expenses** | Turn the optional Daily Expenses feature on or off — a plain instant switch, **no extra cost**. See section **L** below. | Switch it on if you want to track operational spend (rent, electricity, transport, and more) alongside your sales. |
+| **Sales History → row actions** | Void, correct (amount, quantity, product, notes, **and/or the sale's date**), reverse, or delete an individual sale (each permission-dependent). Void/correct/reverse require a reason and stay visible in history with a status badge; a short-window self-service delete needs no reason and removes the sale from the list entirely. | Use void/correct/reverse instead of trying to "undo" a sale in most cases — every change stays visible in history (correct even a wrong **date**, not just the amount). Delete is only for a genuine just-now mistake, within a short window. |
 | **Notifications banner** | A short banner (e.g. a business anniversary wish) appears at the top of the app when relevant. | No action needed — it clears itself automatically after a few days. |
 
 *This table is reviewed against the live app and only lists features that actually exist — nothing here is planned or upcoming functionality.*
@@ -294,6 +295,48 @@ Go to **Stock → Reports** for a 30-day view: a stock-in-vs-out trend chart, a 
 ### Turning it off
 
 Switch Inventory back off any time from **More → Settings → Modules**. This only hides the Stock tab and its screens — **nothing is cancelled, deleted, or lost.** Turn it back on later and every balance and history picks up exactly where you left off.
+
+---
+
+## L. Daily Expenses — Full Guide (Optional Feature)
+
+Track operational spend — rent, electricity, water, transport, county fees, airtime, cleaning, repairs, and anything else your business pays for — strictly separate from stock purchases and sales. A purchase of stock is never treated as an expense here.
+
+### Is this for you?
+
+If you want a simple daily record of what the business spends (not just what it earns), this is for you. It costs nothing extra to turn on, and if you never use it, the rest of the app is completely unaffected.
+
+### Turning it on
+
+1. Go to **More → Settings**.
+2. Switch on **Daily Expenses** — a plain instant toggle, no confirmation needed and no billing impact.
+3. **Expense Items** and **Expenses** appear in your **More** menu right away.
+
+### Setting up your expense catalog
+
+Go to **More → Expense Items** to define what your business spends on before recording anything:
+
+- **Name** — e.g. "Electricity", "Rent", "Transport".
+- **Type** — Recurring (a regular bill) or One-time.
+- **Estimated amount** (optional) — a guide only; it's shown for reference when recording but never enforced against the real amount.
+- **Archive / reactivate** an item any time — an archived item's name is preserved on every past expense that used it, so history never breaks.
+
+### Recording an expense
+
+1. Go to **More → Expenses**.
+2. Tap **+ Add expense**.
+3. Choose an **expense item**, enter the **actual amount**, confirm the **date** (today or an earlier date — never the future), and add an optional note.
+4. Tap **Record expense**.
+5. To review a different day, use the date filter at the top; search by expense name to narrow a long list.
+6. Tap any recorded expense to **edit or void** it (a reason is required to void).
+
+### Expenses Analytics
+
+From **Expenses**, tap **Summary** for Today / Yesterday / a specific date: total expenses, number of expenses, the highest single expense item, and a ranked breakdown of every item's actual spend against its estimate — everything updates the moment a new expense is recorded, with no waiting for a day to close.
+
+### Turning it off
+
+Switch Daily Expenses back off any time from **More → Settings**. This only hides the Expense Items/Expenses screens from the menu — **nothing is deleted.** Turn it back on later and every item and record is exactly as you left it.
 
 ---
 

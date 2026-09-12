@@ -52,5 +52,5 @@ The scope document is the primary source of truth; where it left a technical or 
 - Never store retrievable plaintext passwords, ever.
 - "Super Admin can see username and password" is a feature that must **never** exist.
 - Impersonation is **always** logged — no configuration disables the platform's own audit of it.
-- Financial records are never physically deleted — VOID/CORRECT/REVERSE only.
+- Financial records are never physically deleted — VOID/CORRECT/REVERSE/DELETE only, and even DELETE (migration `0074`) is a soft `status = 'deleted'` status flip, never a hard SQL `DELETE`.
 - Business rules for closing days, editing historical sales, tenant isolation, permission enforcement, billing, and exports are enforced server-side / in Postgres — never frontend-only.

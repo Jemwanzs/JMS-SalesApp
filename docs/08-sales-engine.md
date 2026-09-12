@@ -2,7 +2,7 @@
 
 ## Sale record
 
-Every sale stores (spec §16): Sale ID (UUID), Sale Number, Barcode/Reference, Tenant, Location, Product, **Product Name/Image/Expected Price Snapshots** (captured at time of sale — see below), Actual Amount, Quantity, User, Date, Time, Status (Open/Locked/Corrected/Voided), Device metadata, Created At.
+Every sale stores (spec §16): Sale ID (UUID), Sale Number, Barcode/Reference, Tenant, Location, Product, **Product Name/Image/Expected Price Snapshots** (captured at time of sale — see below), Actual Amount, Quantity, User, Date, Time, Status (Open/Locked/Corrected/Voided/Reversed/Deleted), Device metadata, Created At.
 
 ## Decided: `actual_amount` is the total charged
 
@@ -32,21 +32,35 @@ If zero rows return, the server looks up the existing row by that key and return
 
 ## Sale editing rules
 
-Default edit window: 15 minutes. Tenant-configurable: 0/5/10/15/30/60 minutes/custom (spec §20). Within the window, the recording user (or anyone with `sales.edit_window`... more precisely, ownership + being inside the window) can edit; outside it, only `sales.correct_historical`.
+Migration `0074` replaced the original fixed-minutes edit window with two tenant-configurable **modes** (`tenant_settings.sale_edit_window_mode`):
+
+- **`business_day`** (default) — a sale stays editable by its own recording user for as long as its business day is still `open`/`reopened`; the window closes the moment that day closes, regardless of how many hours have passed.
+- **`hours`** — a fixed window (`sale_edit_window_hours`, default 2) counted from `created_at`, independent of the business day's own state.
+
+Within the window, the recording user (holding `sales.edit_window`, on their own sale) can edit; outside it, only `sales.correct_historical` can still reach it (see "Admin historical correction" below).
 
 ## Never physically delete a sale
 
 Financial records are never hard-deleted. Instead:
 
 - **VOID** — mark a sale voided with a required reason.
-- **CORRECT** — void the original, create a replacement sale, link via `sale_corrections`.
+- **CORRECT** — void the original, create a replacement sale, link via `sale_corrections`. As of migration `0078`, a Sale Date change specifically is applied **in place** on the existing row instead (same `id`/`sale_number`, no replacement) — see "Correcting a sale's date" below; amount/quantity/product/notes corrections still use the replacement-row mechanism.
 - **REVERSE** — same pattern for reversing entries.
+- **DELETE** (migration `0074`) — a distinctly simpler, self-service-only mutation: `delete_sale()` flips `status` to `'deleted'` for the sale's own recording user, no mandatory reason, gated by a short tenant-configurable window (`sale_deletion_enabled`/`sale_delete_window_minutes`, default 2 minutes) rather than the broader edit window above. Unlike voided/corrected/reversed sales — which stay visible in Sales History with a status badge for audit continuity — a deleted sale disappears from Sales History entirely (`SalesService.listRecent`'s `.neq("status", "deleted")`), though the row itself is never actually removed from the table.
 
 `sale_corrections` stores `old_values`/`new_values` (JSONB), `reason`, `requested_by`, `approved_by` (nullable), and an `approval_request_id` back-reference into the generic Approval Engine (see `19-security-checklist.md` §5) — the audit record is immutable (no UPDATE/DELETE policy, same pattern as `audit_logs`).
 
 ## Admin historical correction
 
 After the normal edit window, an authorized administrator (`sales.correct_historical`) can still correct a sale, but must supply a reason; depending on tenant config (`sale_correction_requires_approval`), this either self-approves (if the actor already holds the permission and approval isn't required) or routes through the Approval Engine. Either way, the audit trail format is identical — see the Approval Engine design.
+
+### Correcting a sale's date
+
+Correct Sale can also move a sale to a different, never-future business date, alongside (or instead of) amount/quantity/product/notes changes — validated against `resolve_effective_business_date()`, never a raw calendar-date comparison. Unlike every other correctable field, a date change is applied **in place** on the same row (same `id`, same `sale_number` — explicitly not a replacement, per the feature's own "preserve transaction identity" requirement) via `_apply_sale_date_change()` (migration `0078`): it updates `sales.sale_date`/`business_day_id` directly, relocates the sale's own existing `stock_movements` row's `occurred_on` to match (no reversal/re-deduction pair, since there's no `status` transition to trigger one), and records the change in `sale_corrections` the same way any other correction is. If a date change is combined with an amount/quantity/product/notes change in the same request, the replacement-row correction runs first and the date change then applies to the resulting replacement row.
+
+## Sales History filtering and Corrected Records
+
+Sales History defaults to today's business date and can be narrowed by a single date or by product — "Filter by product" is an exact match against the live product catalog (a dropdown), not free-text search, so a later product rename never breaks an existing filter. Corrected (superseded) sales are hidden from the default list — they're still real, auditable rows, just not useful clutter in the everyday view — and surface instead in a dedicated "Corrected Records" sub-view (`?view=corrected` on the same page, reached via a button under the product filter), which shows only `status = 'corrected'` sales with no date default of its own (a corrected original keeps whatever date it originally had).
 
 ## Recording a sale (form flow)
 

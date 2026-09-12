@@ -232,6 +232,7 @@ const html = `<!doctype html>
     <li><span class="letter">I</span><span class="label">Billing &amp; Subscription (incl. optional Inventory add-on)</span></li>
     <li><span class="letter">J</span><span class="label">Other Features</span></li>
     <li><span class="letter">K</span><span class="label">Inventory &amp; Stock — Full Guide (Optional Module)</span></li>
+    <li><span class="letter">L</span><span class="label">Daily Expenses — Full Guide (Optional Feature)</span></li>
   </ul>
   <div class="journey-strip">
     <b>Your complete journey:</b> Sign up → Complete business setup → Add products → Invite employees →
@@ -490,7 +491,8 @@ const html = `<!doctype html>
       <tr><td><strong>More → Approvals</strong></td><td>Review requests needing sign-off — e.g. a sale correction or a temporary access request.</td><td>Approve or reject pending requests.</td></tr>
       <tr><td><strong>More → Imports</strong></td><td>Bring in historical sales or a product catalog in bulk from a spreadsheet.</td><td>Download the template, fill it in, upload, review flagged rows, confirm.</td></tr>
       <tr><td><strong>More → Settings → Modules</strong></td><td>Turn the optional Inventory/Stock module on or off.</td><td>Switch on when ready to track stock levels; the rest of the app is unaffected if left off.</td></tr>
-      <tr><td><strong>Sales History → row actions</strong></td><td>Void, correct, or reverse a sale (permission-dependent), with a required reason.</td><td>Use this instead of trying to "undo" a sale — every change stays visible.</td></tr>
+      <tr><td><strong>More → Settings → Daily Expenses</strong></td><td>Turn the optional Daily Expenses feature on or off — a plain switch, no extra cost. See section L.</td><td>Switch on to track operational spend alongside your sales.</td></tr>
+      <tr><td><strong>Sales History → row actions</strong></td><td>Void, correct (including the sale's date), reverse, or delete a sale (permission-dependent). Void/correct/reverse need a reason and stay visible with a status badge; delete is a short-window self-service action with no reason needed.</td><td>Use void/correct/reverse instead of trying to "undo" a sale in most cases; delete only for a genuine just-now mistake.</td></tr>
       <tr><td><strong>Notifications banner</strong></td><td>A short banner (e.g. a business-anniversary wish) appears at the top when relevant.</td><td>No action needed — it clears itself automatically.</td></tr>
     </tbody>
   </table>
@@ -588,6 +590,45 @@ const html = `<!doctype html>
   <p>Switch Inventory back off any time from <strong>More → Settings → Modules</strong>. This only hides the Stock
   tab and its screens — <strong>nothing is cancelled, deleted, or lost.</strong> Turn it back on later and every
   balance and history picks up exactly where you left off.</p>
+</div>
+
+<div class="section">
+  <span class="kicker">L · Daily Expenses</span>
+  <h2 class="section-title">The optional Daily Expenses feature — full guide</h2>
+  <p class="section-lede">Track operational spend — rent, electricity, transport, and more — strictly separate
+  from stock purchases and sales.</p>
+
+  <img class="single-shot" src="${img("14-expenses")}" alt="Expenses" />
+
+  <h3 class="sub">Turning it on</h3>
+  <ol class="steps">
+    <li>Go to <strong>More → Settings</strong>.</li>
+    <li>Switch on <strong>Daily Expenses</strong> — a plain instant toggle, no confirmation and no billing impact.</li>
+    <li><strong>Expense Items</strong> and <strong>Expenses</strong> appear in your More menu right away.</li>
+  </ol>
+
+  <h3 class="sub">Setting up your expense catalog</h3>
+  <p>Go to <strong>More → Expense Items</strong> to define what your business spends on: a <strong>name</strong>,
+  a <strong>type</strong> (Recurring or One-time), and an optional <strong>estimated amount</strong> shown for
+  reference only, never enforced. Archive an item any time — its name is preserved on every past expense that
+  used it.</p>
+
+  <h3 class="sub">Recording an expense</h3>
+  <p>From <strong>More → Expenses</strong>, tap <strong>+ Add expense</strong>, choose an item, enter the actual
+  amount, confirm the date (today or earlier, never the future), and save. Use the date filter or search to
+  review a different day; tap any row to edit or void it (a reason is required to void).</p>
+
+  <h3 class="sub">Expenses Analytics</h3>
+  <p>Tap <strong>Summary</strong> from Expenses for Today / Yesterday / a specific date: total expenses, number
+  of expenses, the highest single item, and a ranked actual-vs-estimated breakdown — updated the moment a new
+  expense is recorded, no day-closure wait.</p>
+
+  <img class="single-shot" src="${img("15-expenses-analytics")}" alt="Expenses Analytics" />
+
+  <h3 class="sub">Turning it off</h3>
+  <p>Switch Daily Expenses back off any time from <strong>More → Settings</strong>. This only hides the menu
+  entries — <strong>nothing is deleted.</strong> Turn it back on later and every item and record is exactly as
+  you left it.</p>
 </div>
 
 </body>

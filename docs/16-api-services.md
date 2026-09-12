@@ -22,11 +22,14 @@ UI / Server Action / Route Handler / Cron Job / Webhook
 | `RoleService` | Role CRUD, default-role seeding at tenant creation |
 | `PermissionService` | Permission catalog access, `get_my_permissions` wrapper |
 | `ProductService` | CRUD, image handling, display order, bulk upload |
-| `SalesService` | Sale numbering, idempotent insert, edit-window enforcement, void/correct/reverse |
+| `SalesService` | Sale numbering, idempotent insert, edit-window enforcement, void/correct/reverse/delete, correctable sale date (in-place, no replacement row) |
 | `BusinessDayService` | Open/close/reopen state machine, aggregate computation |
 | `AnalyticsService` | KPI queries, date-range analytics, snapshot-vs-current labeling |
 | `ReportService` | Scheduled report generation, corrections/void reports |
 | `ImportService` | Template generation, validation, preview, confirm-import (sales + products) |
+| `StockService` | Stock movements/balances, reconciliation, tenant-wide stock-control-method (quantity vs. value), 30-day trend/variance reports — Inventory add-on only |
+| `InsightsService` | Rule-based insight snapshots (low stock, trend flags) surfaced on Analytics |
+| `ExpenseItemService` / `ExpenseService` | Expense-item catalog CRUD; expense recording, edit/void, analytics — Daily Expenses feature only, fully separate from `StockService`/`products` (`26-daily-expenses.md`) |
 | `NotificationService` | In-app notification writes, outbox entries, preferences |
 | `SecurityService` | Sessions/devices, geo-fencing, working-hours restriction, download passcode, temporary access |
 | `BillingService` | Subscription state transitions, Paystack webhook processing |

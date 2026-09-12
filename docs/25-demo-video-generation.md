@@ -1,12 +1,14 @@
 # 25 — Demo Video Generation
 
-A repeatable pipeline that produces `public/demo-video-v1.mp4`: a silent,
+A repeatable pipeline that produces `public/demo-video-v1.mp4`: a
 ~1:40 portrait walkthrough of a Sales Agent's daily workflow (record a
 sale, review History, Analytics, Reports, and the product catalogue via
 More), presented inside a generic phone bezel with tap-ripple indicators
-and progressively-typed instructional captions in place of a voice-over.
-Linked from the Login page ("Watch: Demo Video", downloadable, next to
-the existing User Guide link).
+and progressively-typed instructional captions in place of a voice-over,
+under a subtle synthesized instrumental pad (no voice-over of its own,
+so there's nothing for the music to compete with). Linked from the
+Login page ("Watch: Demo Video", downloadable, next to the existing
+User Guide link).
 
 ## Why it's built this way
 
@@ -30,9 +32,10 @@ the existing User Guide link).
   `app/`, `features/`, or anything that ships to real users.
 - **No external/licensed assets.** The phone bezel is drawn from scratch
   as a generic rounded rectangle (not modeled on any specific real
-  device), and the tap sound is synthesized by ffmpeg rather than
-  sourced from an audio library — nothing here carries a licensing
-  question.
+  device), and both the tap sound and the background music are
+  synthesized by ffmpeg (`sine`/`tremolo`/`aecho`, all built-in
+  `lavfi` filters) rather than sourced from an audio library — nothing
+  here carries a licensing question.
 
 ## Pipeline
 
@@ -43,7 +46,7 @@ scripts/demo-video/
   assets/phone-frame.png  -- committed; the transparent-screen bezel PNG generate-frame.mjs produces
   overlay.js              -- injected at runtime: window.__demo.caption()/hideCaption()/ripple()
   record.mjs              -- drives the real walkthrough, records raw.webm + clicks.json (both gitignored, regenerated each run)
-  compose.mjs             -- composites raw.webm into the bezel + synthesizes tap sounds -> public/demo-video-v1.mp4 (committed)
+  compose.mjs             -- composites raw.webm into the bezel + synthesizes tap sounds and a background music pad -> public/demo-video-v1.mp4 (committed)
 ```
 
 Regenerate the whole video after a UI change:

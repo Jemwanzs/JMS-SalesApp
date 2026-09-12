@@ -2,7 +2,7 @@
 
 ## Schema
 
-`products`: `tenant_id`, `location_id` (nullable — a product can be tenant-wide or location-specific), `sku`, `name`, `description`, `expected_price`, `show_expected_price`, `image_url`, `display_order`, `status`, `created_by`. `product_images` holds the Supabase Storage reference(s) — square, consistent aspect ratio, compressed, lazy-loaded (spec §42).
+`products`: `tenant_id`, `location_id` (nullable — a product can be tenant-wide or location-specific), `sku`, `name`, `description`, `expected_price`, `show_expected_price`, `image_url`, `display_order`, `status`, `created_by`. `product_images` holds the Supabase Storage reference(s) — square, consistent aspect ratio, compressed, lazy-loaded (spec §42). `sku` doubles as the barcode/SKU field surfaced in the product edit form. The optional Inventory add-on layers on further columns (`tracks_inventory`, `unit_of_measure`, `unit_of_measure_is_custom`, `low_stock_threshold`, `cost_price`) — see `21-inventory-management.md` rather than duplicating them here.
 
 ## Status lifecycle
 

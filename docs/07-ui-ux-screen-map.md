@@ -23,10 +23,12 @@ Minimal, fast, mobile-native, touch-friendly, professional, consistent, low cogn
 ## Primary navigation (bottom nav, persistent)
 
 ```
-Sales   Analytics   Reports   More
+Sales   Sales History   Analytics   Reports   Stock   More
 ```
 
-Inside **More**: Products, Sales History, Notifications, Settings, Help, Logout. Users only see modules permitted by their assigned permissions — the nav itself is permission-filtered, not just the destination page (spec §12).
+Sales History was promoted from a More-menu entry to its own bottom-nav tab (it was the everyday destination with the worst click-depth in the original audit); Stock is a sixth tab, shown only when the Inventory add-on is enabled for the tenant AND the viewer holds `inventory.view` (`components/shared/bottom-nav.tsx`).
+
+Inside **More** (everyday section): Products, My Preferences, Security, Help & Support, Restart Product Tour. Admin/rare section, each shown only when the viewer holds the relevant permission: Workspace, Approvals, Roles, Users, Imports, Billing, **Expense Items**, **Expenses** (both only when Daily Expenses is enabled for the tenant — `26-daily-expenses.md`), Settings. Users only see modules permitted by their assigned permissions — the nav itself is permission-filtered, not just the destination page (spec §12).
 
 ## The golden path
 
@@ -46,14 +48,16 @@ This is the north star for every UX decision in the Sales module — minimize ta
 | Login / Signup / Verify Email / Reset Password / Invite accept | `(auth)` | |
 | Onboarding wizard (7 steps) | `(tenant)/onboarding` | Business details -> hours -> products -> import -> invite users -> subscription -> finish |
 | Capture Sales | `(tenant)/t/[slug]/(dashboard)/sales` | Default landing after login |
-| Sales History | same, sub-route | Permission-gated own vs. all |
+| Sales History | `.../sales-history` | Own top-level bottom-nav tab, not a sub-route of Capture Sales. Permission-gated own vs. all; defaults to today, filterable by date and by product; a "Corrected Records" sub-view (`?view=corrected`) surfaces superseded/corrected sales, hidden from the default list |
 | Analytics | `.../analytics` | KPI cards, product analytics, permission-gated date filters |
 | Reports | `.../reports` | Daily/weekly/monthly/custom, corrections/void report |
 | Products | `.../products` | List, drag-reorder, bulk upload |
+| Stock | `.../stock`, `.../stock/reconcile`, `.../stock/reports` | Optional Inventory add-on only — balances, movements, reconciliation, 30-day trend/variance reports (`21-inventory-management.md`) |
 | Users | `.../users` | Invite, role assignment, active/inactive |
 | Security | `.../security` | Sessions, devices, geo-fencing, working hours, download security, MFA |
 | Billing | `.../billing` | Plan, payment history, trial/grace status |
-| Settings | `.../settings` | Business workspace, sales controls, numbering, notifications, locations, hours |
+| Settings | `.../settings` | Business workspace, sales controls, numbering, notifications, locations, hours, Inventory/Daily Expenses module toggles |
+| Expense Items / Expenses / Expenses Analytics | `.../expense-items`, `.../expenses`, `.../expenses/analytics` | Optional Daily Expenses feature only — More-menu only, not a bottom-nav tab (`26-daily-expenses.md`) |
 | Platform Admin shell | `(platform-admin)/admin` | Entirely separate nav, `is_platform_admin` guard — see `15-super-admin.md` |
 
 ## Sales capture screen

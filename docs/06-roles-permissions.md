@@ -8,7 +8,7 @@ Code never asks "is this user an Admin?" — it asks "does this user have `sales
 
 ```
 sales.create  sales.view_own  sales.view_all  sales.edit_window
-sales.correct_historical  sales.void
+sales.correct_historical  sales.void  sales.reverse  sales.delete
 
 analytics.view_own  analytics.view_all  analytics.past_dates
 analytics.date_range  analytics.all_users  analytics.products  analytics.locations
@@ -28,17 +28,20 @@ billing.view  billing.manage
 
 inventory.view  inventory.manage
 stock.movement.record  stock.reconcile
+
+expenses.view  expenses.create  expenses.edit  expenses.void
+expenses.configure_items  expenses.view_analytics
 ```
 
-The `inventory.*`/`stock.*` group (migration `0035`) only means anything for a tenant with the Inventory add-on enabled (`21-inventory-management.md`) — holding the permission with the module off just means nothing to gate yet, the same as any permission for a feature the tenant hasn't turned on.
+The `inventory.*`/`stock.*` group (migration `0035`) only means anything for a tenant with the Inventory add-on enabled (`21-inventory-management.md`) — holding the permission with the module off just means nothing to gate yet, the same as any permission for a feature the tenant hasn't turned on. The `expenses.*` group (migration `0054`) is the same shape but for the plain-toggle Daily Expenses feature instead of a billed add-on — see `26-daily-expenses.md`.
 
-Permission actions in general: `VIEW, CREATE, EDIT, VOID, APPROVE, EXPORT, MANAGE, REOPEN`. Deletion of critical financial records is not a permission that exists — see `08-sales-engine.md` for VOID/CORRECT/REVERSE instead.
+Permission actions in general: `VIEW, CREATE, EDIT, VOID, APPROVE, EXPORT, MANAGE, REOPEN, DELETE`. `sales.delete` (migration `0074`) is a genuine addition to that list, but it still isn't a hard SQL `DELETE` — `delete_sale()` flips `status` to `'deleted'`, the same soft-transition pattern VOID/CORRECT/REVERSE already use (see `08-sales-engine.md`). "Financial records are never physically deleted" still holds; there's just now a fourth named transition, gated by its own short, tenant-configurable, self-service-only window rather than the broader edit window VOID/CORRECT/REVERSE share.
 
 ## Roles are per-tenant rows, not shared templates
 
 `roles` has `tenant_id`. At tenant creation, three system-default roles are **seeded as that tenant's own rows** (not references to a global template):
 
-- **Sales User** — `sales.create`, `sales.view_own`, `analytics.view_own`. No products/users/settings/billing/security/business-wide analytics/exports/inventory — keeping Sales simple is a repeated explicit principle (`00-project-overview.md`), so a Sales User gets nothing from the `inventory.*`/`stock.*` group either, even after the add-on is enabled.
+- **Sales User** — `sales.create`, `sales.view_own`, `analytics.view_own`, plus `sales.edit_window` and `sales.delete` (migration `0074` backfilled both onto every system-default role, including Sales User, per the spec's "if Create Sales is ON, default this ON too" requirement — self-service correction/deletion of one's own just-recorded sale, within a short window, not broader historical access). No products/users/settings/billing/security/business-wide analytics/exports/inventory — keeping Sales simple is a repeated explicit principle (`00-project-overview.md`), so a Sales User gets nothing from the `inventory.*`/`stock.*`/`expenses.*` groups either, even after those are enabled.
 - **Supervisor** — Sales User's grants + `sales.view_all` (team scope via location), `analytics.products`, `reports.view`, limited correction rights, `inventory.view` (read-only stock visibility).
 - **Tenant Administrator** — full grant set: settings, users, roles, products, analytics, reports, security, business-day management, billing, and the full `inventory.*`/`stock.*` group.
 
