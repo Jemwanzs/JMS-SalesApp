@@ -38,6 +38,7 @@ export interface ResolveApprovalResult {
   status: "approved" | "rejected";
   type?: string;
   replacementSaleId?: string;
+  expenseId?: string;
 }
 
 export interface ReopenBusinessDayResult {
@@ -482,6 +483,7 @@ export interface Database {
           tenant_id: string;
           name: string;
           receipt_required: boolean;
+          requires_approval: boolean;
           status: "active" | "archived";
           created_by: string | null;
           created_at: string;
@@ -545,7 +547,7 @@ export interface Database {
           actual_amount: number;
           expense_date: string;
           notes: string | null;
-          status: "active" | "voided";
+          status: "active" | "voided" | "pending_approval" | "rejected";
           recorded_by: string;
           voided_by: string | null;
           voided_at: string | null;
@@ -565,6 +567,8 @@ export interface Database {
           receipt_file_type: string | null;
           receipt_extracted_data: Record<string, unknown> | null;
           expense_number: string | null;
+          approval_request_id: string | null;
+          rejection_reason: string | null;
         };
         Insert: Partial<Database["public"]["Tables"]["expenses"]["Row"]> & {
           tenant_id: string;

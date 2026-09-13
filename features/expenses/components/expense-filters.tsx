@@ -281,6 +281,8 @@ export function ExpenseFilters({
                 <option value="">Any status</option>
                 <option value="active">Active</option>
                 <option value="voided">Voided</option>
+                <option value="pending_approval">Pending approval</option>
+                <option value="rejected">Rejected</option>
               </select>
             </div>
 

@@ -4,23 +4,26 @@ import type { Database } from "@/types/database.types";
 
 export type ExpenseCategoryStatus = "active" | "archived";
 
-const EXPENSE_CATEGORY_SELECT = "id, name, receipt_required, status, created_at, updated_at";
+const EXPENSE_CATEGORY_SELECT = "id, name, receipt_required, requires_approval, status, created_at, updated_at";
 
 export interface CreateExpenseCategoryInput {
   name: string;
   receiptRequired: boolean;
+  requiresApproval: boolean;
   createdBy: string;
 }
 
 export interface UpdateExpenseCategoryInput {
   name: string;
   receiptRequired: boolean;
+  requiresApproval: boolean;
 }
 
 export interface ExpenseCategory {
   id: string;
   name: string;
   receiptRequired: boolean;
+  requiresApproval: boolean;
   status: ExpenseCategoryStatus;
   createdAt: string;
   updatedAt: string;
@@ -30,6 +33,7 @@ function toExpenseCategory(row: {
   id: string;
   name: string;
   receipt_required: boolean;
+  requires_approval: boolean;
   status: string;
   created_at: string;
   updated_at: string;
@@ -38,6 +42,7 @@ function toExpenseCategory(row: {
     id: row.id,
     name: row.name,
     receiptRequired: row.receipt_required,
+    requiresApproval: row.requires_approval,
     status: row.status as ExpenseCategoryStatus,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -90,6 +95,7 @@ export class ExpenseCategoryService {
         tenant_id: tenantId,
         name: input.name,
         receipt_required: input.receiptRequired,
+        requires_approval: input.requiresApproval,
         created_by: input.createdBy,
       })
       .select(EXPENSE_CATEGORY_SELECT)
@@ -107,6 +113,7 @@ export class ExpenseCategoryService {
       .update({
         name: input.name,
         receipt_required: input.receiptRequired,
+        requires_approval: input.requiresApproval,
         updated_at: new Date().toISOString(),
       })
       .eq("tenant_id", tenantId)

@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 
 import { AnniversaryWishCard } from "@/features/settings/components/anniversary-wish-card";
 import { BranchesCard } from "@/features/settings/components/branches-card";
+import { ExpenseApprovalRequirementCard } from "@/features/settings/components/expense-approval-requirement-card";
 import { ExpenseReceiptRequirementCard } from "@/features/settings/components/expense-receipt-requirement-card";
 import { ExpensesModuleCard } from "@/features/settings/components/expenses-module-card";
 import { InventoryConfigurationCard } from "@/features/settings/components/inventory-configuration-card";
@@ -92,6 +93,8 @@ export default async function SettingsPage({
     saleDeleteWindowMinutes,
     expenseReceiptRequirementMode,
     expenseReceiptRequirementAmountThreshold,
+    expenseApprovalMode,
+    expenseApprovalAmountThreshold,
   ] = await Promise.all([
     new AnniversaryService(supabase).getWishMode(tenantId),
     tenantService.getSetting<string>(tenantId, "sale_number_template"),
@@ -120,6 +123,8 @@ export default async function SettingsPage({
     tenantService.getSetting<number>(tenantId, "sale_delete_window_minutes"),
     tenantService.getSetting<"never" | "always" | "amount_threshold" | "category">(tenantId, "expense_receipt_requirement_mode"),
     tenantService.getSetting<number>(tenantId, "expense_receipt_requirement_amount_threshold"),
+    tenantService.getSetting<"never" | "always" | "amount_threshold" | "category">(tenantId, "expense_approval_mode"),
+    tenantService.getSetting<number>(tenantId, "expense_approval_amount_threshold"),
   ]);
 
   // Matches features/settings/actions/set-inventory-enabled.ts's own
@@ -190,6 +195,14 @@ export default async function SettingsPage({
           tenantSlug={tenantSlug}
           initialMode={expenseReceiptRequirementMode ?? null}
           initialAmountThreshold={expenseReceiptRequirementAmountThreshold ?? null}
+        />
+      )}
+      {expensesEnabled && (
+        <ExpenseApprovalRequirementCard
+          tenantId={tenantId}
+          tenantSlug={tenantSlug}
+          initialMode={expenseApprovalMode ?? null}
+          initialAmountThreshold={expenseApprovalAmountThreshold ?? null}
         />
       )}
       {inventoryEntitlement.enabled && (

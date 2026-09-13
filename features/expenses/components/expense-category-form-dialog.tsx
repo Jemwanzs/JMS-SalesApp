@@ -36,12 +36,14 @@ export function ExpenseCategoryFormDialog({
   const [isPending, startTransition] = useTransition();
   const [name, setName] = useState("");
   const [receiptRequired, setReceiptRequired] = useState(false);
+  const [requiresApproval, setRequiresApproval] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setName(editingCategory?.name ?? "");
     setReceiptRequired(editingCategory?.receiptRequired ?? false);
+    setRequiresApproval(editingCategory?.requiresApproval ?? false);
     setError(null);
   }, [open, editingCategory]);
 
@@ -52,6 +54,7 @@ export function ExpenseCategoryFormDialog({
     const formData = new FormData();
     formData.set("name", name);
     formData.set("receiptRequired", receiptRequired ? "true" : "");
+    formData.set("requiresApproval", requiresApproval ? "true" : "");
     if (editingCategory) {
       formData.set("categoryId", editingCategory.id);
     }
@@ -102,6 +105,13 @@ export function ExpenseCategoryFormDialog({
               Always require a receipt for expenses in this category
             </Label>
             <Switch id="expense-category-receipt" checked={receiptRequired} onCheckedChange={setReceiptRequired} />
+          </div>
+
+          <div className="flex items-center justify-between gap-3">
+            <Label htmlFor="expense-category-approval" className="font-normal text-muted-foreground">
+              Always require approval for expenses in this category
+            </Label>
+            <Switch id="expense-category-approval" checked={requiresApproval} onCheckedChange={setRequiresApproval} />
           </div>
 
           {error && <p className="text-sm text-destructive">{error}</p>}

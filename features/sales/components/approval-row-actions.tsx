@@ -27,8 +27,12 @@ export function ApprovalRowActions({
     startTransition(async () => {
       const result = await resolveApprovalAction(tenantSlug, {}, formData);
 
-      if (result.error) {
-        setError(result.error);
+      // A validation failure (fieldErrors) is just as much a non-success
+      // as `error` -- checking only `error` let a schema mismatch (see
+      // resolve-approval.ts's own note) silently no-op while this UI
+      // still showed a success toast and cleared the row.
+      if (result.error || result.fieldErrors) {
+        setError(result.error ?? Object.values(result.fieldErrors ?? {})[0] ?? "Could not resolve this request");
         return;
       }
 

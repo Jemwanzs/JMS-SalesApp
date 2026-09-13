@@ -25,6 +25,7 @@ export type UpdateExpenseItemInput = z.infer<typeof updateExpenseItemSchema>;
 export const createExpenseCategorySchema = z.object({
   name: z.string().trim().min(1, "Enter a name").max(200),
   receiptRequired: z.coerce.boolean().optional(),
+  requiresApproval: z.coerce.boolean().optional(),
 });
 
 export type CreateExpenseCategoryInput = z.infer<typeof createExpenseCategorySchema>;

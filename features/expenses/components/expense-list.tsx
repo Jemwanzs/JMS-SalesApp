@@ -94,7 +94,11 @@ export function ExpenseList({
               <div className="flex items-center justify-between gap-3 p-4">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <p className={`truncate font-medium ${expense.status === "voided" ? "line-through text-muted-foreground" : ""}`}>
+                    <p
+                      className={`truncate font-medium ${
+                        expense.status === "voided" || expense.status === "rejected" ? "line-through text-muted-foreground" : ""
+                      }`}
+                    >
                       {expense.expenseItemName}
                     </p>
                     {expense.categoryName && (
@@ -105,6 +109,16 @@ export function ExpenseList({
                     {expense.status === "voided" && (
                       <Badge variant="secondary" className="shrink-0">
                         Voided
+                      </Badge>
+                    )}
+                    {expense.status === "pending_approval" && (
+                      <Badge variant="secondary" className="shrink-0">
+                        Pending approval
+                      </Badge>
+                    )}
+                    {expense.status === "rejected" && (
+                      <Badge variant="destructive" className="shrink-0">
+                        Rejected
                       </Badge>
                     )}
                     {expense.receiptStoragePath && <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}

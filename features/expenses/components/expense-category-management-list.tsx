@@ -68,6 +68,11 @@ export function ExpenseCategoryManagementList({
                       Receipt required
                     </Badge>
                   )}
+                  {category.requiresApproval && (
+                    <Badge variant="outline" className="shrink-0">
+                      Requires approval
+                    </Badge>
+                  )}
                   {category.status === "archived" && (
                     <Badge variant="secondary" className="shrink-0">
                       Archived

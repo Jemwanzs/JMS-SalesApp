@@ -10,6 +10,7 @@ const TYPE_LABEL: Record<string, string> = {
   sale_correction: "Correct sale",
   business_day_reopen: "Reopen business day",
   temporary_location_access: "Temporary location access",
+  expense_create: "Approve expense",
 };
 
 export function ApprovalsInboxList({
@@ -36,7 +37,9 @@ export function ApprovalsInboxList({
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium">{TYPE_LABEL[request.type] ?? request.type}</p>
             <p className="text-xs text-muted-foreground break-words">
-              Reason: {String(request.requestPayload.reason ?? "—")}
+              {request.type === "expense_create"
+                ? `Amount: ${Number(request.requestPayload.amount ?? 0).toFixed(2)}`
+                : `Reason: ${String(request.requestPayload.reason ?? "—")}`}
             </p>
             <p className="text-xs text-muted-foreground">
               Requested {new Date(request.createdAt).toLocaleString()}

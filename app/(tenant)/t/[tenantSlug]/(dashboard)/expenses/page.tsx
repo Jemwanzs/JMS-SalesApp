@@ -45,7 +45,7 @@ export default async function ExpensesPage({
     expenseItemId?: string;
     paymentMethodId?: string;
     vendor?: string;
-    status?: "active" | "voided";
+    status?: "active" | "voided" | "pending_approval" | "rejected";
     hasReceipt?: string;
     minAmount?: string;
     maxAmount?: string;

@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database } from "@/types/database.types";
 
-export type ExpenseStatus = "active" | "voided";
+export type ExpenseStatus = "active" | "voided" | "pending_approval" | "rejected";
 
 export interface ExpenseCorrection {
   id: string;
@@ -30,6 +30,8 @@ export interface ExpenseDashboardSummary {
   topCategoryName: string | null;
   topVendor: string | null;
   withoutReceiptCount: number;
+  pendingApprovalCount: number;
+  pendingApprovalTotal: number;
 }
 
 export type ExpenseBreakdownDimension = "category" | "vendor" | "paymentMethod" | "branch" | "recordedBy";
@@ -47,7 +49,7 @@ export interface ExpenseTrendPoint {
 }
 
 const EXPENSE_SELECT =
-  "id, location_id, expense_item_id, expense_item_name_snapshot, actual_amount, expense_date, notes, status, recorded_by, voided_by, voided_at, void_reason, edited_by, edited_at, created_at, category_id, category_name_snapshot, payment_method_id, payment_method_name_snapshot, vendor, reference_number, tax_amount, reimbursable, receipt_storage_path, receipt_file_type, expense_number";
+  "id, location_id, expense_item_id, expense_item_name_snapshot, actual_amount, expense_date, notes, status, recorded_by, voided_by, voided_at, void_reason, edited_by, edited_at, created_at, category_id, category_name_snapshot, payment_method_id, payment_method_name_snapshot, vendor, reference_number, tax_amount, reimbursable, receipt_storage_path, receipt_file_type, expense_number, approval_request_id, rejection_reason";
 
 export interface RecordExpenseInput {
   /** Client-generated -- lets a receipt upload target `{tenantId}/expenses/{id}/...` in Storage before this row exists. Same trick as ProductService.CreateProductInput.id. */
@@ -96,6 +98,8 @@ export interface ExpenseRecord {
   editedBy: string | null;
   editedAt: string | null;
   createdAt: string;
+  approvalRequestId: string | null;
+  rejectionReason: string | null;
 }
 
 export interface ExpenseSummaryItem {
@@ -142,6 +146,8 @@ function toExpenseRecord(row: {
   receipt_storage_path: string | null;
   receipt_file_type: string | null;
   expense_number: string | null;
+  approval_request_id: string | null;
+  rejection_reason: string | null;
 }): Omit<ExpenseRecord, "recordedByName"> {
   return {
     id: row.id,
@@ -170,6 +176,8 @@ function toExpenseRecord(row: {
     editedBy: row.edited_by,
     editedAt: row.edited_at,
     createdAt: row.created_at,
+    approvalRequestId: row.approval_request_id,
+    rejectionReason: row.rejection_reason,
   };
 }
 
@@ -541,13 +549,29 @@ export class ExpenseService {
       .gte("expense_date", earliestFrom)
       .lte("expense_date", params.today);
 
+    // Separate from the "active" query above -- pending-approval expenses
+    // are deliberately excluded from every total/breakdown/trend in this
+    // service (they aren't real spend yet), but the dashboard still needs
+    // a count/total of them so a reviewer notices there's a queue at all.
+    // Not date-bounded -- a request pending for a week shouldn't quietly
+    // fall out of "This Month"'s window and stop being surfaced.
+    let pendingQuery = this.supabase
+      .from("expenses")
+      .select("actual_amount")
+      .eq("tenant_id", tenantId)
+      .eq("status", "pending_approval");
+
     if (params.locationId) {
       query = query.eq("location_id", params.locationId);
+      pendingQuery = pendingQuery.eq("location_id", params.locationId);
     }
 
-    const { data, error } = await query;
+    const [{ data, error }, { data: pendingData, error: pendingError }] = await Promise.all([query, pendingQuery]);
     if (error) {
       throw new Error(`ExpenseService.getDashboardSummary: ${error.message}`);
+    }
+    if (pendingError) {
+      throw new Error(`ExpenseService.getDashboardSummary: ${pendingError.message}`);
     }
 
     const rows = data ?? [];
@@ -594,6 +618,8 @@ export class ExpenseService {
       topCategoryName: topCategory?.name ?? null,
       topVendor: topVendorEntry?.[0] ?? null,
       withoutReceiptCount,
+      pendingApprovalCount: pendingData?.length ?? 0,
+      pendingApprovalTotal: (pendingData ?? []).reduce((sum, row) => sum + Number(row.actual_amount), 0),
     };
   }
 

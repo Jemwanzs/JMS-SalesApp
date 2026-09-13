@@ -27,6 +27,7 @@ export async function createExpenseCategoryAction(
   const parsed = createExpenseCategorySchema.safeParse({
     name: formData.get("name"),
     receiptRequired: formData.get("receiptRequired"),
+    requiresApproval: formData.get("requiresApproval"),
   });
 
   if (!parsed.success) {
@@ -48,6 +49,7 @@ export async function createExpenseCategoryAction(
     category = await new ExpenseCategoryService(supabase).create(tenantId, {
       name: parsed.data.name,
       receiptRequired: parsed.data.receiptRequired ?? false,
+      requiresApproval: parsed.data.requiresApproval ?? false,
       createdBy: user.id,
     });
 
@@ -58,7 +60,7 @@ export async function createExpenseCategoryAction(
         action: AUDIT_ACTION.EXPENSE_CATEGORY_CREATED,
         entityType: "expense_categories",
         entityId: category.id,
-        newValues: { name: category.name, receiptRequired: category.receiptRequired },
+        newValues: { name: category.name, receiptRequired: category.receiptRequired, requiresApproval: category.requiresApproval },
       })
       .catch(() => {});
   } catch (err) {

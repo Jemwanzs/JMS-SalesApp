@@ -7,12 +7,12 @@ import type { ExpenseDashboardSummary } from "@/services/ExpenseService";
 import type { LocationSummary } from "@/services/LocationService";
 
 /**
- * Clickable KPI tiles for the Expense Dashboard. Deliberately omits
- * Pending Approvals / Reimbursable Expenses / Budget vs Actual tiles --
- * those subsystems (approval workflow, reimbursement tracking, budgets)
- * don't exist yet in this phase; showing a fake/zero card for them would
- * misrepresent the feature as further along than it is. Revisit once the
- * relevant phase lands.
+ * Clickable KPI tiles for the Expense Dashboard. Pending Approval landed
+ * in Phase 2a (migration 0085) -- Reimbursable Expenses / Budget vs
+ * Actual tiles are still deliberately omitted, since those subsystems
+ * (reimbursement tracking, budgets) don't exist yet; showing a fake/zero
+ * card for them would misrepresent the feature as further along than it
+ * is. Revisit once the relevant phase lands.
  *
  * A real browser navigation (window.location.assign), not router.push --
  * this Next.js build's client router can silently fail to commit a
@@ -81,6 +81,23 @@ export function ExpenseDashboardCards({
           <CardContent className="p-3">
             <p className="text-xs text-muted-foreground">Without Receipts</p>
             <p className="text-lg font-semibold tabular-nums">{summary.withoutReceiptCount}</p>
+          </CardContent>
+        </Card>
+      </button>
+
+      <button
+        type="button"
+        onClick={() => go({ status: "pending_approval" })}
+        className="text-left"
+        disabled={summary.pendingApprovalCount === 0}
+      >
+        <Card className="h-full transition-colors hover:bg-muted">
+          <CardContent className="p-3">
+            <p className="text-xs text-muted-foreground">Pending Approval</p>
+            <p className="text-lg font-semibold tabular-nums">{summary.pendingApprovalCount}</p>
+            {summary.pendingApprovalCount > 0 && (
+              <p className="text-xs text-muted-foreground">{summary.pendingApprovalTotal.toFixed(2)}</p>
+            )}
           </CardContent>
         </Card>
       </button>

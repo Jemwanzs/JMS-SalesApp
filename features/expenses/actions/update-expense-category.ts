@@ -28,6 +28,7 @@ export async function updateExpenseCategoryAction(
     categoryId: formData.get("categoryId"),
     name: formData.get("name"),
     receiptRequired: formData.get("receiptRequired"),
+    requiresApproval: formData.get("requiresApproval"),
   });
 
   if (!parsed.success) {
@@ -49,6 +50,7 @@ export async function updateExpenseCategoryAction(
     category = await new ExpenseCategoryService(supabase).update(tenantId, parsed.data.categoryId, {
       name: parsed.data.name,
       receiptRequired: parsed.data.receiptRequired ?? false,
+      requiresApproval: parsed.data.requiresApproval ?? false,
     });
 
     await new AuditService(createServiceRoleClient())
@@ -58,7 +60,7 @@ export async function updateExpenseCategoryAction(
         action: AUDIT_ACTION.EXPENSE_CATEGORY_EDITED,
         entityType: "expense_categories",
         entityId: category.id,
-        newValues: { name: category.name, receiptRequired: category.receiptRequired },
+        newValues: { name: category.name, receiptRequired: category.receiptRequired, requiresApproval: category.requiresApproval },
       })
       .catch(() => {});
   } catch (err) {

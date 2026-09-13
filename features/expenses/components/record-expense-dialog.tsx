@@ -152,7 +152,7 @@ export function RecordExpenseDialog({
         setError(Object.values(result.fieldErrors)[0] ?? "Check the fields above");
         return;
       }
-      toast.success("Expense recorded");
+      toast.success(result.expense?.status === "pending_approval" ? "Expense submitted for approval" : "Expense recorded");
       onOpenChange(false);
     });
   }
