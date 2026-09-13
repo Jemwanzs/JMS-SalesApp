@@ -59,6 +59,7 @@ export function ExpenseFilters({
   const [paymentMethodId, setPaymentMethodId] = useState(searchParams.get("paymentMethodId") ?? "");
   const [vendor, setVendor] = useState(searchParams.get("vendor") ?? "");
   const [status, setStatus] = useState(searchParams.get("status") ?? "");
+  const [reimbursementStatus, setReimbursementStatus] = useState(searchParams.get("reimbursementStatus") ?? "");
   const [hasReceipt, setHasReceipt] = useState(searchParams.get("hasReceipt") ?? "");
   const [minAmount, setMinAmount] = useState(searchParams.get("minAmount") ?? "");
   const [maxAmount, setMaxAmount] = useState(searchParams.get("maxAmount") ?? "");
@@ -71,7 +72,9 @@ export function ExpenseFilters({
     return date === y.from || (from === y.from && to === y.to);
   })();
 
-  const hasAnyFilter = Boolean(date || from || to || q || categoryId || expenseItemId || paymentMethodId || vendor || status || hasReceipt || minAmount || maxAmount || locationId);
+  const hasAnyFilter = Boolean(
+    date || from || to || q || categoryId || expenseItemId || paymentMethodId || vendor || status || reimbursementStatus || hasReceipt || minAmount || maxAmount || locationId
+  );
 
   function navigate(params: URLSearchParams) {
     setIsPending(true);
@@ -90,6 +93,7 @@ export function ExpenseFilters({
       paymentMethodId,
       vendor,
       status,
+      reimbursementStatus,
       hasReceipt,
       minAmount,
       maxAmount,
@@ -136,6 +140,7 @@ export function ExpenseFilters({
     setPaymentMethodId("");
     setVendor("");
     setStatus("");
+    setReimbursementStatus("");
     setHasReceipt("");
     setMinAmount("");
     setMaxAmount("");
@@ -283,6 +288,22 @@ export function ExpenseFilters({
                 <option value="voided">Voided</option>
                 <option value="pending_approval">Pending approval</option>
                 <option value="rejected">Rejected</option>
+              </select>
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="exp-reimbursement-status" className="text-xs">
+                Reimbursement
+              </Label>
+              <select
+                id="exp-reimbursement-status"
+                value={reimbursementStatus}
+                onChange={(e) => setReimbursementStatus(e.target.value)}
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none"
+              >
+                <option value="">Any</option>
+                <option value="pending">Reimbursement pending</option>
+                <option value="paid">Reimbursed</option>
               </select>
             </div>
 

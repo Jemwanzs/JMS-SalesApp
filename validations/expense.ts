@@ -102,3 +102,11 @@ export const voidExpenseSchema = z.object({
 });
 
 export type VoidExpenseInput = z.infer<typeof voidExpenseSchema>;
+
+export const markExpenseReimbursedSchema = z.object({
+  expenseId: z.uuid(),
+  reference: z.string().trim().max(100).optional(),
+  notes: z.string().trim().max(500).optional(),
+});
+
+export type MarkExpenseReimbursedInput = z.infer<typeof markExpenseReimbursedSchema>;

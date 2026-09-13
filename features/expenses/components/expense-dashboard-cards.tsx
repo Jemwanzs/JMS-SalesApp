@@ -8,11 +8,11 @@ import type { LocationSummary } from "@/services/LocationService";
 
 /**
  * Clickable KPI tiles for the Expense Dashboard. Pending Approval landed
- * in Phase 2a (migration 0085) -- Reimbursable Expenses / Budget vs
- * Actual tiles are still deliberately omitted, since those subsystems
- * (reimbursement tracking, budgets) don't exist yet; showing a fake/zero
- * card for them would misrepresent the feature as further along than it
- * is. Revisit once the relevant phase lands.
+ * in Phase 2a (migration 0085); Pending Reimbursements landed in Phase 2b
+ * (migration 0086). Budget vs Actual is still deliberately omitted, since
+ * that subsystem doesn't exist yet; showing a fake/zero card for it would
+ * misrepresent the feature as further along than it is. Revisit once the
+ * relevant phase lands.
  *
  * A real browser navigation (window.location.assign), not router.push --
  * this Next.js build's client router can silently fail to commit a
@@ -97,6 +97,23 @@ export function ExpenseDashboardCards({
             <p className="text-lg font-semibold tabular-nums">{summary.pendingApprovalCount}</p>
             {summary.pendingApprovalCount > 0 && (
               <p className="text-xs text-muted-foreground">{summary.pendingApprovalTotal.toFixed(2)}</p>
+            )}
+          </CardContent>
+        </Card>
+      </button>
+
+      <button
+        type="button"
+        onClick={() => go({ reimbursementStatus: "pending" })}
+        className="text-left"
+        disabled={summary.pendingReimbursementCount === 0}
+      >
+        <Card className="h-full transition-colors hover:bg-muted">
+          <CardContent className="p-3">
+            <p className="text-xs text-muted-foreground">Pending Reimbursements</p>
+            <p className="text-lg font-semibold tabular-nums">{summary.pendingReimbursementCount}</p>
+            {summary.pendingReimbursementCount > 0 && (
+              <p className="text-xs text-muted-foreground">{summary.pendingReimbursementTotal.toFixed(2)}</p>
             )}
           </CardContent>
         </Card>

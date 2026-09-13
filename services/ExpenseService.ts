@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database.types";
 
 export type ExpenseStatus = "active" | "voided" | "pending_approval" | "rejected";
+export type ExpenseReimbursementStatus = "not_applicable" | "pending" | "paid";
 
 export interface ExpenseCorrection {
   id: string;
@@ -32,6 +33,8 @@ export interface ExpenseDashboardSummary {
   withoutReceiptCount: number;
   pendingApprovalCount: number;
   pendingApprovalTotal: number;
+  pendingReimbursementCount: number;
+  pendingReimbursementTotal: number;
 }
 
 export type ExpenseBreakdownDimension = "category" | "vendor" | "paymentMethod" | "branch" | "recordedBy";
@@ -49,7 +52,7 @@ export interface ExpenseTrendPoint {
 }
 
 const EXPENSE_SELECT =
-  "id, location_id, expense_item_id, expense_item_name_snapshot, actual_amount, expense_date, notes, status, recorded_by, voided_by, voided_at, void_reason, edited_by, edited_at, created_at, category_id, category_name_snapshot, payment_method_id, payment_method_name_snapshot, vendor, reference_number, tax_amount, reimbursable, receipt_storage_path, receipt_file_type, expense_number, approval_request_id, rejection_reason";
+  "id, location_id, expense_item_id, expense_item_name_snapshot, actual_amount, expense_date, notes, status, recorded_by, voided_by, voided_at, void_reason, edited_by, edited_at, created_at, category_id, category_name_snapshot, payment_method_id, payment_method_name_snapshot, vendor, reference_number, tax_amount, reimbursable, receipt_storage_path, receipt_file_type, expense_number, approval_request_id, rejection_reason, reimbursement_status, reimbursed_by, reimbursed_at, reimbursement_reference, reimbursement_notes";
 
 export interface RecordExpenseInput {
   /** Client-generated -- lets a receipt upload target `{tenantId}/expenses/{id}/...` in Storage before this row exists. Same trick as ProductService.CreateProductInput.id. */
@@ -100,6 +103,11 @@ export interface ExpenseRecord {
   createdAt: string;
   approvalRequestId: string | null;
   rejectionReason: string | null;
+  reimbursementStatus: ExpenseReimbursementStatus;
+  reimbursedBy: string | null;
+  reimbursedAt: string | null;
+  reimbursementReference: string | null;
+  reimbursementNotes: string | null;
 }
 
 export interface ExpenseSummaryItem {
@@ -148,6 +156,11 @@ function toExpenseRecord(row: {
   expense_number: string | null;
   approval_request_id: string | null;
   rejection_reason: string | null;
+  reimbursement_status: string;
+  reimbursed_by: string | null;
+  reimbursed_at: string | null;
+  reimbursement_reference: string | null;
+  reimbursement_notes: string | null;
 }): Omit<ExpenseRecord, "recordedByName"> {
   return {
     id: row.id,
@@ -178,6 +191,11 @@ function toExpenseRecord(row: {
     createdAt: row.created_at,
     approvalRequestId: row.approval_request_id,
     rejectionReason: row.rejection_reason,
+    reimbursementStatus: row.reimbursement_status as ExpenseReimbursementStatus,
+    reimbursedBy: row.reimbursed_by,
+    reimbursedAt: row.reimbursed_at,
+    reimbursementReference: row.reimbursement_reference,
+    reimbursementNotes: row.reimbursement_notes,
   };
 }
 
@@ -304,6 +322,7 @@ export class ExpenseService {
       paymentMethodId?: string;
       vendor?: string;
       status?: ExpenseStatus;
+      reimbursementStatus?: ExpenseReimbursementStatus;
       hasReceipt?: boolean;
       minAmount?: number;
       maxAmount?: number;
@@ -338,6 +357,9 @@ export class ExpenseService {
     }
     if (filters.status) {
       query = query.eq("status", filters.status);
+    }
+    if (filters.reimbursementStatus) {
+      query = query.eq("reimbursement_status", filters.reimbursementStatus);
     }
     if (filters.hasReceipt === true) {
       query = query.not("receipt_storage_path", "is", null);
@@ -414,6 +436,18 @@ export class ExpenseService {
 
     if (error) {
       throw new Error(`ExpenseService.voidExpense: ${error.message}`);
+    }
+  }
+
+  async markReimbursed(expenseId: string, reference: string | null, notes: string | null): Promise<void> {
+    const { error } = await this.supabase.rpc("mark_expense_reimbursed", {
+      p_expense_id: expenseId,
+      p_reference: reference,
+      p_notes: notes,
+    });
+
+    if (error) {
+      throw new Error(`ExpenseService.markReimbursed: ${error.message}`);
     }
   }
 
@@ -561,17 +595,37 @@ export class ExpenseService {
       .eq("tenant_id", tenantId)
       .eq("status", "pending_approval");
 
+    // Same "not date-bounded" reasoning as pendingQuery above -- an unpaid
+    // reimbursement from last month shouldn't quietly fall out of view
+    // just because it's outside "This Month"'s window. Only 'active'
+    // expenses can ever have reimbursement_status = 'pending' (the
+    // gate_expense_approval/sync_reimbursement_status triggers never set
+    // it on a pending/rejected row), so no extra status filter needed.
+    let pendingReimbursementQuery = this.supabase
+      .from("expenses")
+      .select("actual_amount")
+      .eq("tenant_id", tenantId)
+      .eq("reimbursement_status", "pending");
+
     if (params.locationId) {
       query = query.eq("location_id", params.locationId);
       pendingQuery = pendingQuery.eq("location_id", params.locationId);
+      pendingReimbursementQuery = pendingReimbursementQuery.eq("location_id", params.locationId);
     }
 
-    const [{ data, error }, { data: pendingData, error: pendingError }] = await Promise.all([query, pendingQuery]);
+    const [
+      { data, error },
+      { data: pendingData, error: pendingError },
+      { data: pendingReimbursementData, error: pendingReimbursementError },
+    ] = await Promise.all([query, pendingQuery, pendingReimbursementQuery]);
     if (error) {
       throw new Error(`ExpenseService.getDashboardSummary: ${error.message}`);
     }
     if (pendingError) {
       throw new Error(`ExpenseService.getDashboardSummary: ${pendingError.message}`);
+    }
+    if (pendingReimbursementError) {
+      throw new Error(`ExpenseService.getDashboardSummary: ${pendingReimbursementError.message}`);
     }
 
     const rows = data ?? [];
@@ -620,6 +674,8 @@ export class ExpenseService {
       withoutReceiptCount,
       pendingApprovalCount: pendingData?.length ?? 0,
       pendingApprovalTotal: (pendingData ?? []).reduce((sum, row) => sum + Number(row.actual_amount), 0),
+      pendingReimbursementCount: pendingReimbursementData?.length ?? 0,
+      pendingReimbursementTotal: (pendingReimbursementData ?? []).reduce((sum, row) => sum + Number(row.actual_amount), 0),
     };
   }
 

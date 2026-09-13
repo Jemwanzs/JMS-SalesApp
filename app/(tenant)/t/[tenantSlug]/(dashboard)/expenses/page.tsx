@@ -46,6 +46,7 @@ export default async function ExpensesPage({
     paymentMethodId?: string;
     vendor?: string;
     status?: "active" | "voided" | "pending_approval" | "rejected";
+    reimbursementStatus?: "not_applicable" | "pending" | "paid";
     hasReceipt?: string;
     minAmount?: string;
     maxAmount?: string;
@@ -54,7 +55,7 @@ export default async function ExpensesPage({
 }) {
   const { tenantSlug } = await params;
   const filterParams = await searchParams;
-  const { date, from, to, q, categoryId, expenseItemId, paymentMethodId, vendor, status, hasReceipt, minAmount, maxAmount, locationId } =
+  const { date, from, to, q, categoryId, expenseItemId, paymentMethodId, vendor, status, reimbursementStatus, hasReceipt, minAmount, maxAmount, locationId } =
     filterParams;
   const supabase = await createClient();
 
@@ -103,6 +104,7 @@ export default async function ExpensesPage({
     canViewReceipt,
     canDownloadReceipt,
     canViewAll,
+    canManageReimbursements,
     expenses,
     activeItems,
     recentlyUsedItemIds,
@@ -119,6 +121,7 @@ export default async function ExpensesPage({
     can("expenses.view_receipt", { tenantId: tenant.id }),
     can("expenses.download_receipt", { tenantId: tenant.id }),
     can("expenses.view_all", { tenantId: tenant.id }),
+    can("expenses.manage_reimbursements", { tenantId: tenant.id }),
     expenseService.listExpenses(tenant.id, {
       date: !hasDateFilter ? effectiveDate : date,
       from,
@@ -129,6 +132,7 @@ export default async function ExpensesPage({
       paymentMethodId,
       vendor,
       status,
+      reimbursementStatus,
       hasReceipt: hasReceipt === "true" ? true : hasReceipt === "false" ? false : undefined,
       minAmount: minAmount ? Number(minAmount) : undefined,
       maxAmount: maxAmount ? Number(maxAmount) : undefined,
@@ -207,6 +211,7 @@ export default async function ExpensesPage({
         canViewReceipt={canViewReceipt}
         canDownloadReceipt={canDownloadReceipt}
         canViewAll={canViewAll}
+        canManageReimbursements={canManageReimbursements}
       />
     </div>
   );

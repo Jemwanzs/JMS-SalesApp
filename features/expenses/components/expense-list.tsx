@@ -42,6 +42,7 @@ export function ExpenseList({
   canViewReceipt,
   canDownloadReceipt,
   canViewAll,
+  canManageReimbursements,
 }: {
   tenantId: string;
   tenantSlug: string;
@@ -63,6 +64,7 @@ export function ExpenseList({
   canViewReceipt: boolean;
   canDownloadReceipt: boolean;
   canViewAll: boolean;
+  canManageReimbursements: boolean;
 }) {
   const locationNameById = new Map(locations.map((l) => [l.id, l.name]));
   const [addOpen, setAddOpen] = useState(false);
@@ -119,6 +121,16 @@ export function ExpenseList({
                     {expense.status === "rejected" && (
                       <Badge variant="destructive" className="shrink-0">
                         Rejected
+                      </Badge>
+                    )}
+                    {expense.reimbursementStatus === "pending" && (
+                      <Badge variant="outline" className="shrink-0">
+                        Reimbursement pending
+                      </Badge>
+                    )}
+                    {expense.reimbursementStatus === "paid" && (
+                      <Badge variant="outline" className="shrink-0">
+                        Reimbursed
                       </Badge>
                     )}
                     {expense.receiptStoragePath && <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
@@ -179,6 +191,7 @@ export function ExpenseList({
         canVoid={canVoid}
         canViewReceipt={canViewReceipt}
         canDownloadReceipt={canDownloadReceipt}
+        canManageReimbursements={canManageReimbursements}
         onOpenChange={(open) => !open && setSelected(null)}
       />
     </div>

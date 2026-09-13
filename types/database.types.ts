@@ -569,6 +569,11 @@ export interface Database {
           expense_number: string | null;
           approval_request_id: string | null;
           rejection_reason: string | null;
+          reimbursement_status: "not_applicable" | "pending" | "paid";
+          reimbursed_by: string | null;
+          reimbursed_at: string | null;
+          reimbursement_reference: string | null;
+          reimbursement_notes: string | null;
         };
         Insert: Partial<Database["public"]["Tables"]["expenses"]["Row"]> & {
           tenant_id: string;
@@ -1327,6 +1332,10 @@ export interface Database {
       };
       void_expense: {
         Args: { p_expense_id: string; p_reason: string };
+        Returns: Database["public"]["Tables"]["expenses"]["Row"];
+      };
+      mark_expense_reimbursed: {
+        Args: { p_expense_id: string; p_reference: string | null; p_notes: string | null };
         Returns: Database["public"]["Tables"]["expenses"]["Row"];
       };
     };

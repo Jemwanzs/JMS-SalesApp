@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { ChevronDown } from "lucide-react";
 
 import { correctExpenseAction } from "@/features/expenses/actions/correct-expense";
+import { markExpenseReimbursedAction } from "@/features/expenses/actions/mark-expense-reimbursed";
 import { voidExpenseAction } from "@/features/expenses/actions/void-expense";
 import { ExpenseCategoryCombobox } from "@/features/expenses/components/expense-category-combobox";
 import { ExpenseCorrectionsHistory } from "@/features/expenses/components/expense-corrections-history";
@@ -59,6 +60,7 @@ export function ExpenseDetailDialog({
   canVoid,
   canViewReceipt,
   canDownloadReceipt,
+  canManageReimbursements,
   onOpenChange,
 }: {
   tenantId: string;
@@ -75,6 +77,7 @@ export function ExpenseDetailDialog({
   canVoid: boolean;
   canViewReceipt: boolean;
   canDownloadReceipt: boolean;
+  canManageReimbursements: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
   const [isPending, startTransition] = useTransition();
@@ -92,6 +95,9 @@ export function ExpenseDetailDialog({
   const [reason, setReason] = useState("");
   const [voiding, setVoiding] = useState(false);
   const [voidReason, setVoidReason] = useState("");
+  const [reimbursing, setReimbursing] = useState(false);
+  const [reimbursementReference, setReimbursementReference] = useState("");
+  const [reimbursementNotes, setReimbursementNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -110,6 +116,9 @@ export function ExpenseDetailDialog({
     setReason("");
     setVoiding(false);
     setVoidReason("");
+    setReimbursing(false);
+    setReimbursementReference("");
+    setReimbursementNotes("");
     setError(null);
   }, [expense]);
 
@@ -192,6 +201,31 @@ export function ExpenseDetailDialog({
     });
   }
 
+  function onConfirmReimbursed(e: React.FormEvent) {
+    e.preventDefault();
+    if (!expense) return;
+    setError(null);
+
+    const formData = new FormData();
+    formData.set("expenseId", expense.id);
+    formData.set("reference", reimbursementReference);
+    formData.set("notes", reimbursementNotes);
+
+    startTransition(async () => {
+      const result = await markExpenseReimbursedAction(tenantId, tenantSlug, {}, formData);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      if (result.fieldErrors) {
+        setError(Object.values(result.fieldErrors)[0] ?? "Check the fields above");
+        return;
+      }
+      toast.success("Expense marked as reimbursed");
+      onOpenChange(false);
+    });
+  }
+
   return (
     <Dialog open={expense !== null} onOpenChange={onOpenChange}>
       <DialogContent>
@@ -215,7 +249,17 @@ export function ExpenseDetailDialog({
               />
             )}
 
-            {!voiding ? (
+            {expense.reimbursementStatus === "paid" && (
+              <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+                <p className="font-medium">Reimbursed</p>
+                <p className="text-xs text-muted-foreground">
+                  {expense.reimbursedAt && new Date(expense.reimbursedAt).toLocaleDateString()}
+                  {expense.reimbursementReference && ` · Ref: ${expense.reimbursementReference}`}
+                </p>
+              </div>
+            )}
+
+            {!voiding && !reimbursing ? (
               <form onSubmit={onSaveCorrection} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="correct-item">Expense item</Label>
@@ -340,6 +384,19 @@ export function ExpenseDetailDialog({
                       {isPending ? "Saving..." : "Save correction"}
                     </Button>
                   )}
+                  {canManageReimbursements && expense.reimbursable && expense.reimbursementStatus === "pending" && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => {
+                        setReimbursing(true);
+                        setError(null);
+                      }}
+                    >
+                      Mark as reimbursed
+                    </Button>
+                  )}
                   {canVoid && (
                     <Button
                       type="button"
@@ -355,7 +412,7 @@ export function ExpenseDetailDialog({
                   )}
                 </DialogFooter>
               </form>
-            ) : (
+            ) : voiding ? (
               <form onSubmit={onConfirmVoid} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="void-reason">Reason for voiding</Label>
@@ -376,6 +433,39 @@ export function ExpenseDetailDialog({
                     {isPending ? "Voiding..." : "Confirm void"}
                   </Button>
                   <Button type="button" variant="outline" className="w-full" onClick={() => setVoiding(false)}>
+                    Cancel
+                  </Button>
+                </DialogFooter>
+              </form>
+            ) : (
+              <form onSubmit={onConfirmReimbursed} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="reimbursement-reference">Payment reference (optional)</Label>
+                  <Input
+                    id="reimbursement-reference"
+                    value={reimbursementReference}
+                    onChange={(e) => setReimbursementReference(e.target.value)}
+                    placeholder="e.g. M-Pesa code, cheque number"
+                    autoFocus
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="reimbursement-notes">Notes (optional)</Label>
+                  <Input
+                    id="reimbursement-notes"
+                    value={reimbursementNotes}
+                    onChange={(e) => setReimbursementNotes(e.target.value)}
+                  />
+                </div>
+
+                {error && <p className="text-sm text-destructive">{error}</p>}
+
+                <DialogFooter className="flex-col gap-2 sm:flex-col">
+                  <Button type="submit" disabled={isPending} className="w-full">
+                    {isPending ? "Saving..." : "Confirm reimbursed"}
+                  </Button>
+                  <Button type="button" variant="outline" className="w-full" onClick={() => setReimbursing(false)}>
                     Cancel
                   </Button>
                 </DialogFooter>

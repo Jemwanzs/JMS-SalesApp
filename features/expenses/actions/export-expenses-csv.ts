@@ -88,7 +88,21 @@ export async function exportExpensesCsvAction(
   });
 
   const csv = toCsv([
-    ["Expense Number", "Date", "Item", "Category", "Vendor", "Payment Method", "Amount", "Tax", "Reimbursable", "Receipt", "Recorded By", "Status"],
+    [
+      "Expense Number",
+      "Date",
+      "Item",
+      "Category",
+      "Vendor",
+      "Payment Method",
+      "Amount",
+      "Tax",
+      "Reimbursable",
+      "Reimbursement Status",
+      "Receipt",
+      "Recorded By",
+      "Status",
+    ],
     ...expenses.map((e) => [
       e.expenseNumber ?? "",
       e.expenseDate,
@@ -99,6 +113,7 @@ export async function exportExpensesCsvAction(
       e.actualAmount.toFixed(2),
       e.taxAmount != null ? e.taxAmount.toFixed(2) : "",
       e.reimbursable ? "Yes" : "No",
+      e.reimbursementStatus,
       e.receiptStoragePath ? "Yes" : "No",
       e.recordedByName ?? "",
       e.status,
