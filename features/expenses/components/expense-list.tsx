@@ -141,6 +141,11 @@ export function ExpenseList({
                         Recurring
                       </Badge>
                     )}
+                    {expense.splitGroupId && (
+                      <Badge variant="outline" className="shrink-0">
+                        Split
+                      </Badge>
+                    )}
                     {expense.receiptStoragePath && <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
                   </div>
                   <p className="truncate text-sm text-muted-foreground">

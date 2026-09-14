@@ -11,6 +11,7 @@ import { ExpenseCategoryCombobox } from "@/features/expenses/components/expense-
 import { ExpenseCorrectionsHistory } from "@/features/expenses/components/expense-corrections-history";
 import { ExpenseItemCombobox } from "@/features/expenses/components/expense-item-combobox";
 import { ExpensePaymentMethodSelect } from "@/features/expenses/components/expense-payment-method-select";
+import { ExpenseSplitSiblings } from "@/features/expenses/components/expense-split-siblings";
 import { ReceiptUpload, type ExpenseReceiptValue } from "@/features/expenses/components/receipt-upload";
 import { ReceiptViewer } from "@/features/expenses/components/receipt-viewer";
 import { VendorAutocompleteInput } from "@/features/expenses/components/vendor-autocomplete-input";
@@ -257,6 +258,10 @@ export function ExpenseDetailDialog({
                   {expense.reimbursementReference && ` · Ref: ${expense.reimbursementReference}`}
                 </p>
               </div>
+            )}
+
+            {expense.splitGroupId && (
+              <ExpenseSplitSiblings tenantId={tenantId} splitGroupId={expense.splitGroupId} expenseId={expense.id} />
             )}
 
             {!voiding && !reimbursing ? (

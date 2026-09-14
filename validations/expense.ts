@@ -146,3 +146,37 @@ export const updateExpenseRecurringTemplateSchema = createExpenseRecurringTempla
 });
 
 export type UpdateExpenseRecurringTemplateInput = z.infer<typeof updateExpenseRecurringTemplateSchema>;
+
+const expenseSplitLineSchema = z.object({
+  categoryId: z.uuid(),
+  amount: z.coerce.number().positive(),
+});
+
+// `splits` arrives as one JSON-stringified FormData field (a repeatable
+// list of {categoryId, amount} rows has no clean flat-field encoding the
+// way every other expense form here uses) -- parsed and shape-validated
+// in one pass rather than trusting the client's JSON.
+export const recordSplitExpenseSchema = z.object({
+  expenseItemId: z.uuid("Select an expense item"),
+  paymentMethodId: z.uuid("Select a payment method"),
+  expenseDate: z.iso.date(),
+  splits: z
+    .string()
+    .transform((val, ctx) => {
+      try {
+        return JSON.parse(val);
+      } catch {
+        ctx.addIssue({ code: "custom", message: "Invalid split data" });
+        return z.NEVER;
+      }
+    })
+    .pipe(z.array(expenseSplitLineSchema).min(2, "Add at least 2 categories to split this expense")),
+  vendor: z.string().trim().max(200).optional(),
+  referenceNumber: z.string().trim().max(100).optional(),
+  reimbursable: z.coerce.boolean().optional(),
+  receiptStoragePath: z.string().optional(),
+  receiptFileType: z.string().optional(),
+  notes: z.string().trim().max(500).optional(),
+});
+
+export type RecordSplitExpenseInput = z.infer<typeof recordSplitExpenseSchema>;

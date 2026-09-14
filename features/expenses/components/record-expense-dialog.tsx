@@ -5,9 +5,11 @@ import { toast } from "sonner";
 import { ChevronDown } from "lucide-react";
 
 import { recordExpenseAction } from "@/features/expenses/actions/record-expense";
+import { recordSplitExpenseAction } from "@/features/expenses/actions/record-split-expense";
 import { ExpenseCategoryCombobox } from "@/features/expenses/components/expense-category-combobox";
 import { ExpenseItemCombobox } from "@/features/expenses/components/expense-item-combobox";
 import { ExpensePaymentMethodSelect } from "@/features/expenses/components/expense-payment-method-select";
+import { ExpenseSplitRows, newSplitRow, type ExpenseSplitRowValue } from "@/features/expenses/components/expense-split-rows";
 import { ReceiptUpload, type ExpenseReceiptValue } from "@/features/expenses/components/receipt-upload";
 import { VendorAutocompleteInput } from "@/features/expenses/components/vendor-autocomplete-input";
 import { Button } from "@/components/ui/button";
@@ -90,6 +92,8 @@ export function RecordExpenseDialog({
   // (ExpenseService.RecordExpenseInput.id, same trick ProductService's
   // own client-generated id uses).
   const [pendingExpenseId, setPendingExpenseId] = useState("");
+  const [splitMode, setSplitMode] = useState(false);
+  const [splitRows, setSplitRows] = useState<ExpenseSplitRowValue[]>([]);
 
   useEffect(() => {
     if (!open) return;
@@ -106,6 +110,8 @@ export function RecordExpenseDialog({
     setNotes("");
     setError(null);
     setPendingExpenseId(crypto.randomUUID());
+    setSplitMode(false);
+    setSplitRows([newSplitRow(), newSplitRow()]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -127,12 +133,54 @@ export function RecordExpenseDialog({
       setError("Select an expense item");
       return;
     }
-    if (!categoryId) {
-      setError("Select a category");
-      return;
-    }
     if (!paymentMethodId) {
       setError("Select a payment method");
+      return;
+    }
+
+    if (splitMode) {
+      if (splitRows.some((r) => !r.categoryId)) {
+        setError("Select a category for every split");
+        return;
+      }
+      if (splitRows.some((r) => !r.amount || Number(r.amount) <= 0)) {
+        setError("Enter an amount greater than 0 for every split");
+        return;
+      }
+
+      const formData = new FormData();
+      formData.set("expenseItemId", expenseItemId);
+      formData.set("paymentMethodId", paymentMethodId);
+      formData.set("expenseDate", expenseDate);
+      formData.set("splits", JSON.stringify(splitRows.map((r) => ({ categoryId: r.categoryId, amount: r.amount }))));
+      formData.set("vendor", vendor);
+      formData.set("referenceNumber", referenceNumber);
+      formData.set("reimbursable", reimbursable ? "true" : "");
+      if (receipt) {
+        formData.set("receiptStoragePath", receipt.storagePath);
+        formData.set("receiptFileType", receipt.fileType);
+      }
+      formData.set("notes", notes);
+
+      startTransition(async () => {
+        const result = await recordSplitExpenseAction(tenantId, tenantSlug, timezone, {}, formData);
+        if (result.error) {
+          setError(result.error);
+          return;
+        }
+        if (result.fieldErrors) {
+          setError(Object.values(result.fieldErrors)[0] ?? "Check the fields above");
+          return;
+        }
+        const anyPending = result.expenses?.some((e) => e.status === "pending_approval");
+        toast.success(anyPending ? "Split expense submitted for approval" : "Split expense recorded");
+        onOpenChange(false);
+      });
+      return;
+    }
+
+    if (!categoryId) {
+      setError("Select a category");
       return;
     }
 
@@ -198,29 +246,57 @@ export function RecordExpenseDialog({
               )}
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="expense-category">Category</Label>
-              <ExpenseCategoryCombobox id="expense-category" categories={categories} value={categoryId} onChange={setCategoryId} />
-            </div>
+            {!splitMode ? (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="expense-category">Category</Label>
+                  <ExpenseCategoryCombobox id="expense-category" categories={categories} value={categoryId} onChange={setCategoryId} />
+                </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="expense-actual-amount">Actual amount</Label>
-              <Input
-                id="expense-actual-amount"
-                type="number"
-                min="0.01"
-                step="0.01"
-                value={actualAmount}
-                onChange={(e) => setActualAmount(e.target.value)}
-                required
-              />
-              {overBudget && projectedSpend != null && selectedBudget && (
-                <p className="text-xs text-amber-600 dark:text-amber-400">
-                  This will put {selectedBudget.categoryName} at {projectedSpend.toFixed(2)} of its {selectedBudget.monthlyAmount.toFixed(2)}{" "}
-                  monthly budget this month.
-                </p>
-              )}
-            </div>
+                <div className="space-y-2">
+                  <Label htmlFor="expense-actual-amount">Actual amount</Label>
+                  <Input
+                    id="expense-actual-amount"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={actualAmount}
+                    onChange={(e) => setActualAmount(e.target.value)}
+                    required
+                  />
+                  {overBudget && projectedSpend != null && selectedBudget && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400">
+                      This will put {selectedBudget.categoryName} at {projectedSpend.toFixed(2)} of its {selectedBudget.monthlyAmount.toFixed(2)}{" "}
+                      monthly budget this month.
+                    </p>
+                  )}
+                </div>
+
+                {categories.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setSplitMode(true)}
+                    className="text-sm font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                  >
+                    Split into multiple categories
+                  </button>
+                )}
+              </>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Split across categories</Label>
+                  <button
+                    type="button"
+                    onClick={() => setSplitMode(false)}
+                    className="text-xs font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                  >
+                    Use one category instead
+                  </button>
+                </div>
+                <ExpenseSplitRows rows={splitRows} categories={categories} budgetStatus={budgetStatus} onChange={setSplitRows} />
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="expense-payment-method">Payment method</Label>
@@ -267,17 +343,19 @@ export function RecordExpenseDialog({
                   <Input id="expense-reference" value={referenceNumber} onChange={(e) => setReferenceNumber(e.target.value)} />
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="expense-tax">Tax amount (optional)</Label>
-                  <Input
-                    id="expense-tax"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={taxAmount}
-                    onChange={(e) => setTaxAmount(e.target.value)}
-                  />
-                </div>
+                {!splitMode && (
+                  <div className="space-y-2">
+                    <Label htmlFor="expense-tax">Tax amount (optional)</Label>
+                    <Input
+                      id="expense-tax"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={taxAmount}
+                      onChange={(e) => setTaxAmount(e.target.value)}
+                    />
+                  </div>
+                )}
 
                 <div className="flex items-center gap-2">
                   <Checkbox id="expense-reimbursable" checked={reimbursable} onCheckedChange={(v) => setReimbursable(v === true)} />
@@ -297,7 +375,7 @@ export function RecordExpenseDialog({
 
             <DialogFooter>
               <Button type="submit" disabled={isPending} className="w-full">
-                {isPending ? "Recording..." : "Record expense"}
+                {isPending ? "Recording..." : splitMode ? "Record split expense" : "Record expense"}
               </Button>
             </DialogFooter>
           </form>

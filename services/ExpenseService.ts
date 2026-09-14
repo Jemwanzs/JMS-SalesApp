@@ -52,7 +52,22 @@ export interface ExpenseTrendPoint {
 }
 
 const EXPENSE_SELECT =
-  "id, location_id, expense_item_id, expense_item_name_snapshot, actual_amount, expense_date, notes, status, recorded_by, voided_by, voided_at, void_reason, edited_by, edited_at, created_at, category_id, category_name_snapshot, payment_method_id, payment_method_name_snapshot, vendor, reference_number, tax_amount, reimbursable, receipt_storage_path, receipt_file_type, expense_number, approval_request_id, rejection_reason, reimbursement_status, reimbursed_by, reimbursed_at, reimbursement_reference, reimbursement_notes, recurring_template_id";
+  "id, location_id, expense_item_id, expense_item_name_snapshot, actual_amount, expense_date, notes, status, recorded_by, voided_by, voided_at, void_reason, edited_by, edited_at, created_at, category_id, category_name_snapshot, payment_method_id, payment_method_name_snapshot, vendor, reference_number, tax_amount, reimbursable, receipt_storage_path, receipt_file_type, expense_number, approval_request_id, rejection_reason, reimbursement_status, reimbursed_by, reimbursed_at, reimbursement_reference, reimbursement_notes, recurring_template_id, split_group_id";
+
+export interface RecordSplitExpenseInput {
+  locationId: string;
+  expenseItemId: string;
+  paymentMethodId: string;
+  expenseDate: string;
+  splits: ExpenseSplitLine[];
+  vendor?: string | null;
+  referenceNumber?: string | null;
+  reimbursable?: boolean;
+  receiptStoragePath?: string | null;
+  receiptFileType?: string | null;
+  notes?: string | null;
+  recordedBy: string;
+}
 
 export interface RecordExpenseInput {
   /** Client-generated -- lets a receipt upload target `{tenantId}/expenses/{id}/...` in Storage before this row exists. Same trick as ProductService.CreateProductInput.id. */
@@ -109,6 +124,12 @@ export interface ExpenseRecord {
   reimbursementReference: string | null;
   reimbursementNotes: string | null;
   recurringTemplateId: string | null;
+  splitGroupId: string | null;
+}
+
+export interface ExpenseSplitLine {
+  categoryId: string;
+  amount: number;
 }
 
 export interface ExpenseSummaryItem {
@@ -163,6 +184,7 @@ function toExpenseRecord(row: {
   reimbursement_reference: string | null;
   reimbursement_notes: string | null;
   recurring_template_id: string | null;
+  split_group_id: string | null;
 }): Omit<ExpenseRecord, "recordedByName"> {
   return {
     id: row.id,
@@ -199,6 +221,7 @@ function toExpenseRecord(row: {
     reimbursementReference: row.reimbursement_reference,
     reimbursementNotes: row.reimbursement_notes,
     recurringTemplateId: row.recurring_template_id,
+    splitGroupId: row.split_group_id,
   };
 }
 
@@ -277,6 +300,104 @@ export class ExpenseService {
       throw new Error(`ExpenseService.recordExpense: ${error?.message ?? "no row returned"}`);
     }
     return { ...toExpenseRecord(data), recordedByName: null };
+  }
+
+  /**
+   * One payment split across multiple categories -- a single bulk insert
+   * of N ordinary `expenses` rows sharing a fresh `split_group_id`, not a
+   * new SECURITY DEFINER function (see migration 0089's own header
+   * comment for why a plain insert is the right shape here, same
+   * reasoning the recurring-expense sweep already applies): every
+   * existing BEFORE INSERT trigger (numbering, receipt requirement,
+   * approval gating, reimbursement sync) fires per row exactly as it
+   * would for a single-category expense. A single multi-row INSERT
+   * statement is atomic -- if any one split fails a trigger check (e.g.
+   * a receipt-required tenant with none attached), the whole group rolls
+   * back rather than leaving a partial split behind.
+   */
+  async recordSplitExpense(tenantId: string, input: RecordSplitExpenseInput): Promise<ExpenseRecord[]> {
+    if (input.splits.length < 2) {
+      throw new Error("ExpenseService.recordSplitExpense: a split needs at least 2 categories");
+    }
+    if (input.splits.some((s) => s.amount <= 0)) {
+      throw new Error("ExpenseService.recordSplitExpense: every split amount must be greater than 0");
+    }
+
+    const categoryIds = [...new Set(input.splits.map((s) => s.categoryId))];
+    const [{ data: item, error: itemError }, { data: categoryRows, error: categoryError }, { data: paymentMethod, error: paymentMethodError }] =
+      await Promise.all([
+        this.supabase.from("expense_items").select("name, status").eq("tenant_id", tenantId).eq("id", input.expenseItemId).single(),
+        this.supabase.from("expense_categories").select("id, name, status").eq("tenant_id", tenantId).in("id", categoryIds),
+        this.supabase
+          .from("expense_payment_methods")
+          .select("name, status")
+          .eq("tenant_id", tenantId)
+          .eq("id", input.paymentMethodId)
+          .single(),
+      ]);
+
+    if (itemError || !item) {
+      throw new Error(`ExpenseService.recordSplitExpense: ${itemError?.message ?? "expense item not found"}`);
+    }
+    if (item.status !== "active") {
+      throw new Error("This expense item has been archived -- reactivate it before recording an expense against it.");
+    }
+    if (categoryError || !categoryRows || categoryRows.length !== categoryIds.length) {
+      throw new Error(`ExpenseService.recordSplitExpense: ${categoryError?.message ?? "one or more categories not found"}`);
+    }
+    if (paymentMethodError || !paymentMethod) {
+      throw new Error(`ExpenseService.recordSplitExpense: ${paymentMethodError?.message ?? "payment method not found"}`);
+    }
+
+    const categoryNameById = new Map(categoryRows.map((c) => [c.id, c.name]));
+    const splitGroupId = crypto.randomUUID();
+
+    const { data, error } = await this.supabase
+      .from("expenses")
+      .insert(
+        input.splits.map((split) => ({
+          tenant_id: tenantId,
+          location_id: input.locationId,
+          expense_item_id: input.expenseItemId,
+          expense_item_name_snapshot: item.name,
+          category_id: split.categoryId,
+          category_name_snapshot: categoryNameById.get(split.categoryId) ?? "",
+          payment_method_id: input.paymentMethodId,
+          payment_method_name_snapshot: paymentMethod.name,
+          vendor: input.vendor ?? null,
+          reference_number: input.referenceNumber ?? null,
+          reimbursable: input.reimbursable ?? false,
+          receipt_storage_path: input.receiptStoragePath ?? null,
+          receipt_file_type: input.receiptFileType ?? null,
+          actual_amount: split.amount,
+          expense_date: input.expenseDate,
+          notes: input.notes ?? null,
+          recorded_by: input.recordedBy,
+          split_group_id: splitGroupId,
+        }))
+      )
+      .select(EXPENSE_SELECT);
+
+    if (error || !data) {
+      throw new Error(`ExpenseService.recordSplitExpense: ${error?.message ?? "no rows returned"}`);
+    }
+    return data.map((row) => ({ ...toExpenseRecord(row), recordedByName: null }));
+  }
+
+  /** The other rows in the same split group, for the detail dialog's "part of a split" context -- excludes the row being viewed. */
+  async getSplitSiblings(tenantId: string, splitGroupId: string, excludeExpenseId: string): Promise<ExpenseRecord[]> {
+    const { data, error } = await this.supabase
+      .from("expenses")
+      .select(EXPENSE_SELECT)
+      .eq("tenant_id", tenantId)
+      .eq("split_group_id", splitGroupId)
+      .neq("id", excludeExpenseId)
+      .order("category_name_snapshot", { ascending: true });
+
+    if (error) {
+      throw new Error(`ExpenseService.getSplitSiblings: ${error.message}`);
+    }
+    return (data ?? []).map((row) => ({ ...toExpenseRecord(row), recordedByName: null }));
   }
 
   /**

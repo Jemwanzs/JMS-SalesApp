@@ -637,6 +637,7 @@ export interface Database {
           reimbursement_notes: string | null;
           recurring_template_id: string | null;
           recurring_period: string | null;
+          split_group_id: string | null;
         };
         Insert: Partial<Database["public"]["Tables"]["expenses"]["Row"]> & {
           tenant_id: string;
