@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 
 import { exportExpensesCsvAction, type ExpensesExportFilters } from "@/features/expenses/actions/export-expenses-csv";
+import { exportExpensesExcelAction } from "@/features/expenses/actions/export-expenses-excel";
 import { getExpenseReportAction } from "@/features/expenses/actions/get-expense-report";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -21,11 +22,29 @@ function triggerDownload(csv: string, filename: string) {
   URL.revokeObjectURL(url);
 }
 
+/** Decodes the base64 payload exportExpensesExcelAction returns (a real binary .xlsx can't cross the server-action boundary any other way) back into bytes for the same download-link trick triggerDownload uses. */
+function triggerDownloadBase64(base64: string, filename: string, mimeType: string) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  const blob = new Blob([bytes], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 /**
- * CSV + PDF export for the selected range/dimension -- same passcode-
- * gated flow ExportCsvButton (Sales History) already uses for CSV;
- * PDF uses the same dynamic-jsPDF-import pattern DailyReportDialog uses
- * for Sales. One flexible export, not per-report-type buttons.
+ * CSV + PDF + Excel export for the selected range/dimension -- same
+ * passcode-gated flow ExportCsvButton (Sales History) already uses for
+ * CSV, now shared by Excel too since both cross the same
+ * require_download_passcode gate; PDF uses the same dynamic-jsPDF-import
+ * pattern DailyReportDialog uses for Sales. One flexible export, not
+ * per-report-type buttons.
  */
 export function ExpenseReportExportBar({
   tenantId,
@@ -40,6 +59,7 @@ export function ExpenseReportExportBar({
 }) {
   const [isPending, startTransition] = useTransition();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [pendingFormat, setPendingFormat] = useState<"csv" | "excel" | null>(null);
   const [passcode, setPasscode] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -57,12 +77,48 @@ export function ExpenseReportExportBar({
     });
   }
 
+  function runExcelExport(enteredPasscode: string | null) {
+    setError(null);
+    startTransition(async () => {
+      const result = await exportExpensesExcelAction(tenantId, filters, dimension, enteredPasscode);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      triggerDownloadBase64(
+        result.excelBase64!,
+        result.filename!,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      );
+      setDialogOpen(false);
+      setPasscode("");
+    });
+  }
+
+  function runPendingExport(enteredPasscode: string | null) {
+    if (pendingFormat === "excel") {
+      runExcelExport(enteredPasscode);
+    } else {
+      runCsvExport(enteredPasscode);
+    }
+  }
+
   function onCsvClick() {
     if (requiresPasscode) {
+      setPendingFormat("csv");
       setDialogOpen(true);
       return;
     }
     runCsvExport(null);
+  }
+
+  function onExcelClick() {
+    if (requiresPasscode) {
+      setPendingFormat("excel");
+      setDialogOpen(true);
+      return;
+    }
+    runExcelExport(null);
   }
 
   function onPdfClick() {
@@ -83,6 +139,9 @@ export function ExpenseReportExportBar({
         <Button type="button" variant="outline" size="sm" disabled={isPending} onClick={onCsvClick} className="flex-1">
           {isPending ? "Working..." : "Export CSV"}
         </Button>
+        <Button type="button" variant="outline" size="sm" disabled={isPending} onClick={onExcelClick} className="flex-1">
+          {isPending ? "Working..." : "Export Excel"}
+        </Button>
         <Button type="button" variant="outline" size="sm" disabled={isPending} onClick={onPdfClick} className="flex-1">
           {isPending ? "Working..." : "Download PDF"}
         </Button>
@@ -97,7 +156,7 @@ export function ExpenseReportExportBar({
           <Input type="password" value={passcode} onChange={(e) => setPasscode(e.target.value)} autoFocus />
           {error && <p className="text-sm text-destructive">{error}</p>}
           <DialogFooter>
-            <Button disabled={isPending || !passcode} onClick={() => runCsvExport(passcode)}>
+            <Button disabled={isPending || !passcode} onClick={() => runPendingExport(passcode)}>
               {isPending ? "Verifying..." : "Download"}
             </Button>
           </DialogFooter>
