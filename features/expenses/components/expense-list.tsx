@@ -45,6 +45,8 @@ export function ExpenseList({
   canViewAll,
   canManageReimbursements,
   budgetStatus,
+  ocrEnabled,
+  ocrConfigured,
 }: {
   tenantId: string;
   tenantSlug: string;
@@ -68,6 +70,8 @@ export function ExpenseList({
   canViewAll: boolean;
   canManageReimbursements: boolean;
   budgetStatus: ExpenseBudgetStatusEntry[];
+  ocrEnabled: boolean;
+  ocrConfigured: boolean;
 }) {
   const locationNameById = new Map(locations.map((l) => [l.id, l.name]));
   const [addOpen, setAddOpen] = useState(false);
@@ -188,6 +192,9 @@ export function ExpenseList({
         defaultPaymentMethodId={defaultPaymentMethodId}
         knownVendors={knownVendors}
         budgetStatus={budgetStatus}
+        canViewReceipt={canViewReceipt}
+        ocrEnabled={ocrEnabled}
+        ocrConfigured={ocrConfigured}
       />
 
       <ExpenseDetailDialog

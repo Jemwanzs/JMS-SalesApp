@@ -72,6 +72,11 @@ export const recordExpenseSchema = z.object({
   reimbursable: z.coerce.boolean().optional(),
   receiptStoragePath: z.string().optional(),
   receiptFileType: z.string().optional(),
+  // Raw JSON string from ReceiptOcrExtract's "Use these values" -- stored
+  // as-is (receipt_extracted_data), never re-validated field-by-field
+  // here; it's a record of what OCR suggested, not itself a source of
+  // truth (the form fields it prefilled are what actually get saved).
+  receiptExtractedData: z.string().optional(),
   notes: z.string().trim().max(500).optional(),
 });
 

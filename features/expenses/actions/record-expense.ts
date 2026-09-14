@@ -40,6 +40,7 @@ export async function recordExpenseAction(
     reimbursable: formData.get("reimbursable"),
     receiptStoragePath: formData.get("receiptStoragePath") || undefined,
     receiptFileType: formData.get("receiptFileType") || undefined,
+    receiptExtractedData: formData.get("receiptExtractedData") || undefined,
     notes: formData.get("notes"),
   });
 
@@ -86,6 +87,7 @@ export async function recordExpenseAction(
       reimbursable: parsed.data.reimbursable ?? false,
       receiptStoragePath: parsed.data.receiptStoragePath || null,
       receiptFileType: parsed.data.receiptFileType || null,
+      receiptExtractedData: parsed.data.receiptExtractedData ? JSON.parse(parsed.data.receiptExtractedData) : null,
       notes: parsed.data.notes || null,
       recordedBy: user.id,
     });

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { AnniversaryWishCard } from "@/features/settings/components/anniversary-wish-card";
 import { BranchesCard } from "@/features/settings/components/branches-card";
 import { ExpenseApprovalRequirementCard } from "@/features/settings/components/expense-approval-requirement-card";
+import { ExpenseReceiptOcrCard } from "@/features/settings/components/expense-receipt-ocr-card";
 import { ExpenseReceiptRequirementCard } from "@/features/settings/components/expense-receipt-requirement-card";
 import { ExpensesModuleCard } from "@/features/settings/components/expenses-module-card";
 import { InventoryConfigurationCard } from "@/features/settings/components/inventory-configuration-card";
@@ -95,6 +96,7 @@ export default async function SettingsPage({
     expenseReceiptRequirementAmountThreshold,
     expenseApprovalMode,
     expenseApprovalAmountThreshold,
+    expenseReceiptOcrEnabled,
   ] = await Promise.all([
     new AnniversaryService(supabase).getWishMode(tenantId),
     tenantService.getSetting<string>(tenantId, "sale_number_template"),
@@ -125,7 +127,10 @@ export default async function SettingsPage({
     tenantService.getSetting<number>(tenantId, "expense_receipt_requirement_amount_threshold"),
     tenantService.getSetting<"never" | "always" | "amount_threshold" | "category">(tenantId, "expense_approval_mode"),
     tenantService.getSetting<number>(tenantId, "expense_approval_amount_threshold"),
+    tenantService.getSetting<boolean>(tenantId, "expense_receipt_ocr_enabled"),
   ]);
+
+  const ocrConfigured = Boolean(process.env.ANTHROPIC_API_KEY);
 
   // Matches features/settings/actions/set-inventory-enabled.ts's own
   // ENTITLED_WITHOUT_CHECKOUT exactly (deliberately narrower than
@@ -203,6 +208,14 @@ export default async function SettingsPage({
           tenantSlug={tenantSlug}
           initialMode={expenseApprovalMode ?? null}
           initialAmountThreshold={expenseApprovalAmountThreshold ?? null}
+        />
+      )}
+      {expensesEnabled && (
+        <ExpenseReceiptOcrCard
+          tenantId={tenantId}
+          tenantSlug={tenantSlug}
+          initialEnabled={expenseReceiptOcrEnabled ?? false}
+          configured={ocrConfigured}
         />
       )}
       {inventoryEntitlement.enabled && (

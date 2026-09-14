@@ -116,6 +116,7 @@ export default async function ExpensesPage({
     locations,
     dashboardSummary,
     budgetStatus,
+    ocrEnabled,
   ] = await Promise.all([
     can("expenses.create", { tenantId: tenant.id }),
     can("expenses.edit", { tenantId: tenant.id }),
@@ -158,9 +159,11 @@ export default async function ExpensesPage({
     activeLocationId
       ? new ExpenseBudgetService(supabase).getBudgetStatus(tenant.id, activeLocationId, monthStart, effectiveDate)
       : Promise.resolve([]),
+    new TenantService(supabase).getSetting<boolean>(tenant.id, "expense_receipt_ocr_enabled"),
   ]);
 
   const defaultPaymentMethodId = paymentMethods.find((pm) => pm.isDefault)?.id ?? paymentMethods[0]?.id ?? "";
+  const ocrConfigured = Boolean(process.env.ANTHROPIC_API_KEY);
 
   return (
     <div className="flex flex-1 flex-col p-6">
@@ -221,6 +224,8 @@ export default async function ExpensesPage({
         canViewAll={canViewAll}
         canManageReimbursements={canManageReimbursements}
         budgetStatus={budgetStatus}
+        ocrEnabled={ocrEnabled === true}
+        ocrConfigured={ocrConfigured}
       />
     </div>
   );

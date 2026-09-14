@@ -4,12 +4,14 @@ import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { ChevronDown } from "lucide-react";
 
+import type { ExtractedReceiptData } from "@/features/expenses/actions/extract-receipt-data";
 import { recordExpenseAction } from "@/features/expenses/actions/record-expense";
 import { recordSplitExpenseAction } from "@/features/expenses/actions/record-split-expense";
 import { ExpenseCategoryCombobox } from "@/features/expenses/components/expense-category-combobox";
 import { ExpenseItemCombobox } from "@/features/expenses/components/expense-item-combobox";
 import { ExpensePaymentMethodSelect } from "@/features/expenses/components/expense-payment-method-select";
 import { ExpenseSplitRows, newSplitRow, type ExpenseSplitRowValue } from "@/features/expenses/components/expense-split-rows";
+import { ReceiptOcrExtract } from "@/features/expenses/components/receipt-ocr-extract";
 import { ReceiptUpload, type ExpenseReceiptValue } from "@/features/expenses/components/receipt-upload";
 import { VendorAutocompleteInput } from "@/features/expenses/components/vendor-autocomplete-input";
 import { Button } from "@/components/ui/button";
@@ -55,6 +57,9 @@ export function RecordExpenseDialog({
   defaultPaymentMethodId,
   knownVendors,
   budgetStatus,
+  canViewReceipt,
+  ocrEnabled,
+  ocrConfigured,
 }: {
   tenantId: string;
   tenantSlug: string;
@@ -68,6 +73,9 @@ export function RecordExpenseDialog({
   paymentMethods: ExpensePaymentMethod[];
   defaultPaymentMethodId: string;
   knownVendors: string[];
+  canViewReceipt: boolean;
+  ocrEnabled: boolean;
+  ocrConfigured: boolean;
   budgetStatus: ExpenseBudgetStatusEntry[];
 }) {
   const [isPending, startTransition] = useTransition();
@@ -94,6 +102,12 @@ export function RecordExpenseDialog({
   const [pendingExpenseId, setPendingExpenseId] = useState("");
   const [splitMode, setSplitMode] = useState(false);
   const [splitRows, setSplitRows] = useState<ExpenseSplitRowValue[]>([]);
+  // Set once the user taps "Use these values" on an OCR suggestion --
+  // carried through to recordExpenseAction purely so receipt_extracted_
+  // data has something real to hold, never re-derived or re-validated
+  // here (the applied form fields are the actual source of truth from
+  // that point on; this is just a record of what OCR originally read).
+  const [extractedData, setExtractedData] = useState<ExtractedReceiptData | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -112,6 +126,7 @@ export function RecordExpenseDialog({
     setPendingExpenseId(crypto.randomUUID());
     setSplitMode(false);
     setSplitRows([newSplitRow(), newSplitRow()]);
+    setExtractedData(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -200,6 +215,9 @@ export function RecordExpenseDialog({
       formData.set("receiptFileType", receipt.fileType);
     }
     formData.set("notes", notes);
+    if (extractedData) {
+      formData.set("receiptExtractedData", JSON.stringify(extractedData));
+    }
 
     startTransition(async () => {
       const result = await recordExpenseAction(tenantId, tenantSlug, timezone, {}, formData);
@@ -330,6 +348,24 @@ export function RecordExpenseDialog({
                   <Label>Receipt (optional)</Label>
                   {pendingExpenseId && (
                     <ReceiptUpload tenantId={tenantId} expenseId={pendingExpenseId} value={receipt} onChange={setReceipt} />
+                  )}
+                  {!splitMode && (
+                    <ReceiptOcrExtract
+                      tenantId={tenantId}
+                      receipt={receipt}
+                      ocrEnabled={ocrEnabled}
+                      ocrConfigured={ocrConfigured}
+                      canViewReceipt={canViewReceipt}
+                      onApply={(data) => {
+                        setExtractedData(data);
+                        if (data.vendor) setVendor(data.vendor);
+                        if (data.date) setExpenseDate(data.date);
+                        if (data.amount != null) setActualAmount(String(data.amount));
+                        if (data.taxAmount != null) setTaxAmount(String(data.taxAmount));
+                        if (data.referenceNumber) setReferenceNumber(data.referenceNumber);
+                        toast.success("Applied the receipt's details -- review before saving");
+                      }}
+                    />
                   )}
                 </div>
 

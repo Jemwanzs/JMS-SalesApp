@@ -84,6 +84,8 @@ export interface RecordExpenseInput {
   reimbursable?: boolean;
   receiptStoragePath?: string | null;
   receiptFileType?: string | null;
+  /** Raw suggestion from extractReceiptDataAction, if the user applied one before submitting -- stored as-is for audit/reference, never re-validated here. */
+  receiptExtractedData?: Record<string, unknown> | null;
   notes?: string | null;
   recordedBy: string;
 }
@@ -288,6 +290,7 @@ export class ExpenseService {
         reimbursable: input.reimbursable ?? false,
         receipt_storage_path: input.receiptStoragePath ?? null,
         receipt_file_type: input.receiptFileType ?? null,
+        receipt_extracted_data: input.receiptExtractedData ?? null,
         actual_amount: input.actualAmount,
         expense_date: input.expenseDate,
         notes: input.notes ?? null,
