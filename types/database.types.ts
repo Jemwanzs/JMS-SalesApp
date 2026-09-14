@@ -60,6 +60,13 @@ export interface BillingSweepResult {
   ranAt: string;
 }
 
+export interface RecurringExpenseSweepResult {
+  generated: number;
+  alreadyGenerated: number;
+  errors: number;
+  ranAt: string;
+}
+
 export interface AutoRelockResult {
   status: BusinessDayStatus;
   relocked: boolean;
@@ -517,6 +524,39 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["expense_budgets"]["Row"]>;
         Relationships: [];
       };
+      expense_recurring_templates: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          location_id: string;
+          expense_item_id: string;
+          category_id: string;
+          payment_method_id: string;
+          amount: number;
+          vendor: string | null;
+          reference_number: string | null;
+          tax_amount: number | null;
+          reimbursable: boolean;
+          notes: string | null;
+          day_of_month: number;
+          status: "active" | "archived";
+          created_by: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["expense_recurring_templates"]["Row"]> & {
+          tenant_id: string;
+          location_id: string;
+          expense_item_id: string;
+          category_id: string;
+          payment_method_id: string;
+          amount: number;
+          day_of_month: number;
+          created_by: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["expense_recurring_templates"]["Row"]>;
+        Relationships: [];
+      };
       expense_corrections: {
         Row: {
           id: string;
@@ -595,6 +635,8 @@ export interface Database {
           reimbursed_at: string | null;
           reimbursement_reference: string | null;
           reimbursement_notes: string | null;
+          recurring_template_id: string | null;
+          recurring_period: string | null;
         };
         Insert: Partial<Database["public"]["Tables"]["expenses"]["Row"]> & {
           tenant_id: string;
@@ -1279,6 +1321,10 @@ export interface Database {
       run_addon_billing_sweep: {
         Args: Record<string, never>;
         Returns: BillingSweepResult;
+      };
+      generate_due_recurring_expenses: {
+        Args: Record<string, never>;
+        Returns: RecurringExpenseSweepResult;
       };
       record_stock_reconciliation: {
         Args: {

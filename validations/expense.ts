@@ -124,3 +124,25 @@ export const markExpenseReimbursedSchema = z.object({
 });
 
 export type MarkExpenseReimbursedInput = z.infer<typeof markExpenseReimbursedSchema>;
+
+export const createExpenseRecurringTemplateSchema = z.object({
+  locationId: z.uuid("Select a branch"),
+  expenseItemId: z.uuid("Select an expense item"),
+  categoryId: z.uuid("Select a category"),
+  paymentMethodId: z.uuid("Select a payment method"),
+  amount: z.coerce.number().positive("Enter an amount greater than 0"),
+  dayOfMonth: z.coerce.number().int().min(1, "Pick a day 1-31").max(31, "Pick a day 1-31"),
+  vendor: z.string().trim().max(200).optional(),
+  referenceNumber: z.string().trim().max(100).optional(),
+  taxAmount: z.union([z.coerce.number().nonnegative(), z.literal("")]).optional(),
+  reimbursable: z.coerce.boolean().optional(),
+  notes: z.string().trim().max(500).optional(),
+});
+
+export type CreateExpenseRecurringTemplateInput = z.infer<typeof createExpenseRecurringTemplateSchema>;
+
+export const updateExpenseRecurringTemplateSchema = createExpenseRecurringTemplateSchema.extend({
+  templateId: z.uuid(),
+});
+
+export type UpdateExpenseRecurringTemplateInput = z.infer<typeof updateExpenseRecurringTemplateSchema>;

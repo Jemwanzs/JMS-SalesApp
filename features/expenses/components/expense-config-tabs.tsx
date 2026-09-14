@@ -4,11 +4,13 @@ import { ExpenseBudgetManagementList } from "@/features/expenses/components/expe
 import { ExpenseCategoryManagementList } from "@/features/expenses/components/expense-category-management-list";
 import { ExpenseItemManagementList } from "@/features/expenses/components/expense-item-management-list";
 import { ExpensePaymentMethodManagementList } from "@/features/expenses/components/expense-payment-method-management-list";
+import { ExpenseRecurringTemplateManagementList } from "@/features/expenses/components/expense-recurring-template-management-list";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { ExpenseBudget } from "@/services/ExpenseBudgetService";
 import type { ExpenseCategory } from "@/services/ExpenseCategoryService";
 import type { ExpenseItem } from "@/services/ExpenseItemService";
 import type { ExpensePaymentMethod } from "@/services/ExpensePaymentMethodService";
+import type { ExpenseRecurringTemplate } from "@/services/ExpenseRecurringTemplateService";
 import type { LocationSummary } from "@/services/LocationService";
 
 /**
@@ -24,10 +26,13 @@ export function ExpenseConfigTabs({
   categories,
   paymentMethods,
   budgets,
+  recurringTemplates,
+  knownVendors,
   locations,
   canManageCategories,
   canManagePaymentMethods,
   canManageBudgets,
+  canManageRecurring,
 }: {
   tenantId: string;
   tenantSlug: string;
@@ -35,10 +40,13 @@ export function ExpenseConfigTabs({
   categories: ExpenseCategory[];
   paymentMethods: ExpensePaymentMethod[];
   budgets: ExpenseBudget[];
+  recurringTemplates: ExpenseRecurringTemplate[];
+  knownVendors: string[];
   locations: LocationSummary[];
   canManageCategories: boolean;
   canManagePaymentMethods: boolean;
   canManageBudgets: boolean;
+  canManageRecurring: boolean;
 }) {
   return (
     <Tabs defaultValue="items">
@@ -47,6 +55,7 @@ export function ExpenseConfigTabs({
         {canManageCategories && <TabsTrigger value="categories">Categories</TabsTrigger>}
         {canManagePaymentMethods && <TabsTrigger value="payment-methods">Payment Methods</TabsTrigger>}
         {canManageBudgets && <TabsTrigger value="budgets">Budgets</TabsTrigger>}
+        {canManageRecurring && <TabsTrigger value="recurring">Recurring</TabsTrigger>}
       </TabsList>
 
       <TabsContent value="items" className="pt-4">
@@ -68,6 +77,21 @@ export function ExpenseConfigTabs({
       {canManageBudgets && (
         <TabsContent value="budgets" className="pt-4">
           <ExpenseBudgetManagementList tenantId={tenantId} tenantSlug={tenantSlug} budgets={budgets} categories={categories} locations={locations} />
+        </TabsContent>
+      )}
+
+      {canManageRecurring && (
+        <TabsContent value="recurring" className="pt-4">
+          <ExpenseRecurringTemplateManagementList
+            tenantId={tenantId}
+            tenantSlug={tenantSlug}
+            templates={recurringTemplates}
+            expenseItems={expenseItems}
+            categories={categories}
+            paymentMethods={paymentMethods}
+            knownVendors={knownVendors}
+            locations={locations}
+          />
         </TabsContent>
       )}
     </Tabs>

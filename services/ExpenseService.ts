@@ -52,7 +52,7 @@ export interface ExpenseTrendPoint {
 }
 
 const EXPENSE_SELECT =
-  "id, location_id, expense_item_id, expense_item_name_snapshot, actual_amount, expense_date, notes, status, recorded_by, voided_by, voided_at, void_reason, edited_by, edited_at, created_at, category_id, category_name_snapshot, payment_method_id, payment_method_name_snapshot, vendor, reference_number, tax_amount, reimbursable, receipt_storage_path, receipt_file_type, expense_number, approval_request_id, rejection_reason, reimbursement_status, reimbursed_by, reimbursed_at, reimbursement_reference, reimbursement_notes";
+  "id, location_id, expense_item_id, expense_item_name_snapshot, actual_amount, expense_date, notes, status, recorded_by, voided_by, voided_at, void_reason, edited_by, edited_at, created_at, category_id, category_name_snapshot, payment_method_id, payment_method_name_snapshot, vendor, reference_number, tax_amount, reimbursable, receipt_storage_path, receipt_file_type, expense_number, approval_request_id, rejection_reason, reimbursement_status, reimbursed_by, reimbursed_at, reimbursement_reference, reimbursement_notes, recurring_template_id";
 
 export interface RecordExpenseInput {
   /** Client-generated -- lets a receipt upload target `{tenantId}/expenses/{id}/...` in Storage before this row exists. Same trick as ProductService.CreateProductInput.id. */
@@ -108,6 +108,7 @@ export interface ExpenseRecord {
   reimbursedAt: string | null;
   reimbursementReference: string | null;
   reimbursementNotes: string | null;
+  recurringTemplateId: string | null;
 }
 
 export interface ExpenseSummaryItem {
@@ -161,6 +162,7 @@ function toExpenseRecord(row: {
   reimbursed_at: string | null;
   reimbursement_reference: string | null;
   reimbursement_notes: string | null;
+  recurring_template_id: string | null;
 }): Omit<ExpenseRecord, "recordedByName"> {
   return {
     id: row.id,
@@ -196,6 +198,7 @@ function toExpenseRecord(row: {
     reimbursedAt: row.reimbursed_at,
     reimbursementReference: row.reimbursement_reference,
     reimbursementNotes: row.reimbursement_notes,
+    recurringTemplateId: row.recurring_template_id,
   };
 }
 

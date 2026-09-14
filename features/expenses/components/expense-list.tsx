@@ -136,6 +136,11 @@ export function ExpenseList({
                         Reimbursed
                       </Badge>
                     )}
+                    {expense.recurringTemplateId && (
+                      <Badge variant="outline" className="shrink-0">
+                        Recurring
+                      </Badge>
+                    )}
                     {expense.receiptStoragePath && <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />}
                   </div>
                   <p className="truncate text-sm text-muted-foreground">
