@@ -50,12 +50,38 @@ export function ExpenseConfigTabs({
 }) {
   return (
     <Tabs defaultValue="items">
-      <TabsList className="w-full">
-        <TabsTrigger value="items">Items</TabsTrigger>
-        {canManageCategories && <TabsTrigger value="categories">Categories</TabsTrigger>}
-        {canManagePaymentMethods && <TabsTrigger value="payment-methods">Payment Methods</TabsTrigger>}
-        {canManageBudgets && <TabsTrigger value="budgets">Budgets</TabsTrigger>}
-        {canManageRecurring && <TabsTrigger value="recurring">Recurring</TabsTrigger>}
+      {/* Up to 5 tabs here (more than any other TabsList in the app) --
+          wraps onto a second, centered row on narrow screens instead of
+          overflowing off the right edge. flex-none on each trigger (vs.
+          the shared TabsList's default flex-1) so a short row like a
+          lone "Items" doesn't stretch to fill it; scoped to this
+          component only, not the shared components/ui/tabs.tsx
+          primitive, since StockTabs/Analytics/Imports all fit their
+          fewer tabs on one line already and shouldn't wrap. */}
+      <TabsList className="h-auto w-full flex-wrap justify-center gap-1.5">
+        <TabsTrigger value="items" className="flex-none px-3">
+          Items
+        </TabsTrigger>
+        {canManageCategories && (
+          <TabsTrigger value="categories" className="flex-none px-3">
+            Categories
+          </TabsTrigger>
+        )}
+        {canManagePaymentMethods && (
+          <TabsTrigger value="payment-methods" className="flex-none px-3">
+            Payment Methods
+          </TabsTrigger>
+        )}
+        {canManageBudgets && (
+          <TabsTrigger value="budgets" className="flex-none px-3">
+            Budgets
+          </TabsTrigger>
+        )}
+        {canManageRecurring && (
+          <TabsTrigger value="recurring" className="flex-none px-3">
+            Recurring
+          </TabsTrigger>
+        )}
       </TabsList>
 
       <TabsContent value="items" className="pt-4">
