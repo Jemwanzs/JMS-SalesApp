@@ -3,9 +3,11 @@ import { notFound, redirect } from "next/navigation";
 import { BackLink } from "@/components/shared/back-link";
 
 import { ExpenseConfigTabs } from "@/features/expenses/components/expense-config-tabs";
+import { ExpenseBudgetService } from "@/services/ExpenseBudgetService";
 import { ExpenseCategoryService } from "@/services/ExpenseCategoryService";
 import { ExpenseItemService } from "@/services/ExpenseItemService";
 import { ExpensePaymentMethodService } from "@/services/ExpensePaymentMethodService";
+import { LocationService } from "@/services/LocationService";
 import { TenantService } from "@/services/TenantService";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
@@ -35,20 +37,23 @@ export default async function ExpenseItemsPage({ params }: { params: Promise<{ t
     notFound();
   }
 
-  const [canConfigure, canManageCategories, canManagePaymentMethods, expensesEnabled] = await Promise.all([
+  const [canConfigure, canManageCategories, canManagePaymentMethods, canManageBudgets, expensesEnabled] = await Promise.all([
     can("expenses.configure_items", { tenantId: tenant.id }),
     can("expenses.manage_categories", { tenantId: tenant.id }),
     can("expenses.manage_payment_methods", { tenantId: tenant.id }),
+    can("expenses.manage_budgets", { tenantId: tenant.id }),
     new TenantService(supabase).getSetting<boolean>(tenant.id, "expenses_enabled"),
   ]);
-  if (!expensesEnabled || (!canConfigure && !canManageCategories && !canManagePaymentMethods)) {
+  if (!expensesEnabled || (!canConfigure && !canManageCategories && !canManagePaymentMethods && !canManageBudgets)) {
     redirect(`/t/${tenantSlug}/more`);
   }
 
-  const [expenseItems, categories, paymentMethods] = await Promise.all([
+  const [expenseItems, categories, paymentMethods, budgets, locations] = await Promise.all([
     new ExpenseItemService(supabase).listAll(tenant.id),
     new ExpenseCategoryService(supabase).listAll(tenant.id),
     new ExpensePaymentMethodService(supabase).listAll(tenant.id),
+    canManageBudgets ? new ExpenseBudgetService(supabase).listAll(tenant.id) : Promise.resolve([]),
+    new LocationService(supabase).listLocations(tenant.id),
   ]);
 
   return (
@@ -65,8 +70,11 @@ export default async function ExpenseItemsPage({ params }: { params: Promise<{ t
         expenseItems={expenseItems}
         categories={categories}
         paymentMethods={paymentMethods}
+        budgets={budgets}
+        locations={locations}
         canManageCategories={canManageCategories}
         canManagePaymentMethods={canManagePaymentMethods}
+        canManageBudgets={canManageBudgets}
       />
     </div>
   );

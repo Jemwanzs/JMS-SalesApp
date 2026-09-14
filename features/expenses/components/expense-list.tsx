@@ -9,6 +9,7 @@ import { ExpenseDetailDialog } from "@/features/expenses/components/expense-deta
 import { RecordExpenseDialog } from "@/features/expenses/components/record-expense-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import type { ExpenseBudgetStatusEntry } from "@/services/ExpenseBudgetService";
 import type { ExpenseCategory } from "@/services/ExpenseCategoryService";
 import type { ExpenseItem } from "@/services/ExpenseItemService";
 import type { ExpenseRecord } from "@/services/ExpenseService";
@@ -43,6 +44,7 @@ export function ExpenseList({
   canDownloadReceipt,
   canViewAll,
   canManageReimbursements,
+  budgetStatus,
 }: {
   tenantId: string;
   tenantSlug: string;
@@ -65,6 +67,7 @@ export function ExpenseList({
   canDownloadReceipt: boolean;
   canViewAll: boolean;
   canManageReimbursements: boolean;
+  budgetStatus: ExpenseBudgetStatusEntry[];
 }) {
   const locationNameById = new Map(locations.map((l) => [l.id, l.name]));
   const [addOpen, setAddOpen] = useState(false);
@@ -174,6 +177,7 @@ export function ExpenseList({
         paymentMethods={paymentMethods}
         defaultPaymentMethodId={defaultPaymentMethodId}
         knownVendors={knownVendors}
+        budgetStatus={budgetStatus}
       />
 
       <ExpenseDetailDialog

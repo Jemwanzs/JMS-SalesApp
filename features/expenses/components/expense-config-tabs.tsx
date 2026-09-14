@@ -1,12 +1,15 @@
 "use client";
 
+import { ExpenseBudgetManagementList } from "@/features/expenses/components/expense-budget-management-list";
 import { ExpenseCategoryManagementList } from "@/features/expenses/components/expense-category-management-list";
 import { ExpenseItemManagementList } from "@/features/expenses/components/expense-item-management-list";
 import { ExpensePaymentMethodManagementList } from "@/features/expenses/components/expense-payment-method-management-list";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import type { ExpenseBudget } from "@/services/ExpenseBudgetService";
 import type { ExpenseCategory } from "@/services/ExpenseCategoryService";
 import type { ExpenseItem } from "@/services/ExpenseItemService";
 import type { ExpensePaymentMethod } from "@/services/ExpensePaymentMethodService";
+import type { LocationSummary } from "@/services/LocationService";
 
 /**
  * Items / Categories / Payment Methods as tabs of one screen rather than
@@ -20,16 +23,22 @@ export function ExpenseConfigTabs({
   expenseItems,
   categories,
   paymentMethods,
+  budgets,
+  locations,
   canManageCategories,
   canManagePaymentMethods,
+  canManageBudgets,
 }: {
   tenantId: string;
   tenantSlug: string;
   expenseItems: ExpenseItem[];
   categories: ExpenseCategory[];
   paymentMethods: ExpensePaymentMethod[];
+  budgets: ExpenseBudget[];
+  locations: LocationSummary[];
   canManageCategories: boolean;
   canManagePaymentMethods: boolean;
+  canManageBudgets: boolean;
 }) {
   return (
     <Tabs defaultValue="items">
@@ -37,6 +46,7 @@ export function ExpenseConfigTabs({
         <TabsTrigger value="items">Items</TabsTrigger>
         {canManageCategories && <TabsTrigger value="categories">Categories</TabsTrigger>}
         {canManagePaymentMethods && <TabsTrigger value="payment-methods">Payment Methods</TabsTrigger>}
+        {canManageBudgets && <TabsTrigger value="budgets">Budgets</TabsTrigger>}
       </TabsList>
 
       <TabsContent value="items" className="pt-4">
@@ -52,6 +62,12 @@ export function ExpenseConfigTabs({
       {canManagePaymentMethods && (
         <TabsContent value="payment-methods" className="pt-4">
           <ExpensePaymentMethodManagementList tenantId={tenantId} tenantSlug={tenantSlug} paymentMethods={paymentMethods} />
+        </TabsContent>
+      )}
+
+      {canManageBudgets && (
+        <TabsContent value="budgets" className="pt-4">
+          <ExpenseBudgetManagementList tenantId={tenantId} tenantSlug={tenantSlug} budgets={budgets} categories={categories} locations={locations} />
         </TabsContent>
       )}
     </Tabs>

@@ -103,6 +103,20 @@ export const voidExpenseSchema = z.object({
 
 export type VoidExpenseInput = z.infer<typeof voidExpenseSchema>;
 
+export const createExpenseBudgetSchema = z.object({
+  locationId: z.uuid("Select a branch"),
+  categoryId: z.uuid("Select a category"),
+  monthlyAmount: z.coerce.number().nonnegative("Enter a valid amount"),
+});
+
+export type CreateExpenseBudgetInput = z.infer<typeof createExpenseBudgetSchema>;
+
+export const updateExpenseBudgetSchema = createExpenseBudgetSchema.extend({
+  budgetId: z.uuid(),
+});
+
+export type UpdateExpenseBudgetInput = z.infer<typeof updateExpenseBudgetSchema>;
+
 export const markExpenseReimbursedSchema = z.object({
   expenseId: z.uuid(),
   reference: z.string().trim().max(100).optional(),

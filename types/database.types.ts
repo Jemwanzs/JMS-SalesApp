@@ -496,6 +496,27 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["expense_categories"]["Row"]>;
         Relationships: [];
       };
+      expense_budgets: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          location_id: string;
+          category_id: string;
+          monthly_amount: number;
+          status: "active" | "archived";
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["expense_budgets"]["Row"]> & {
+          tenant_id: string;
+          location_id: string;
+          category_id: string;
+          monthly_amount: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["expense_budgets"]["Row"]>;
+        Relationships: [];
+      };
       expense_corrections: {
         Row: {
           id: string;

@@ -4,10 +4,12 @@ import { notFound, redirect } from "next/navigation";
 import { BackLink } from "@/components/shared/back-link";
 import { BarChart3 } from "lucide-react";
 
+import { ExpenseBudgetStatus } from "@/features/expenses/components/expense-budget-status";
 import { ExpenseDashboardCards } from "@/features/expenses/components/expense-dashboard-cards";
 import { ExpenseFilters } from "@/features/expenses/components/expense-filters";
 import { ExpenseList } from "@/features/expenses/components/expense-list";
 import { BusinessDayService } from "@/services/BusinessDayService";
+import { ExpenseBudgetService } from "@/services/ExpenseBudgetService";
 import { ExpenseCategoryService } from "@/services/ExpenseCategoryService";
 import { ExpenseItemService } from "@/services/ExpenseItemService";
 import { ExpensePaymentMethodService } from "@/services/ExpensePaymentMethodService";
@@ -113,6 +115,7 @@ export default async function ExpensesPage({
     knownVendors,
     locations,
     dashboardSummary,
+    budgetStatus,
   ] = await Promise.all([
     can("expenses.create", { tenantId: tenant.id }),
     can("expenses.edit", { tenantId: tenant.id }),
@@ -152,6 +155,9 @@ export default async function ExpensesPage({
     // sit above would show a "Today" total that disagrees with what's
     // actually displayed once you look below it.
     expenseService.getDashboardSummary(tenant.id, { today: effectiveDate, weekStart, monthStart }),
+    activeLocationId
+      ? new ExpenseBudgetService(supabase).getBudgetStatus(tenant.id, activeLocationId, monthStart, effectiveDate)
+      : Promise.resolve([]),
   ]);
 
   const defaultPaymentMethodId = paymentMethods.find((pm) => pm.isDefault)?.id ?? paymentMethods[0]?.id ?? "";
@@ -180,6 +186,8 @@ export default async function ExpensesPage({
         locations={locations}
         canViewAll={canViewAll}
       />
+
+      <ExpenseBudgetStatus items={budgetStatus} />
 
       <ExpenseFilters
         timezone={tenant.timezone}
@@ -212,6 +220,7 @@ export default async function ExpensesPage({
         canDownloadReceipt={canDownloadReceipt}
         canViewAll={canViewAll}
         canManageReimbursements={canManageReimbursements}
+        budgetStatus={budgetStatus}
       />
     </div>
   );

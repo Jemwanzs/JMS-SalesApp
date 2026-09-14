@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import type { ExpenseBudgetStatusEntry } from "@/services/ExpenseBudgetService";
 import type { ExpenseCategory } from "@/services/ExpenseCategoryService";
 import type { ExpenseItem } from "@/services/ExpenseItemService";
 import type { ExpensePaymentMethod } from "@/services/ExpensePaymentMethodService";
@@ -51,6 +52,7 @@ export function RecordExpenseDialog({
   paymentMethods,
   defaultPaymentMethodId,
   knownVendors,
+  budgetStatus,
 }: {
   tenantId: string;
   tenantSlug: string;
@@ -64,6 +66,7 @@ export function RecordExpenseDialog({
   paymentMethods: ExpensePaymentMethod[];
   defaultPaymentMethodId: string;
   knownVendors: string[];
+  budgetStatus: ExpenseBudgetStatusEntry[];
 }) {
   const [isPending, startTransition] = useTransition();
   // Starts unset (no item pre-selected) -- the searchable combobox
@@ -107,6 +110,14 @@ export function RecordExpenseDialog({
   }, [open]);
 
   const selectedItem = activeItems.find((i) => i.id === expenseItemId) ?? null;
+  // Purely advisory -- never blocks submission (see migration 0087's own
+  // header comment). Recomputed from the SAME budgetStatus snapshot the
+  // dashboard already loaded for this branch, not a fresh query -- the
+  // few minutes of staleness while the dialog is open doesn't matter for
+  // a heads-up like this.
+  const selectedBudget = budgetStatus.find((b) => b.categoryId === categoryId) ?? null;
+  const projectedSpend = selectedBudget && actualAmount ? selectedBudget.spent + Number(actualAmount) : null;
+  const overBudget = selectedBudget && projectedSpend != null && projectedSpend > selectedBudget.monthlyAmount;
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -203,6 +214,12 @@ export function RecordExpenseDialog({
                 onChange={(e) => setActualAmount(e.target.value)}
                 required
               />
+              {overBudget && projectedSpend != null && selectedBudget && (
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  This will put {selectedBudget.categoryName} at {projectedSpend.toFixed(2)} of its {selectedBudget.monthlyAmount.toFixed(2)}{" "}
+                  monthly budget this month.
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
