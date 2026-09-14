@@ -52,33 +52,40 @@ export function ExpenseConfigTabs({
     <Tabs defaultValue="items">
       {/* Up to 5 tabs here (more than any other TabsList in the app) --
           wraps onto a second, centered row on narrow screens instead of
-          overflowing off the right edge. flex-none on each trigger (vs.
-          the shared TabsList's default flex-1) so a short row like a
-          lone "Items" doesn't stretch to fill it; scoped to this
+          overflowing off the right edge. The shared TabsList's fixed
+          height comes from a `group-data-horizontal/tabs:h-8` variant
+          selector, which beats a plain `h-auto` override on specificity
+          alone regardless of class order -- so without `!` the list
+          stayed locked at one row's height and the wrapped second row
+          rendered outside its bg-muted pill entirely (no background,
+          overlapping whatever sat below). Same story for each trigger's
+          `h-[calc(100%-1px)]` (sized against the WHOLE list, i.e. both
+          rows, once wrapped) vs. a fixed `h-8` per trigger. `!important`
+          on both makes the override actually win. Scoped to this
           component only, not the shared components/ui/tabs.tsx
           primitive, since StockTabs/Analytics/Imports all fit their
           fewer tabs on one line already and shouldn't wrap. */}
-      <TabsList className="h-auto w-full flex-wrap justify-center gap-1.5">
-        <TabsTrigger value="items" className="flex-none px-3">
+      <TabsList className="!h-auto w-full flex-wrap justify-center gap-1.5 pb-1.5">
+        <TabsTrigger value="items" className="!h-8 flex-none px-3">
           Items
         </TabsTrigger>
         {canManageCategories && (
-          <TabsTrigger value="categories" className="flex-none px-3">
+          <TabsTrigger value="categories" className="!h-8 flex-none px-3">
             Categories
           </TabsTrigger>
         )}
         {canManagePaymentMethods && (
-          <TabsTrigger value="payment-methods" className="flex-none px-3">
+          <TabsTrigger value="payment-methods" className="!h-8 flex-none px-3">
             Payment Methods
           </TabsTrigger>
         )}
         {canManageBudgets && (
-          <TabsTrigger value="budgets" className="flex-none px-3">
+          <TabsTrigger value="budgets" className="!h-8 flex-none px-3">
             Budgets
           </TabsTrigger>
         )}
         {canManageRecurring && (
-          <TabsTrigger value="recurring" className="flex-none px-3">
+          <TabsTrigger value="recurring" className="!h-8 flex-none px-3">
             Recurring
           </TabsTrigger>
         )}
