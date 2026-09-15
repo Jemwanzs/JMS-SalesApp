@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { assertCan } from "@/lib/permissions/can";
 import { AuditService } from "@/services/AuditService";
 import { SalesService, type RecordedSale } from "@/services/SalesService";
 import { AUDIT_ACTION } from "@/lib/audit/actions";
@@ -31,6 +32,7 @@ export async function recordSaleAction(
     notes: formData.get("notes"),
     manualProductName: formData.get("manualProductName") || undefined,
     idempotencyKey: formData.get("idempotencyKey"),
+    saleDate: formData.get("saleDate") || undefined,
   });
 
   if (!parsed.success) {
@@ -51,10 +53,47 @@ export async function recordSaleAction(
   const salesService = new SalesService(supabase);
 
   try {
+    let targetBusinessDayId = businessDayId;
+    let isBackdated = false;
+
+    // Only touch the backdating path at all when a saleDate was actually
+    // submitted AND it differs from the business day the client already
+    // resolved as "today's" -- equal-to-today is the normal/default case
+    // (the field's own useEffect seeds it with todayDate) and must stay
+    // exactly the existing fast flow, no extra round trip or permission
+    // check, per the "don't change normal behaviour" requirement.
+    if (parsed.data.saleDate) {
+      const { data: currentDay } = await supabase
+        .from("business_days")
+        .select("business_date")
+        .eq("id", businessDayId)
+        .maybeSingle();
+
+      if (currentDay && parsed.data.saleDate !== currentDay.business_date) {
+        await assertCan("sales.record_backdated", { tenantId });
+
+        const { data: resolvedBusinessDayId, error: resolveError } = await supabase.rpc(
+          "resolve_backdated_business_day",
+          {
+            p_tenant_id: tenantId,
+            p_location_id: locationId,
+            p_sale_date: parsed.data.saleDate,
+          }
+        );
+
+        if (resolveError || !resolvedBusinessDayId) {
+          return { error: resolveError?.message ?? "Could not record a sale for that date" };
+        }
+
+        targetBusinessDayId = resolvedBusinessDayId;
+        isBackdated = true;
+      }
+    }
+
     const sale = await salesService.recordSale({
       tenantId,
       locationId,
-      businessDayId,
+      businessDayId: targetBusinessDayId,
       productId: parsed.data.productId,
       actualAmount: parsed.data.actualAmount,
       quantity: parsed.data.quantity === "" ? null : parsed.data.quantity,
@@ -62,6 +101,7 @@ export async function recordSaleAction(
       manualProductName: parsed.data.manualProductName || null,
       recordedBy: user.id,
       idempotencyKey: parsed.data.idempotencyKey,
+      allowBackdated: isBackdated,
     });
 
     if (!sale.replayed) {
@@ -72,7 +112,11 @@ export async function recordSaleAction(
           action: AUDIT_ACTION.SALE_CREATED,
           entityType: "sale",
           entityId: sale.id,
-          newValues: { saleNumber: sale.saleNumber, actualAmount: sale.actualAmount },
+          newValues: {
+            saleNumber: sale.saleNumber,
+            actualAmount: sale.actualAmount,
+            ...(isBackdated ? { isBackdated: true, saleDate: parsed.data.saleDate } : {}),
+          },
         })
         .catch(() => {});
     }

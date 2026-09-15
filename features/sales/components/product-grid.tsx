@@ -52,6 +52,9 @@ export function ProductGrid({
   quantityEnabled = true,
   quantityMandatory = false,
   notesEnabled = true,
+  saleDateSelectionEnabled = false,
+  maxBackdatingDays = null,
+  todayDate,
   tenantId,
   tenantSlug,
   locationId,
@@ -64,6 +67,12 @@ export function ProductGrid({
   quantityEnabled?: boolean;
   quantityMandatory?: boolean;
   notesEnabled?: boolean;
+  /** Tenant setting ON *and* this viewer holds sales.record_backdated --
+   * already combined by the caller (sales/page.tsx), so both gates
+   * collapse to one prop here. */
+  saleDateSelectionEnabled?: boolean;
+  maxBackdatingDays?: number | null;
+  todayDate: string;
   tenantId: string;
   tenantSlug: string;
   locationId: string;
@@ -191,6 +200,9 @@ export function ProductGrid({
         quantityEnabled={quantityEnabled}
         quantityMandatory={quantityMandatory}
         notesEnabled={notesEnabled}
+        saleDateSelectionEnabled={saleDateSelectionEnabled}
+        maxBackdatingDays={maxBackdatingDays}
+        todayDate={todayDate}
         onOpenChange={(open) => !open && setSelected(null)}
         onRecorded={onRecorded}
       />

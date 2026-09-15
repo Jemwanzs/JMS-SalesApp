@@ -45,6 +45,12 @@ export interface RecordSaleInput {
   manualProductName?: string | null;
   recordedBy: string;
   idempotencyKey: string;
+  /** Set only by record-sale.ts after resolve_backdated_business_day()
+   * has already authorized + resolved a CLOSED business day for a
+   * past sale_date -- lets a closed day through the status guard
+   * below for this one, already-authorized, insert. Never set from a
+   * raw client value. */
+  allowBackdated?: boolean;
 }
 
 export interface RecordedSale {
@@ -88,9 +94,16 @@ export class SalesService {
     // auto-relocks to "closed" once its window expires (see
     // BusinessDayService.getTodayBusinessDay).
     if (businessDay.status !== "open" && businessDay.status !== "reopened") {
-      throw new Error(
-        `SalesService.recordSale: business day is "${businessDay.status}", not open`
-      );
+      // A closed day is only acceptable here for an already-authorized
+      // backdated entry (record-sale.ts sets allowBackdated only after
+      // resolve_backdated_business_day() has verified permission +
+      // the tenant setting + the date window) -- any other closed/
+      // scheduled day is still rejected exactly as before.
+      if (!(businessDay.status === "closed" && input.allowBackdated)) {
+        throw new Error(
+          `SalesService.recordSale: business day is "${businessDay.status}", not open`
+        );
+      }
     }
 
     const { data: product, error: productError } = await this.supabase

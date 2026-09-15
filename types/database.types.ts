@@ -1406,6 +1406,10 @@ export interface Database {
         Args: { p_expense_id: string; p_reference: string | null; p_notes: string | null };
         Returns: Database["public"]["Tables"]["expenses"]["Row"];
       };
+      resolve_backdated_business_day: {
+        Args: { p_tenant_id: string; p_location_id: string; p_sale_date: string };
+        Returns: string;
+      };
     };
   };
 }

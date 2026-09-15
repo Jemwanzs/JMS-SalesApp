@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { useTranslations } from "next-intl";
 
 import { recordSaleAction, type RecordSaleState } from "@/features/sales/actions/record-sale";
+import { subtractDays } from "@/lib/utils/date-ranges";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -26,6 +27,9 @@ export function RecordSaleDialog({
   quantityEnabled,
   quantityMandatory,
   notesEnabled,
+  saleDateSelectionEnabled = false,
+  maxBackdatingDays = null,
+  todayDate,
   onOpenChange,
   onRecorded,
 }: {
@@ -38,12 +42,23 @@ export function RecordSaleDialog({
   /** True when the tenant's Settings -> Inventory Configuration -> "Record Stock By" is set to Quantity -- forces the field visible for every product and required for a tracks_inventory one, per that tenant-wide policy (not a per-product setting). */
   quantityMandatory: boolean;
   notesEnabled: boolean;
+  /** Tenant's "Allow Sale Date Selection" setting on AND this user holds
+   * sales.record_backdated -- already combined upstream (sales/page.tsx),
+   * so this alone decides whether the field renders at all. Hidden by
+   * default: the normal fast today-only flow is unaffected either way. */
+  saleDateSelectionEnabled?: boolean;
+  maxBackdatingDays?: number | null;
+  todayDate: string;
   onOpenChange: (open: boolean) => void;
   onRecorded: (sale: NonNullable<RecordSaleState["sale"]>) => void;
 }) {
   const [isPending, startTransition] = useTransition();
   const t = useTranslations("Sales");
   const tCommon = useTranslations("Common");
+  // saleDate/today/yesterday live under "SalesHistory" (correct-sale-
+  // dialog.tsx's own namespace) -- reused here rather than duplicating
+  // the keys (and their ar/fr/sw translations) into "Sales" too.
+  const tSalesHistory = useTranslations("SalesHistory");
   const [amount, setAmount] = useState("");
   const [quantity, setQuantity] = useState("1");
   const [notes, setNotes] = useState("");
@@ -53,6 +68,11 @@ export function RecordSaleDialog({
   // double-tap, timeout retry, or refresh all carry the same key -- see
   // docs/08-sales-engine.md.
   const [idempotencyKey, setIdempotencyKey] = useState("");
+  // Defaults to today every time the dialog opens for a product (spec:
+  // "Sale Date defaults to Today every time a new sale is opened") --
+  // only meaningful while saleDateSelectionEnabled, but always seeded so
+  // a stale prior selection can never leak into a later, unrelated sale.
+  const [saleDate, setSaleDate] = useState(todayDate);
 
   useEffect(() => {
     if (product) {
@@ -62,8 +82,12 @@ export function RecordSaleDialog({
       setManualProductName("");
       setError(null);
       setIdempotencyKey(crypto.randomUUID());
+      setSaleDate(todayDate);
     }
-  }, [product]);
+  }, [product, todayDate]);
+
+  const yesterdayDate = subtractDays(todayDate, 1);
+  const minSaleDate = maxBackdatingDays != null ? subtractDays(todayDate, maxBackdatingDays) : undefined;
 
   // quantityMandatory reflects the tenant-wide Settings -> Inventory
   // Configuration -> "Record Stock By" choice (Quantity vs Monetary
@@ -108,6 +132,9 @@ export function RecordSaleDialog({
     formData.set("quantity", showQuantity ? quantity : "");
     formData.set("notes", notesEnabled ? notes : "");
     formData.set("idempotencyKey", idempotencyKey);
+    if (saleDateSelectionEnabled) {
+      formData.set("saleDate", saleDate);
+    }
 
     startTransition(async () => {
       const result = await recordSaleAction(
@@ -193,6 +220,40 @@ export function RecordSaleDialog({
                     onChange={(e) => setQuantity(e.target.value)}
                     required={quantityRequired}
                   />
+                </div>
+              )}
+
+              {saleDateSelectionEnabled && (
+                <div className="space-y-2">
+                  <Label>{tSalesHistory("saleDate")}</Label>
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={saleDate === todayDate ? "default" : "outline"}
+                      onClick={() => setSaleDate(todayDate)}
+                    >
+                      {tSalesHistory("today")}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={saleDate === yesterdayDate ? "default" : "outline"}
+                      onClick={() => setSaleDate(yesterdayDate)}
+                      disabled={minSaleDate !== undefined && yesterdayDate < minSaleDate}
+                    >
+                      {tSalesHistory("yesterday")}
+                    </Button>
+                    <Input
+                      type="date"
+                      value={saleDate}
+                      max={todayDate}
+                      min={minSaleDate}
+                      onChange={(e) => setSaleDate(e.target.value)}
+                      className="h-8 w-auto"
+                      aria-label={tSalesHistory("saleDate")}
+                    />
+                  </div>
                 </div>
               )}
 

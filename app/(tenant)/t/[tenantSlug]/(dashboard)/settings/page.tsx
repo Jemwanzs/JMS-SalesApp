@@ -13,6 +13,7 @@ import { InventoryModuleCard } from "@/features/settings/components/inventory-mo
 import { NotesFieldCard } from "@/features/settings/components/notes-field-card";
 import { ProductRankingCard } from "@/features/settings/components/product-ranking-card";
 import { QuantityFieldCard } from "@/features/settings/components/quantity-field-card";
+import { SaleDateSelectionCard } from "@/features/settings/components/sale-date-selection-card";
 import { SaleEditingDeletionCard } from "@/features/settings/components/sale-editing-deletion-card";
 import { SaleNumberTemplateCard } from "@/features/settings/components/sale-number-template-card";
 import { StockVarianceToleranceCard } from "@/features/settings/components/stock-variance-tolerance-card";
@@ -76,6 +77,8 @@ export default async function SettingsPage({
     showProductPrice,
     quantityEnabled,
     notesFieldEnabled,
+    saleDateSelectionEnabled,
+    saleDateMaxBackdatingDays,
     expensesEnabled,
     inventoryEnabledSetting,
     inventoryAddon,
@@ -107,6 +110,8 @@ export default async function SettingsPage({
     tenantService.getSetting<boolean>(tenantId, "show_product_price_on_landing"),
     tenantService.getSetting<boolean>(tenantId, "quantity_enabled"),
     tenantService.getSetting<boolean>(tenantId, "notes_field_enabled"),
+    tenantService.getSetting<boolean>(tenantId, "sale_date_selection_enabled"),
+    tenantService.getSetting<number>(tenantId, "sale_date_max_backdating_days"),
     tenantService.getSetting<boolean>(tenantId, "expenses_enabled"),
     tenantService.getSetting<boolean>(tenantId, "inventory_enabled"),
     addonBillingService.getAddonSubscription(tenantId, "inventory"),
@@ -178,6 +183,12 @@ export default async function SettingsPage({
         locked={inventoryEntitlement.enabled && stockControlMethod === "quantity"}
       />
       <NotesFieldCard tenantId={tenantId} tenantSlug={tenantSlug} initialEnabled={notesFieldEnabled ?? true} />
+      <SaleDateSelectionCard
+        tenantId={tenantId}
+        tenantSlug={tenantSlug}
+        initialEnabled={saleDateSelectionEnabled ?? false}
+        initialMaxBackdatingDays={saleDateMaxBackdatingDays ?? null}
+      />
       <SaleEditingDeletionCard
         tenantId={tenantId}
         tenantSlug={tenantSlug}

@@ -10,6 +10,15 @@ export const recordSaleSchema = z.object({
   // optional at the schema level and enforced there instead.
   manualProductName: z.string().trim().max(200).optional(),
   idempotencyKey: z.uuid(),
+  // Only ever sent when the tenant's "Allow Sale Date Selection" setting
+  // is on AND this user holds sales.record_backdated (record-sale-
+  // dialog.tsx hides the field entirely otherwise) -- absent, or equal
+  // to today, means the normal, unchanged flow (see record-sale.ts).
+  // Future-date/max-backdating-window rejection happens server-side in
+  // resolve_backdated_business_day() (migration 0090), against the
+  // tenant's own effective business date -- same reasoning as
+  // correctSaleSchema's own newSaleDate comment above.
+  saleDate: z.iso.date().optional(),
 });
 
 export type RecordSaleInput = z.infer<typeof recordSaleSchema>;

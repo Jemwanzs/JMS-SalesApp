@@ -139,12 +139,13 @@ export default async function SalesPage({
   // regardless of status" lookup -- see BusinessDayService.
   // getTodayBusinessDayRow's own header comment for why businessDay
   // alone could never detect "closed."
-  const [businessDay, todayRow, canOpenDay, canReopenDay, activeWish, activeLocation, hashedOpenPasscode] =
+  const [businessDay, todayRow, canOpenDay, canReopenDay, canRecordBackdated, activeWish, activeLocation, hashedOpenPasscode] =
     await Promise.all([
       businessDayService.getTodayBusinessDay(tenant.id, location.id),
       businessDayService.getTodayBusinessDayRow(tenant.id, location.id),
       can("business_day.open", { tenantId: tenant.id }),
       can("business_day.reopen", { tenantId: tenant.id }),
+      can("sales.record_backdated", { tenantId: tenant.id }),
       new AnniversaryService(supabase).getActiveWish(tenant.id).catch(() => null),
       supabase.from("locations").select("name").eq("id", location.id).maybeSingle(),
       // Gated on whether a passcode has been CREATED at all (matches
@@ -220,6 +221,7 @@ export default async function SalesPage({
             timezone={tenant.timezone}
             locationId={location.id}
             businessDayId={businessDay.id}
+            canRecordBackdated={canRecordBackdated}
             supabase={supabase}
           />
         </Suspense>
@@ -267,6 +269,7 @@ async function SalesCaptureBody({
   timezone,
   locationId,
   businessDayId,
+  canRecordBackdated,
   supabase,
 }: {
   tenantId: string;
@@ -274,12 +277,13 @@ async function SalesCaptureBody({
   timezone: string;
   locationId: string;
   businessDayId: string;
+  canRecordBackdated: boolean;
   supabase: Awaited<ReturnType<typeof createClient>>;
 }) {
   const productService = new ProductService(supabase);
   const tenantService = new TenantService(supabase);
 
-  const [products, settings, inventoryEntitlement, stockControlMethod] = await Promise.all([
+  const [products, settings, inventoryEntitlement, stockControlMethod, effectiveDate] = await Promise.all([
     productService.listActive(tenantId),
     tenantService.getSettings(tenantId, [
       "product_ranking_enabled",
@@ -287,9 +291,12 @@ async function SalesCaptureBody({
       "show_product_price_on_landing",
       "quantity_enabled",
       "notes_field_enabled",
+      "sale_date_selection_enabled",
+      "sale_date_max_backdating_days",
     ]),
     getInventoryEntitlement(tenantId),
     getStockControlMethod(supabase, tenantId),
+    new BusinessDayService(supabase).getEffectiveBusinessDate(tenantId, locationId),
   ]);
 
   const rankingEnabled = (settings.product_ranking_enabled as boolean | undefined) ?? true;
@@ -297,6 +304,19 @@ async function SalesCaptureBody({
   const showProductPrice = (settings.show_product_price_on_landing as boolean | undefined) ?? true;
   const quantityEnabled = (settings.quantity_enabled as boolean | undefined) ?? true;
   const notesEnabled = (settings.notes_field_enabled as boolean | undefined) ?? true;
+  // Tenant-wide "off" (default) or this user lacking sales.record_backdated
+  // both fully hide the field -- the normal fast flow is then completely
+  // unaffected, per the feature's own "don't change default behaviour"
+  // requirement.
+  const saleDateSelectionEnabled = ((settings.sale_date_selection_enabled as boolean | undefined) ?? false) && canRecordBackdated;
+  // -1 is the "Unlimited" sentinel set-sale-date-selection.ts writes
+  // (never an actual stored null -- see that action's own comment);
+  // normalize it, and an unconfigured/absent setting, to null here so
+  // every downstream reader (record-sale-dialog.tsx) only ever sees
+  // "no limit" as null, never has to know about the sentinel.
+  const rawMaxBackdatingDays = settings.sale_date_max_backdating_days as number | undefined;
+  const maxBackdatingDays = rawMaxBackdatingDays != null && rawMaxBackdatingDays > 0 ? rawMaxBackdatingDays : null;
+  const todayDate = effectiveDate.date;
   // Settings -> Inventory Configuration -> "Record Stock By": the
   // tenant-wide policy, not a per-product one (docs/21). Only meaningful
   // once Inventory is genuinely entitled -- a tenant without the module
@@ -362,6 +382,9 @@ async function SalesCaptureBody({
         quantityEnabled={quantityEnabled}
         quantityMandatory={quantityMandatory}
         notesEnabled={notesEnabled}
+        saleDateSelectionEnabled={saleDateSelectionEnabled}
+        maxBackdatingDays={maxBackdatingDays}
+        todayDate={todayDate}
         tenantId={tenantId}
         tenantSlug={tenantSlug}
         locationId={locationId}
