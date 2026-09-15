@@ -21,8 +21,60 @@ import { XIcon } from "lucide-react"
 // never assume a specific app-level context is always available
 // upstream -- translate a dialog's own title/description/buttons at the
 // CALLER, which knows its own render context, not here.
-function Dialog({ ...props }: DialogPrimitive.Root.Props) {
-  return <DialogPrimitive.Root data-slot="dialog" {...props} />
+//
+// Vertical-centering fix: DialogContent portals into #app-shell (see
+// that function's own comment) so a dialog stays confined to the
+// ~430px mobile column on a wide desktop viewport. #app-shell sets
+// `contain: layout` to make that containment work for fixed/absolute
+// descendants -- but a side effect of `contain: layout` is that
+// #app-shell ALSO becomes the containing block for position:fixed
+// descendants, so DialogContent's `top-1/2` centers against
+// #app-shell's own (possibly much taller than the viewport) content
+// height, not the visible viewport. On a short/unscrolled page this
+// coincidentally looks right; on a tall page opened after scrolling
+// (e.g. Add Expense, reached by scrolling past several dashboard cards
+// on the Expenses page) it lands the dialog mostly below the fold,
+// cutting off the footer/submit button entirely -- reproduced live and
+// previously called out (components/shared/tenant-logo-viewer.tsx's
+// own header comment) as a known, "too broad to fix here" quirk. Fixed
+// properly here instead of worked around per-dialog: DialogCenterTop
+// computes the CURRENT viewport's vertical center relative to
+// #app-shell's own (viewport-relative) top edge via
+// getBoundingClientRect() -- immune to scroll position or content
+// height, since getBoundingClientRect() always reflects where the
+// element actually is on screen right now -- and DialogContent applies
+// it as an inline `top` style, overriding the CSS `top-1/2` percentage
+// (which is what was resolving against the wrong box). Horizontal
+// centering is untouched (`left-1/2`): #app-shell's WIDTH doesn't grow
+// with content the way its height does, so that axis was never broken.
+// Recomputed only when `open` actually flips true (every caller in
+// this codebase controls Dialog via a real `open` boolean, none rely
+// on DialogTrigger alone) -- not on every re-render, so typing into a
+// field while the dialog is open never re-centers/jumps it.
+const DialogCenterTopContext = React.createContext<number | null>(null)
+
+function Dialog({ open, ...props }: DialogPrimitive.Root.Props) {
+  const [centerTop, setCenterTop] = React.useState<number | null>(null)
+
+  React.useLayoutEffect(() => {
+    if (!open) return
+    const shell = getAppShellContainer()
+    if (!shell) {
+      // No #app-shell (auth pages, platform-admin shell) -- Popup then
+      // portals straight to <body>, which does NOT redefine the
+      // containing block for position:fixed, so the default CSS
+      // top-1/2 already centers against the true viewport correctly.
+      setCenterTop(null)
+      return
+    }
+    setCenterTop(window.innerHeight / 2 - shell.getBoundingClientRect().top)
+  }, [open])
+
+  return (
+    <DialogCenterTopContext.Provider value={centerTop}>
+      <DialogPrimitive.Root data-slot="dialog" open={open} {...props} />
+    </DialogCenterTopContext.Provider>
+  )
 }
 
 function DialogTrigger({ ...props }: DialogPrimitive.Trigger.Props) {
@@ -57,15 +109,18 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  style,
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean
 }) {
+  const centerTop = React.useContext(DialogCenterTopContext)
   return (
     <DialogPortal container={getAppShellContainer()}>
       <DialogOverlay />
       <DialogPrimitive.Popup
         data-slot="dialog-content"
+        style={centerTop != null ? { top: centerTop, ...style } : style}
         className={cn(
           // max-h-[85dvh] + overflow-y-auto by default -- without a height
           // cap, a dialog taller than the viewport still centers via
