@@ -10,6 +10,7 @@ import { ProductGrid } from "@/features/sales/components/product-grid";
 import { ProductGridSkeleton } from "@/features/sales/components/product-grid-skeleton";
 import { ReopenBusinessDayDialog } from "@/features/sales/components/reopen-business-day-dialog";
 import { SalesVisibilityBadge } from "@/features/sales/components/sales-visibility-badge";
+import { WelcomeBannerDialog } from "@/features/sales/components/welcome-banner-dialog";
 import { Badge } from "@/components/ui/badge";
 import { AnalyticsService } from "@/services/AnalyticsService";
 import { AnniversaryService } from "@/services/AnniversaryService";
@@ -139,20 +140,38 @@ export default async function SalesPage({
   // regardless of status" lookup -- see BusinessDayService.
   // getTodayBusinessDayRow's own header comment for why businessDay
   // alone could never detect "closed."
-  const [businessDay, todayRow, canOpenDay, canReopenDay, canRecordBackdated, activeWish, activeLocation, hashedOpenPasscode] =
-    await Promise.all([
-      businessDayService.getTodayBusinessDay(tenant.id, location.id),
-      businessDayService.getTodayBusinessDayRow(tenant.id, location.id),
-      can("business_day.open", { tenantId: tenant.id }),
-      can("business_day.reopen", { tenantId: tenant.id }),
-      can("sales.record_backdated", { tenantId: tenant.id }),
-      new AnniversaryService(supabase).getActiveWish(tenant.id).catch(() => null),
-      supabase.from("locations").select("name").eq("id", location.id).maybeSingle(),
-      // Gated on whether a passcode has been CREATED at all (matches
-      // open-business-day.ts's own check), not require_download_passcode
-      // -- that toggle only governs downloads, see DownloadSecurityCard.
-      new TenantService(supabase).getSetting<string>(tenant.id, "hashed_download_passcode"),
-    ]);
+  const [
+    businessDay,
+    todayRow,
+    canOpenDay,
+    canReopenDay,
+    canRecordBackdated,
+    activeWish,
+    activeLocation,
+    hashedOpenPasscode,
+    showWelcomeBanner,
+    claims,
+  ] = await Promise.all([
+    businessDayService.getTodayBusinessDay(tenant.id, location.id),
+    businessDayService.getTodayBusinessDayRow(tenant.id, location.id),
+    can("business_day.open", { tenantId: tenant.id }),
+    can("business_day.reopen", { tenantId: tenant.id }),
+    can("sales.record_backdated", { tenantId: tenant.id }),
+    new AnniversaryService(supabase).getActiveWish(tenant.id).catch(() => null),
+    supabase.from("locations").select("name").eq("id", location.id).maybeSingle(),
+    // Gated on whether a passcode has been CREATED at all (matches
+    // open-business-day.ts's own check), not require_download_passcode
+    // -- that toggle only governs downloads, see DownloadSecurityCard.
+    new TenantService(supabase).getSetting<string>(tenant.id, "hashed_download_passcode"),
+    new TenantService(supabase).getSetting<boolean>(tenant.id, "show_welcome_banner"),
+    // Local JWT read, not a network round trip -- same call
+    // resolveActiveLocationId already makes internally (migration 0050)
+    // to key active_branch_sessions. session_id changes only on a
+    // genuinely new login, which is exactly the "once per login"
+    // boundary WelcomeBannerDialog's own sessionStorage key needs.
+    supabase.auth.getClaims(),
+  ]);
+  const sessionId = claims?.data?.claims.session_id as string | undefined;
   // Business + branch identity always shows here now, single-branch
   // tenants included -- this is the golden-path landing screen (spec
   // S13) where sales get captured, and being certain which business/
@@ -180,6 +199,7 @@ export default async function SalesPage({
       {wishSentToday && activeWish && (
         <AnniversaryCelebrationDialog wishId={`${activeWish.id}-${todayDateKey}`} message={activeWish.message} />
       )}
+      {(showWelcomeBanner ?? false) && sessionId && <WelcomeBannerDialog sessionId={sessionId} />}
       {/* Business + branch identity: the first thing on the golden-path
           screen where sales actually get captured, so it's never
           ambiguous which business/branch a session is working in --

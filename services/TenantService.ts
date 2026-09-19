@@ -172,7 +172,7 @@ export class TenantService {
    * settings.manage -- callers should check that first for a clear error
    * rather than relying solely on the RLS rejection.
    */
-  async setSetting(tenantId: string, key: string, value: unknown, updatedBy: string): Promise<void> {
+  async setSetting(tenantId: string, key: string, value: unknown, updatedBy: string | null): Promise<void> {
     const { error } = await this.supabase
       .from("tenant_settings")
       .upsert(

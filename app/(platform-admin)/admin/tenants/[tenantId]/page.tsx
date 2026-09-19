@@ -5,8 +5,10 @@ import { AccessWorkspaceDialog } from "@/features/platform-admin/components/acce
 import { SendWishForm } from "@/features/platform-admin/components/send-wish-form";
 import { TenantActionsPanel } from "@/features/platform-admin/components/tenant-actions-panel";
 import { TenantAddonPanel } from "@/features/platform-admin/components/tenant-addon-panel";
+import { TenantWelcomeBannerPanel } from "@/features/platform-admin/components/tenant-welcome-banner-panel";
 import { BillingService } from "@/services/BillingService";
 import { PlatformAdminService } from "@/services/PlatformAdminService";
+import { TenantService } from "@/services/TenantService";
 import { UserService } from "@/services/UserService";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 
@@ -58,13 +60,14 @@ export default async function PlatformAdminTenantDetailPage({
   const svc = createServiceRoleClient();
   const platformAdminService = new PlatformAdminService(svc);
 
-  const [detail, payments, members, credits, auditLog, inventoryAddon] = await Promise.all([
+  const [detail, payments, members, credits, auditLog, inventoryAddon, showWelcomeBanner] = await Promise.all([
     platformAdminService.getTenantDetail(tenantId),
     new BillingService(svc).listPayments(tenantId),
     new UserService(svc).listUsers(tenantId, ""),
     platformAdminService.listTenantCredits(tenantId),
     platformAdminService.listTenantAuditLog(tenantId),
     platformAdminService.getTenantAddon(tenantId, "inventory"),
+    new TenantService(svc).getSetting<boolean>(tenantId, "show_welcome_banner"),
   ]);
 
   if (!detail) {
@@ -162,6 +165,8 @@ export default async function PlatformAdminTenantDetailPage({
         currency={detail.currency}
         isPlatformOwner={detail.isPlatformOwner}
       />
+
+      <TenantWelcomeBannerPanel tenantId={tenantId} initialEnabled={showWelcomeBanner ?? false} />
 
       <div>
         <h2 className="mb-2 text-sm font-semibold text-white/70">Send anniversary wish</h2>

@@ -1060,6 +1060,42 @@ export class PlatformAdminService {
     await this.logAction(platformAdminId, "TENANT_ADDON_DEACTIVATED", tenantId, null, before, { status: "SUSPENDED" }, reason);
   }
 
+  /**
+   * The login welcome banner is a plain tenant_settings key
+   * (show_welcome_banner) -- schema-less, no dedicated table -- so this
+   * writes it via TenantService.setSetting on THIS service's own
+   * service-role client, which bypasses tenant_settings' RLS entirely
+   * (that RLS only lets a tenant's own settings.manage holder write,
+   * which deliberately excludes this platform-admin-only path). Every
+   * other tenant_settings toggle in the app is written from the
+   * tenant's own Settings page via a settings.manage-gated action --
+   * this is the first one written exclusively from here instead.
+   *
+   * `updated_by` is deliberately null, not platformAdminId --
+   * tenant_settings.updated_by references public.profiles(id), while
+   * platformAdminId here is platform_admins.id (a different table's
+   * own generated key, per getPlatformAdminId's own return value) --
+   * passing it would violate that foreign key outright. `updated_by`
+   * is nullable specifically for cases like this one, where the actor
+   * isn't a member of the tenant they're changing settings for; "who"
+   * is still fully captured in platform_audit_logs below.
+   */
+  async setTenantWelcomeBanner(platformAdminId: string, tenantId: string, enabled: boolean, reason: string): Promise<void> {
+    const before = await new TenantService(this.supabase).getSetting<boolean>(tenantId, "show_welcome_banner");
+
+    await new TenantService(this.supabase).setSetting(tenantId, "show_welcome_banner", enabled, null);
+
+    await this.logAction(
+      platformAdminId,
+      "TENANT_WELCOME_BANNER_SET",
+      tenantId,
+      null,
+      { show_welcome_banner: before },
+      { show_welcome_banner: enabled },
+      reason
+    );
+  }
+
   /** Thin wrapper mirroring grantSubscriptionCredit's exact body, scoped to one add-on via the addon_key column (0034). */
   async grantAddonCredit(
     platformAdminId: string,
