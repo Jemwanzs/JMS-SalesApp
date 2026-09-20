@@ -11,6 +11,7 @@ import { ExpensesModuleCard } from "@/features/settings/components/expenses-modu
 import { InventoryConfigurationCard } from "@/features/settings/components/inventory-configuration-card";
 import { InventoryModuleCard } from "@/features/settings/components/inventory-module-card";
 import { NotesFieldCard } from "@/features/settings/components/notes-field-card";
+import { OrdersModuleCard } from "@/features/settings/components/orders-module-card";
 import { ProductRankingCard } from "@/features/settings/components/product-ranking-card";
 import { QuantityFieldCard } from "@/features/settings/components/quantity-field-card";
 import { SaleDateSelectionCard } from "@/features/settings/components/sale-date-selection-card";
@@ -80,6 +81,8 @@ export default async function SettingsPage({
     saleDateSelectionEnabled,
     saleDateMaxBackdatingDays,
     expensesEnabled,
+    ordersEnabled,
+    publicOrderingEnabled,
     inventoryEnabledSetting,
     inventoryAddon,
     inventoryPlans,
@@ -113,6 +116,8 @@ export default async function SettingsPage({
     tenantService.getSetting<boolean>(tenantId, "sale_date_selection_enabled"),
     tenantService.getSetting<number>(tenantId, "sale_date_max_backdating_days"),
     tenantService.getSetting<boolean>(tenantId, "expenses_enabled"),
+    tenantService.getSetting<boolean>(tenantId, "orders_enabled"),
+    tenantService.getSetting<boolean>(tenantId, "public_ordering_enabled"),
     tenantService.getSetting<boolean>(tenantId, "inventory_enabled"),
     addonBillingService.getAddonSubscription(tenantId, "inventory"),
     addonBillingService.listAddonPlans("inventory"),
@@ -205,6 +210,12 @@ export default async function SettingsPage({
         initialReportsEnabled={reportsEnabled ?? true}
       />
       <ExpensesModuleCard tenantId={tenantId} tenantSlug={tenantSlug} initialEnabled={expensesEnabled ?? false} />
+      <OrdersModuleCard
+        tenantId={tenantId}
+        tenantSlug={tenantSlug}
+        initialOrdersEnabled={ordersEnabled ?? false}
+        initialPublicOrderingEnabled={publicOrderingEnabled ?? false}
+      />
       {expensesEnabled && (
         <ExpenseReceiptRequirementCard
           tenantId={tenantId}

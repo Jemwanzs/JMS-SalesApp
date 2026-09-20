@@ -27,6 +27,7 @@ export type PaymentStatus = "success" | "failed" | "pending";
 export type TenantCreditStatus = "available" | "applied" | "expired";
 /** Every paid add-on module's identifier — currently only Inventory (Product Enhancements #3/#7). */
 export type AddonKey = "inventory";
+export type OrderStatus = "received" | "being_attended" | "on_delivery" | "completed" | "cancelled" | "rejected";
 
 export interface VoidOrCorrectResult {
   status: "voided" | "corrected" | "reversed" | "deleted" | "pending_approval";
@@ -1272,6 +1273,142 @@ export interface Database {
           message: string;
         };
         Update: Partial<Database["public"]["Tables"]["anniversary_wishes"]["Row"]>;
+        Relationships: [];
+      };
+      order_products: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          name: string;
+          description: string | null;
+          image_storage_path: string | null;
+          image_url: string | null;
+          minimum_order_amount: number;
+          status: "active" | "archived";
+          is_available: boolean;
+          display_order: number;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["order_products"]["Row"]> & {
+          tenant_id: string;
+          name: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["order_products"]["Row"]>;
+        Relationships: [];
+      };
+      order_customers: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          name: string;
+          mobile_number: string;
+          default_delivery_location: string | null;
+          first_order_at: string | null;
+          last_order_at: string | null;
+          order_count: number;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["order_customers"]["Row"]> & {
+          tenant_id: string;
+          name: string;
+          mobile_number: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["order_customers"]["Row"]>;
+        Relationships: [];
+      };
+      order_number_sequences: {
+        Row: {
+          tenant_id: string;
+          year: number;
+          current_value: number;
+        };
+        Insert: Partial<Database["public"]["Tables"]["order_number_sequences"]["Row"]> & {
+          tenant_id: string;
+          year: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["order_number_sequences"]["Row"]>;
+        Relationships: [];
+      };
+      orders: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          order_number: string | null;
+          tracking_token: string;
+          idempotency_key: string;
+          customer_id: string | null;
+          customer_name_snapshot: string;
+          customer_mobile_snapshot: string;
+          delivery_location: string;
+          delivery_directions: string | null;
+          order_notes: string | null;
+          order_total: number;
+          status: OrderStatus;
+          attended_by: string | null;
+          attended_at: string | null;
+          delivery_person_name: string | null;
+          delivery_person_mobile: string | null;
+          delivery_notes: string | null;
+          dispatched_at: string | null;
+          completed_by: string | null;
+          completed_at: string | null;
+          cancelled_by: string | null;
+          cancelled_at: string | null;
+          cancellation_reason: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["orders"]["Row"]> & {
+          tenant_id: string;
+          idempotency_key: string;
+          customer_name_snapshot: string;
+          customer_mobile_snapshot: string;
+          delivery_location: string;
+          order_total: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["orders"]["Row"]>;
+        Relationships: [];
+      };
+      order_items: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          order_id: string;
+          order_product_id: string | null;
+          product_name_snapshot: string;
+          product_image_snapshot: string | null;
+          minimum_order_snapshot: number | null;
+          requested_amount: number;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["order_items"]["Row"]> & {
+          tenant_id: string;
+          order_id: string;
+          product_name_snapshot: string;
+          requested_amount: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["order_items"]["Row"]>;
+        Relationships: [];
+      };
+      order_status_history: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          order_id: string;
+          from_status: OrderStatus | null;
+          to_status: OrderStatus;
+          changed_by: string | null;
+          changed_at: string;
+          notes: string | null;
+        };
+        Insert: Partial<Database["public"]["Tables"]["order_status_history"]["Row"]> & {
+          tenant_id: string;
+          order_id: string;
+          to_status: OrderStatus;
+        };
+        Update: Partial<Database["public"]["Tables"]["order_status_history"]["Row"]>;
         Relationships: [];
       };
     };

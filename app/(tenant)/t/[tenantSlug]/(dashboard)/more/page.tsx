@@ -10,6 +10,7 @@ import {
   Receipt,
   Settings,
   ShieldCheck,
+  ShoppingCart,
   Sliders,
   Sparkles,
   Store,
@@ -78,6 +79,8 @@ export default async function MorePage({
     canManageExpensePaymentMethods,
     canViewExpenses,
     expensesEnabled,
+    canManageOrderProducts,
+    ordersEnabled,
   ] =
     tenant && user
       ? await Promise.all([
@@ -93,8 +96,10 @@ export default async function MorePage({
           can("expenses.manage_payment_methods", { tenantId: tenant.id }),
           can("expenses.view", { tenantId: tenant.id }),
           new TenantService(supabase).getSetting<boolean>(tenant.id, "expenses_enabled"),
+          can("orders.manage_products", { tenantId: tenant.id }),
+          new TenantService(supabase).getSetting<boolean>(tenant.id, "orders_enabled"),
         ])
-      : [false, false, false, false, false, false, false, false, false, false, false, false];
+      : [false, false, false, false, false, false, false, false, false, false, false, false, false, false];
 
   const isBillingOwner = tenant?.billing_owner_profile_id === user?.id;
 
@@ -131,6 +136,10 @@ export default async function MorePage({
       ? [{ label: "Expense Setup", icon: Receipt, href: "expense-items" }]
       : []),
     ...(expensesEnabled && canViewExpenses ? [{ label: "Expenses", icon: Wallet, href: "expenses" }] : []),
+    // Customer Orders Phase 2a: only Order Products exists so far (the
+    // staff order dashboard itself is Phase 2c) -- same "hidden, not
+    // shown-disabled" convention as every other conditional row here.
+    ...(ordersEnabled && canManageOrderProducts ? [{ label: "Order Products", icon: ShoppingCart, href: "orders/products" }] : []),
     ...(canManageSettings ? [{ label: "Settings", icon: Settings, href: "settings" }] : []),
   ];
 
