@@ -150,7 +150,6 @@ function totalHeightMm(segments: Segment[]): number {
 }
 
 function drawSegments(doc: JsPdfDoc, segments: Segment[], widthMm: number, textColor: string) {
-  const contentWidthMm = widthMm - MARGIN_MM * 2;
   const centerX = widthMm / 2;
   const rightX = widthMm - MARGIN_MM;
   let y = 0;

@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { BackLink } from "@/components/shared/back-link";
 
-import { WhatsAppButton } from "@/components/shared/whatsapp-button";
 import { OrderActionPanel } from "@/features/orders/components/order-action-panel";
 import { OrderReceiptDialog } from "@/features/orders/components/order-receipt-dialog";
+import { OrderWhatsAppButton } from "@/features/orders/components/order-whatsapp-button";
 import { OrderStatusBadge, ORDER_STATUS_LABEL } from "@/features/orders/components/order-status-badge";
 import { OrderService } from "@/services/OrderService";
 import { TenantService } from "@/services/TenantService";
@@ -131,8 +131,11 @@ export default async function OrderDetailPage({
       <div className="mb-4 space-y-1 rounded-lg border p-4">
         <div className="flex items-center justify-between gap-3">
           <p className="text-sm font-medium">{order.customerName}</p>
-          <WhatsAppButton
+          <OrderWhatsAppButton
+            tenantId={tenant.id}
+            orderId={order.id}
             mobile={order.customerMobile}
+            canAttachReceipt={canDownloadReceipts}
             message={buildOrderWhatsAppMessage(
               order.status,
               {

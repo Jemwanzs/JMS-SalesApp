@@ -2,10 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { BackLink } from "@/components/shared/back-link";
-import { WhatsAppButton } from "@/components/shared/whatsapp-button";
 
 import { OrderFilters } from "@/features/orders/components/order-filters";
 import { OrderStatusBadge } from "@/features/orders/components/order-status-badge";
+import { OrderWhatsAppButton } from "@/features/orders/components/order-whatsapp-button";
 import { OrderService, type OrderFilters as OrderFiltersInput } from "@/services/OrderService";
 import { TenantService } from "@/services/TenantService";
 import { buildOrderWhatsAppMessage } from "@/lib/utils/order-whatsapp-messages";
@@ -56,10 +56,11 @@ export default async function OrdersDashboardPage({
   }
 
   const tenantService = new TenantService(supabase);
-  const [canView, canViewAll, ordersEnabled, settings] = await Promise.all([
+  const [canView, canViewAll, ordersEnabled, canDownloadReceipts, settings] = await Promise.all([
     can("orders.view", { tenantId: tenant.id }),
     can("orders.view_all", { tenantId: tenant.id }),
     tenantService.getSetting<boolean>(tenant.id, "orders_enabled"),
+    can("orders.download_receipts", { tenantId: tenant.id }),
     tenantService.getSettings(tenant.id, ["order_outlet_name", "whatsapp_message_on_delivery", "whatsapp_message_completed"]),
   ]);
   if (!ordersEnabled || (!canView && !canViewAll)) {
@@ -135,8 +136,11 @@ export default async function OrdersDashboardPage({
                   <p className="text-sm font-medium">{order.orderTotal.toFixed(2)}</p>
                   <OrderStatusBadge status={order.status} />
                 </div>
-                <WhatsAppButton
+                <OrderWhatsAppButton
+                  tenantId={tenant.id}
+                  orderId={order.id}
                   mobile={order.customerMobile}
+                  canAttachReceipt={canDownloadReceipts}
                   message={buildOrderWhatsAppMessage(
                     order.status,
                     {
