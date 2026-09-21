@@ -52,3 +52,19 @@ export const submitPublicOrderSchema = z.object({
 });
 
 export type SubmitPublicOrderInput = z.infer<typeof submitPublicOrderSchema>;
+
+export const markOrderOnDeliverySchema = z.object({
+  orderId: z.uuid(),
+  deliveryPersonName: z.string().trim().min(1, "Enter the delivery person's name").max(200),
+  deliveryPersonMobile: z.string().trim().min(1, "Enter the delivery person's mobile number").max(30),
+  deliveryNotes: z.string().trim().max(500).optional(),
+});
+
+export type MarkOrderOnDeliveryInput = z.infer<typeof markOrderOnDeliverySchema>;
+
+export const cancelOrderSchema = z.object({
+  orderId: z.uuid(),
+  reason: z.string().trim().min(1, "Enter a reason for cancelling this order").max(500),
+});
+
+export type CancelOrderInput = z.infer<typeof cancelOrderSchema>;

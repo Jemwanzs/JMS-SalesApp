@@ -22,7 +22,9 @@ import {
 import type { LucideIcon } from "lucide-react";
 
 import { signOutAction } from "@/features/auth/actions/sign-out";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { OrderService } from "@/services/OrderService";
 import { PlatformAdminService } from "@/services/PlatformAdminService";
 import { TenantService } from "@/services/TenantService";
 import { can } from "@/lib/permissions/can";
@@ -81,6 +83,9 @@ export default async function MorePage({
     expensesEnabled,
     canManageOrderProducts,
     ordersEnabled,
+    canViewOrders,
+    canViewAllOrders,
+    canViewOrderCustomers,
   ] =
     tenant && user
       ? await Promise.all([
@@ -98,23 +103,37 @@ export default async function MorePage({
           new TenantService(supabase).getSetting<boolean>(tenant.id, "expenses_enabled"),
           can("orders.manage_products", { tenantId: tenant.id }),
           new TenantService(supabase).getSetting<boolean>(tenant.id, "orders_enabled"),
+          can("orders.view", { tenantId: tenant.id }),
+          can("orders.view_all", { tenantId: tenant.id }),
+          can("orders.view_customers", { tenantId: tenant.id }),
         ])
-      : [false, false, false, false, false, false, false, false, false, false, false, false, false, false];
+      : [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false];
 
   const isBillingOwner = tenant?.billing_owner_profile_id === user?.id;
+
+  // Phase 2c: a plain received-order count, not a real notification
+  // system (decided in Phase 2a's own planning) -- computed inline here
+  // rather than in the tenant layout since More is the only surface
+  // that needs it this phase.
+  const canViewOrdersDashboard = ordersEnabled && (canViewOrders || canViewAllOrders);
+  const receivedOrdersCount =
+    canViewOrdersDashboard && tenant ? (await new OrderService(supabase).getCounts(tenant.id)).received : 0;
 
   // Help & Support's ?from= lets /support's own Back button return here
   // exactly, rather than guessing from browser history -- see
   // components/shared/back-link-smart.tsx's own header comment.
-  const everydayItems: { label: string; icon: LucideIcon; href?: string; absoluteHref?: string }[] = [
+  const everydayItems: { label: string; icon: LucideIcon; href?: string; absoluteHref?: string; badgeCount?: number }[] = [
     { label: "Products", icon: Package, href: "products" },
+    ...(canViewOrdersDashboard
+      ? [{ label: "Orders", icon: ShoppingCart, href: "orders", badgeCount: receivedOrdersCount }]
+      : []),
     { label: "My Preferences", icon: Sliders, href: "preferences" },
     { label: "Security", icon: Lock, href: "security" },
     { label: "Help & Support", icon: HelpCircle, absoluteHref: `/support?from=/t/${tenantSlug}/more` },
     { label: "Restart Product Tour", icon: Sparkles, absoluteHref: `/t/${tenantSlug}/sales?restartTour=1` },
   ];
 
-  const adminItems: { label: string; icon: LucideIcon; href?: string; absoluteHref?: string }[] = [
+  const adminItems: { label: string; icon: LucideIcon; href?: string; absoluteHref?: string; badgeCount?: number }[] = [
     // First in the section (the user's explicit "surface it at the
     // top" ask) -- business name/type/website/anniversary/currency/
     // timezone/working hours set once at sign-up/onboarding, with no
@@ -136,10 +155,12 @@ export default async function MorePage({
       ? [{ label: "Expense Setup", icon: Receipt, href: "expense-items" }]
       : []),
     ...(expensesEnabled && canViewExpenses ? [{ label: "Expenses", icon: Wallet, href: "expenses" }] : []),
-    // Customer Orders Phase 2a: only Order Products exists so far (the
-    // staff order dashboard itself is Phase 2c) -- same "hidden, not
-    // shown-disabled" convention as every other conditional row here.
+    // Customer Orders: Order Products (catalogue config, Phase 2a) and
+    // Customers (Phase 2c) -- same "hidden, not shown-disabled"
+    // convention as every other conditional row here. The staff order
+    // dashboard itself is the "Orders" row above, in everydayItems.
     ...(ordersEnabled && canManageOrderProducts ? [{ label: "Order Products", icon: ShoppingCart, href: "orders/products" }] : []),
+    ...(ordersEnabled && canViewOrderCustomers ? [{ label: "Customers", icon: Users, href: "orders/customers" }] : []),
     ...(canManageSettings ? [{ label: "Settings", icon: Settings, href: "settings" }] : []),
   ];
 
@@ -175,12 +196,12 @@ function MenuSection({
   items,
   tenantSlug,
 }: {
-  items: { label: string; icon: LucideIcon; href?: string; absoluteHref?: string }[];
+  items: { label: string; icon: LucideIcon; href?: string; absoluteHref?: string; badgeCount?: number }[];
   tenantSlug: string;
 }) {
   return (
     <div className="divide-y rounded-lg border">
-      {items.map(({ label, icon: Icon, href, absoluteHref }) =>
+      {items.map(({ label, icon: Icon, href, absoluteHref, badgeCount }) =>
         href || absoluteHref ? (
           <Link
             key={label}
@@ -190,6 +211,11 @@ function MenuSection({
             <span className="flex items-center gap-3">
               <Icon className="h-4 w-4" />
               {label}
+              {!!badgeCount && (
+                <Badge variant="destructive" className="h-5 min-w-5 justify-center rounded-full px-1">
+                  {badgeCount}
+                </Badge>
+              )}
             </span>
             <ChevronRight className="h-4 w-4 text-muted-foreground" />
           </Link>

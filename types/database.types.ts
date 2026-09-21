@@ -1547,6 +1547,27 @@ export interface Database {
         Args: { p_tenant_id: string; p_location_id: string; p_sale_date: string };
         Returns: string;
       };
+      attend_order: {
+        Args: { p_order_id: string };
+        Returns: Database["public"]["Tables"]["orders"]["Row"];
+      };
+      mark_order_on_delivery: {
+        Args: {
+          p_order_id: string;
+          p_delivery_person_name: string;
+          p_delivery_person_mobile: string;
+          p_delivery_notes: string | null;
+        };
+        Returns: Database["public"]["Tables"]["orders"]["Row"];
+      };
+      complete_order: {
+        Args: { p_order_id: string };
+        Returns: Database["public"]["Tables"]["orders"]["Row"];
+      };
+      cancel_order: {
+        Args: { p_order_id: string; p_reason: string };
+        Returns: Database["public"]["Tables"]["orders"]["Row"];
+      };
     };
   };
 }
