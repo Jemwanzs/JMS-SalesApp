@@ -61,10 +61,16 @@ export function ProductList({
       </div>
 
       {products.length === 0 && (
-        <p className="p-8 text-center text-sm text-muted-foreground">No products are available for ordering right now.</p>
+        <p className="p-8 text-center text-sm text-muted-foreground">
+          Ordering is currently unavailable. Please check again shortly or contact us for assistance.
+        </p>
       )}
       {products.length > 0 && visibleProducts.length === 0 && (
-        <p className="p-8 text-center text-sm text-muted-foreground">No products match &quot;{search}&quot;.</p>
+        <p className="p-8 text-center text-sm text-muted-foreground">
+          No products found for &quot;{search}&quot;.
+          <br />
+          Try searching for another product.
+        </p>
       )}
 
       <div className="divide-y">

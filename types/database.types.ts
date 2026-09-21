@@ -1279,21 +1279,16 @@ export interface Database {
         Row: {
           id: string;
           tenant_id: string;
-          name: string;
-          description: string | null;
-          image_storage_path: string | null;
-          image_url: string | null;
+          product_id: string;
           minimum_order_amount: number;
-          status: "active" | "archived";
           is_available: boolean;
-          display_order: number;
           created_by: string | null;
           created_at: string;
           updated_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["order_products"]["Row"]> & {
           tenant_id: string;
-          name: string;
+          product_id: string;
         };
         Update: Partial<Database["public"]["Tables"]["order_products"]["Row"]>;
         Relationships: [];

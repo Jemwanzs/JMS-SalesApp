@@ -118,18 +118,59 @@ export class PublicOrderingService {
       return null;
     }
 
-    const { data: products, error: productsError } = await this.supabase
+    // order_products (config) inner-joined against products (name/
+    // description/image, live) -- "fetch separately, join in JS" per
+    // this codebase's own established convention (avoids relying on a
+    // PostgREST embedded-resource select, which risks a relationship-
+    // ambiguity error given `products` has several other FK
+    // relationships too). minimum_order_amount > 0 is the "tenant has
+    // actually configured this product" signal (see
+    // OrderProductService's own header comment) -- a product with no
+    // order_products row, or one still at the default 0, never appears
+    // here, same as it wouldn't if genuinely unavailable.
+    const { data: configs, error: configsError } = await this.supabase
       .from("order_products")
-      .select("id, name, description, image_url, minimum_order_amount")
+      .select("id, product_id, minimum_order_amount")
       .eq("tenant_id", tenant.id)
-      .eq("status", "active")
       .eq("is_available", true)
-      .order("display_order", { ascending: true })
-      .order("name", { ascending: true });
+      .gt("minimum_order_amount", 0);
+
+    if (configsError) {
+      throw new Error(`PublicOrderingService.getStorefront: ${configsError.message}`);
+    }
+
+    const productIds = (configs ?? []).map((c) => c.product_id);
+    const { data: catalogueProducts, error: productsError } =
+      productIds.length > 0
+        ? await this.supabase
+            .from("products")
+            .select("id, name, description, image_url, display_order")
+            .in("id", productIds)
+            .eq("status", "active")
+            .eq("is_system", false)
+        : { data: [], error: null };
 
     if (productsError) {
       throw new Error(`PublicOrderingService.getStorefront: ${productsError.message}`);
     }
+
+    const productById = new Map((catalogueProducts ?? []).map((p) => [p.id, p]));
+    const joined: { product: (typeof catalogueProducts)[number]; minimumOrderAmount: number; configId: string }[] = [];
+    for (const config of configs ?? []) {
+      const product = productById.get(config.product_id);
+      if (product) {
+        joined.push({ product, minimumOrderAmount: Number(config.minimum_order_amount), configId: config.id });
+      }
+    }
+    joined.sort((a, b) => a.product.display_order - b.product.display_order || a.product.name.localeCompare(b.product.name));
+
+    const storefrontProducts: StorefrontProduct[] = joined.map(({ product, minimumOrderAmount, configId }) => ({
+      id: configId,
+      name: product.name,
+      description: product.description,
+      imageUrl: product.image_url,
+      minimumOrderAmount,
+    }));
 
     return {
       tenantId: tenant.id,
@@ -139,13 +180,7 @@ export class PublicOrderingService {
       welcomeMessage: (settings.order_welcome_message as string | undefined) || null,
       deliveryFeeNotice: (settings.order_delivery_fee_notice as string | undefined) || DEFAULT_DELIVERY_FEE_NOTICE,
       completionMessage: (settings.order_completion_message as string | undefined) || DEFAULT_COMPLETION_MESSAGE,
-      products: (products ?? []).map((p) => ({
-        id: p.id,
-        name: p.name,
-        description: p.description,
-        imageUrl: p.image_url,
-        minimumOrderAmount: Number(p.minimum_order_amount),
-      })),
+      products: storefrontProducts,
     };
   }
 
@@ -249,18 +284,35 @@ export class PublicOrderingService {
       throw new Error("Your cart is empty");
     }
 
-    const productIds = input.items.map((i) => i.orderProductId);
-    const { data: products, error: productsError } = await this.supabase
+    // Re-validate against the SAME config-row-id (order_products.id) the
+    // client's cart carries, joined live against `products` for the
+    // current name/image/active-status -- "fetch separately, join in
+    // JS" per this codebase's own convention (see getStorefront's own
+    // comment for why not a PostgREST embed).
+    const configIds = input.items.map((i) => i.orderProductId);
+    const { data: configs, error: configsError } = await this.supabase
       .from("order_products")
-      .select("id, name, image_url, minimum_order_amount, status, is_available")
+      .select("id, product_id, minimum_order_amount, is_available")
       .eq("tenant_id", tenant.id)
-      .in("id", productIds);
+      .in("id", configIds);
+
+    if (configsError) {
+      throw new Error(`PublicOrderingService.submitOrder: ${configsError.message}`);
+    }
+
+    const productIds = (configs ?? []).map((c) => c.product_id);
+    const { data: catalogueProducts, error: productsError } =
+      productIds.length > 0
+        ? await this.supabase.from("products").select("id, name, image_url, status, is_system").in("id", productIds)
+        : { data: [], error: null };
 
     if (productsError) {
       throw new Error(`PublicOrderingService.submitOrder: ${productsError.message}`);
     }
 
-    const productById = new Map((products ?? []).map((p) => [p.id, p]));
+    const catalogueProductById = new Map((catalogueProducts ?? []).map((p) => [p.id, p]));
+    const configById = new Map((configs ?? []).map((c) => [c.id, c]));
+
     let orderTotal = 0;
     const itemRows: {
       order_product_id: string;
@@ -271,17 +323,18 @@ export class PublicOrderingService {
     }[] = [];
 
     for (const item of input.items) {
-      const product = productById.get(item.orderProductId);
-      if (!product || product.status !== "active" || !product.is_available) {
+      const config = configById.get(item.orderProductId);
+      const product = config ? catalogueProductById.get(config.product_id) : undefined;
+      if (!config || !product || !config.is_available || product.status !== "active" || product.is_system) {
         throw new Error("One of the items in your cart is no longer available. Please review your cart and try again.");
       }
-      const minimum = Number(product.minimum_order_amount);
+      const minimum = Number(config.minimum_order_amount);
       if (item.requestedAmount < minimum) {
         throw new Error(`Minimum order for ${product.name} is ${minimum.toFixed(2)}.`);
       }
       orderTotal += item.requestedAmount;
       itemRows.push({
-        order_product_id: product.id,
+        order_product_id: config.id,
         product_name_snapshot: product.name,
         product_image_snapshot: product.image_url,
         minimum_order_snapshot: minimum,

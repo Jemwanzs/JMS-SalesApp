@@ -19,11 +19,14 @@ export const metadata: Metadata = {
   title: "Orders | JMS Sales App",
 };
 
-const COUNT_TILES: { status: OrderStatus; label: string }[] = [
-  { status: "received", label: "Received" },
-  { status: "being_attended", label: "Being Attended" },
-  { status: "on_delivery", label: "On Delivery" },
-  { status: "completed", label: "Completed" },
+// Color-coded per status so the four counts read at a glance without
+// having to check the labels -- matches the progression a staff member
+// already scans left-to-right through the workflow.
+const COUNT_TILES: { status: OrderStatus; label: string; className: string }[] = [
+  { status: "received", label: "Received", className: "border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100" },
+  { status: "being_attended", label: "Being Attended", className: "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100" },
+  { status: "on_delivery", label: "On Delivery", className: "border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100" },
+  { status: "completed", label: "Completed", className: "border-green-300 bg-green-50 text-green-700 hover:bg-green-100" },
 ];
 
 /**
@@ -90,10 +93,10 @@ export default async function OrdersDashboardPage({
           <Link
             key={tile.status}
             href={`/t/${tenantSlug}/orders?status=${tile.status}`}
-            className="rounded-lg border p-3 text-center hover:bg-muted"
+            className={`rounded-lg border p-3 text-center transition-colors ${tile.className}`}
           >
-            <p className="text-2xl font-semibold">{counts[toCountKey(tile.status)]}</p>
-            <p className="text-xs text-muted-foreground">{tile.label}</p>
+            <p className="text-lg font-semibold">{counts[toCountKey(tile.status)]}</p>
+            <p className="text-xs opacity-80">{tile.label}</p>
           </Link>
         ))}
       </div>
