@@ -20,6 +20,7 @@ import { SaleEditingDeletionCard } from "@/features/settings/components/sale-edi
 import { SaleNumberTemplateCard } from "@/features/settings/components/sale-number-template-card";
 import { StockVarianceToleranceCard } from "@/features/settings/components/stock-variance-tolerance-card";
 import { TabsVisibilityCard } from "@/features/settings/components/tabs-visibility-card";
+import { WhatsAppMessagesCard } from "@/features/settings/components/whatsapp-messages-card";
 import { AnniversaryService } from "@/services/AnniversaryService";
 import { BillingService } from "@/services/BillingService";
 import { LocationService } from "@/services/LocationService";
@@ -95,6 +96,8 @@ export default async function SettingsPage({
     receiptShowCustomerMobile,
     receiptShowDeliveryPerson,
     receiptFooterMessage,
+    whatsappMessageOnDelivery,
+    whatsappMessageCompleted,
     inventoryEnabledSetting,
     inventoryAddon,
     inventoryPlans,
@@ -141,6 +144,8 @@ export default async function SettingsPage({
     tenantService.getSetting<boolean>(tenantId, "receipt_show_customer_mobile"),
     tenantService.getSetting<boolean>(tenantId, "receipt_show_delivery_person"),
     tenantService.getSetting<string>(tenantId, "receipt_footer_message"),
+    tenantService.getSetting<string>(tenantId, "whatsapp_message_on_delivery"),
+    tenantService.getSetting<string>(tenantId, "whatsapp_message_completed"),
     tenantService.getSetting<boolean>(tenantId, "inventory_enabled"),
     addonBillingService.getAddonSubscription(tenantId, "inventory"),
     addonBillingService.listAddonPlans("inventory"),
@@ -254,6 +259,14 @@ export default async function SettingsPage({
           initialShowCustomerMobile={receiptShowCustomerMobile ?? true}
           initialShowDeliveryPerson={receiptShowDeliveryPerson ?? true}
           initialFooterMessage={receiptFooterMessage ?? null}
+        />
+      )}
+      {ordersEnabled && (
+        <WhatsAppMessagesCard
+          tenantId={tenantId}
+          tenantSlug={tenantSlug}
+          initialOnDeliveryTemplate={whatsappMessageOnDelivery ?? null}
+          initialCompletedTemplate={whatsappMessageCompleted ?? null}
         />
       )}
       {expensesEnabled && (

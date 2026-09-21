@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { BackLink } from "@/components/shared/back-link";
+import { WhatsAppButton } from "@/components/shared/whatsapp-button";
 
 import { OrderStatusBadge } from "@/features/orders/components/order-status-badge";
 import { OrderService } from "@/services/OrderService";
@@ -50,7 +51,10 @@ export default async function OrderCustomerDetailPage({
       <BackLink href={`/t/${tenantSlug}/orders/customers`} label="Customers" />
 
       <div className="mb-4 space-y-1 rounded-lg border p-4">
-        <h1 className="text-xl font-semibold">{customer.name}</h1>
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="text-xl font-semibold">{customer.name}</h1>
+          <WhatsAppButton mobile={customer.mobileNumber} />
+        </div>
         <p className="text-sm text-muted-foreground">{customer.mobileNumber}</p>
         {customer.defaultDeliveryLocation && <p className="text-sm text-muted-foreground">{customer.defaultDeliveryLocation}</p>}
         <div className="mt-3 grid grid-cols-2 gap-2">

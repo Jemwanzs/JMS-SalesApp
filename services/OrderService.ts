@@ -15,6 +15,7 @@ export interface OrderListItem {
   orderNumber: string | null;
   customerName: string;
   customerMobile: string;
+  deliveryLocation: string;
   orderTotal: number;
   status: OrderStatus;
   createdAt: string;
@@ -140,6 +141,7 @@ function toOrderListItem(row: {
   order_number: string | null;
   customer_name_snapshot: string;
   customer_mobile_snapshot: string;
+  delivery_location: string;
   order_total: number | string;
   status: OrderStatus;
   created_at: string;
@@ -149,6 +151,7 @@ function toOrderListItem(row: {
     orderNumber: row.order_number,
     customerName: row.customer_name_snapshot,
     customerMobile: row.customer_mobile_snapshot,
+    deliveryLocation: row.delivery_location,
     orderTotal: Number(row.order_total),
     status: row.status,
     createdAt: row.created_at,
@@ -192,7 +195,7 @@ export class OrderService {
   async listOrders(tenantId: string, filters: OrderFilters = {}): Promise<OrderListItem[]> {
     let query = this.supabase
       .from("orders")
-      .select("id, order_number, customer_name_snapshot, customer_mobile_snapshot, order_total, status, created_at")
+      .select("id, order_number, customer_name_snapshot, customer_mobile_snapshot, delivery_location, order_total, status, created_at")
       .eq("tenant_id", tenantId)
       .order("created_at", { ascending: false })
       .limit(filters.limit ?? 50);
@@ -409,7 +412,7 @@ export class OrderService {
 
     const { data: orders, error: ordersError } = await this.supabase
       .from("orders")
-      .select("id, order_number, customer_name_snapshot, customer_mobile_snapshot, order_total, status, created_at")
+      .select("id, order_number, customer_name_snapshot, customer_mobile_snapshot, delivery_location, order_total, status, created_at")
       .eq("tenant_id", tenantId)
       .eq("customer_id", customerId)
       .order("created_at", { ascending: false });

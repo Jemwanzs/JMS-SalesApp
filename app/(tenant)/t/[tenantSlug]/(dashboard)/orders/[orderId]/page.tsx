@@ -2,11 +2,13 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { BackLink } from "@/components/shared/back-link";
 
+import { WhatsAppButton } from "@/components/shared/whatsapp-button";
 import { OrderActionPanel } from "@/features/orders/components/order-action-panel";
 import { OrderReceiptDialog } from "@/features/orders/components/order-receipt-dialog";
 import { OrderStatusBadge, ORDER_STATUS_LABEL } from "@/features/orders/components/order-status-badge";
 import { OrderService } from "@/services/OrderService";
 import { TenantService } from "@/services/TenantService";
+import { buildOrderWhatsAppMessage } from "@/lib/utils/order-whatsapp-messages";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
@@ -42,17 +44,19 @@ export default async function OrderDetailPage({
     notFound();
   }
 
-  const [canView, canViewAll, ordersEnabled, canAttend, canMarkOnDelivery, canComplete, canCancel, canViewReceipts, canDownloadReceipts] =
+  const tenantService = new TenantService(supabase);
+  const [canView, canViewAll, ordersEnabled, canAttend, canMarkOnDelivery, canComplete, canCancel, canViewReceipts, canDownloadReceipts, settings] =
     await Promise.all([
       can("orders.view", { tenantId: tenant.id }),
       can("orders.view_all", { tenantId: tenant.id }),
-      new TenantService(supabase).getSetting<boolean>(tenant.id, "orders_enabled"),
+      tenantService.getSetting<boolean>(tenant.id, "orders_enabled"),
       can("orders.attend", { tenantId: tenant.id }),
       can("orders.mark_on_delivery", { tenantId: tenant.id }),
       can("orders.complete", { tenantId: tenant.id }),
       can("orders.cancel", { tenantId: tenant.id }),
       can("orders.view_receipts", { tenantId: tenant.id }),
       can("orders.download_receipts", { tenantId: tenant.id }),
+      tenantService.getSettings(tenant.id, ["order_outlet_name", "whatsapp_message_on_delivery", "whatsapp_message_completed"]),
     ]);
   if (!ordersEnabled || (!canView && !canViewAll)) {
     redirect(`/t/${tenantSlug}/more`);
@@ -125,7 +129,26 @@ export default async function OrderDetailPage({
       </div>
 
       <div className="mb-4 space-y-1 rounded-lg border p-4">
-        <p className="text-sm font-medium">{order.customerName}</p>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm font-medium">{order.customerName}</p>
+          <WhatsAppButton
+            mobile={order.customerMobile}
+            message={buildOrderWhatsAppMessage(
+              order.status,
+              {
+                customerName: order.customerName,
+                orderNumber: order.orderNumber,
+                outletName: (settings.order_outlet_name as string | undefined) || tenant.name,
+                orderTotal: order.orderTotal,
+                deliveryLocation: order.deliveryLocation,
+              },
+              {
+                onDeliveryTemplate: settings.whatsapp_message_on_delivery as string | undefined,
+                completedTemplate: settings.whatsapp_message_completed as string | undefined,
+              }
+            )}
+          />
+        </div>
         <p className="text-sm text-muted-foreground">{order.customerMobile}</p>
         <p className="text-sm text-muted-foreground">{order.deliveryLocation}</p>
         {order.deliveryDirections && <p className="text-sm text-muted-foreground">{order.deliveryDirections}</p>}

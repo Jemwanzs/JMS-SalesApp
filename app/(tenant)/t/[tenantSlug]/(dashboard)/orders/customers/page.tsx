@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { BackLink } from "@/components/shared/back-link";
+import { WhatsAppButton } from "@/components/shared/whatsapp-button";
 
 import { OrderService } from "@/services/OrderService";
 import { TenantService } from "@/services/TenantService";
@@ -66,11 +67,15 @@ export default async function OrderCustomersPage({
       ) : (
         <div className="divide-y rounded-lg border">
           {customers.map((customer) => (
-            <Link
-              key={customer.id}
-              href={`/t/${tenantSlug}/orders/customers/${customer.id}`}
-              className="flex items-center justify-between gap-3 p-4 hover:bg-muted"
-            >
+            // "Stretched link" pattern -- see orders/page.tsx's own
+            // header comment on this row for why (Phase 3b WhatsApp
+            // click-to-chat needs an independently-clickable icon here).
+            <div key={customer.id} className="relative flex items-center justify-between gap-3 p-4">
+              <Link
+                href={`/t/${tenantSlug}/orders/customers/${customer.id}`}
+                className="absolute inset-0 hover:bg-muted"
+                aria-label={customer.name}
+              />
               <div>
                 <p className="text-sm font-medium">{customer.name}</p>
                 <p className="text-xs text-muted-foreground">{customer.mobileNumber}</p>
@@ -78,8 +83,11 @@ export default async function OrderCustomersPage({
                   <p className="text-xs text-muted-foreground">{customer.defaultDeliveryLocation}</p>
                 )}
               </div>
-              <p className="text-sm text-muted-foreground">{customer.orderCount} orders</p>
-            </Link>
+              <div className="flex items-center gap-2">
+                <p className="text-sm text-muted-foreground">{customer.orderCount} orders</p>
+                <WhatsAppButton mobile={customer.mobileNumber} />
+              </div>
+            </div>
           ))}
         </div>
       )}

@@ -2,11 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { BackLink } from "@/components/shared/back-link";
+import { WhatsAppButton } from "@/components/shared/whatsapp-button";
 
 import { OrderFilters } from "@/features/orders/components/order-filters";
 import { OrderStatusBadge } from "@/features/orders/components/order-status-badge";
 import { OrderService, type OrderFilters as OrderFiltersInput } from "@/services/OrderService";
 import { TenantService } from "@/services/TenantService";
+import { buildOrderWhatsAppMessage } from "@/lib/utils/order-whatsapp-messages";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
@@ -50,14 +52,17 @@ export default async function OrdersDashboardPage({
     notFound();
   }
 
-  const [canView, canViewAll, ordersEnabled] = await Promise.all([
+  const tenantService = new TenantService(supabase);
+  const [canView, canViewAll, ordersEnabled, settings] = await Promise.all([
     can("orders.view", { tenantId: tenant.id }),
     can("orders.view_all", { tenantId: tenant.id }),
-    new TenantService(supabase).getSetting<boolean>(tenant.id, "orders_enabled"),
+    tenantService.getSetting<boolean>(tenant.id, "orders_enabled"),
+    tenantService.getSettings(tenant.id, ["order_outlet_name", "whatsapp_message_on_delivery", "whatsapp_message_completed"]),
   ]);
   if (!ordersEnabled || (!canView && !canViewAll)) {
     redirect(`/t/${tenantSlug}/more`);
   }
+  const outletName = (settings.order_outlet_name as string | undefined) || tenant.name;
 
   const orderService = new OrderService(supabase);
 
@@ -102,11 +107,19 @@ export default async function OrdersDashboardPage({
       ) : (
         <div className="divide-y rounded-lg border">
           {orders.map((order) => (
-            <Link
-              key={order.id}
-              href={`/t/${tenantSlug}/orders/${order.id}`}
-              className="flex items-center justify-between gap-3 p-4 hover:bg-muted"
-            >
+            // "Stretched link" pattern: the Link becomes an invisible
+            // full-row click target (absolute inset-0) instead of
+            // wrapping everything, so the WhatsAppButton can be its own
+            // independently-clickable <a> without nesting anchors
+            // (invalid HTML) -- it needs relative z-10 to stack above
+            // the Link overlay. See this module's own plan notes for
+            // why (Phase 3b, WhatsApp click-to-chat).
+            <div key={order.id} className="relative flex items-center justify-between gap-3 p-4">
+              <Link
+                href={`/t/${tenantSlug}/orders/${order.id}`}
+                className="absolute inset-0 hover:bg-muted"
+                aria-label={order.orderNumber ?? "Order"}
+              />
               <div>
                 <p className="text-sm font-medium">{order.orderNumber ?? "Order"}</p>
                 <p className="text-xs text-muted-foreground">
@@ -114,11 +127,30 @@ export default async function OrdersDashboardPage({
                 </p>
                 <p className="text-xs text-muted-foreground">{new Date(order.createdAt).toLocaleString()}</p>
               </div>
-              <div className="flex flex-col items-end gap-1">
-                <p className="text-sm font-medium">{order.orderTotal.toFixed(2)}</p>
-                <OrderStatusBadge status={order.status} />
+              <div className="flex items-center gap-2">
+                <div className="flex flex-col items-end gap-1">
+                  <p className="text-sm font-medium">{order.orderTotal.toFixed(2)}</p>
+                  <OrderStatusBadge status={order.status} />
+                </div>
+                <WhatsAppButton
+                  mobile={order.customerMobile}
+                  message={buildOrderWhatsAppMessage(
+                    order.status,
+                    {
+                      customerName: order.customerName,
+                      orderNumber: order.orderNumber,
+                      outletName,
+                      orderTotal: order.orderTotal,
+                      deliveryLocation: order.deliveryLocation,
+                    },
+                    {
+                      onDeliveryTemplate: settings.whatsapp_message_on_delivery as string | undefined,
+                      completedTemplate: settings.whatsapp_message_completed as string | undefined,
+                    }
+                  )}
+                />
               </div>
-            </Link>
+            </div>
           ))}
         </div>
       )}
