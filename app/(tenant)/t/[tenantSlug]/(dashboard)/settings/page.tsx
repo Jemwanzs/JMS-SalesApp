@@ -14,6 +14,7 @@ import { NotesFieldCard } from "@/features/settings/components/notes-field-card"
 import { OrdersModuleCard } from "@/features/settings/components/orders-module-card";
 import { ProductRankingCard } from "@/features/settings/components/product-ranking-card";
 import { QuantityFieldCard } from "@/features/settings/components/quantity-field-card";
+import { ReceiptSettingsCard } from "@/features/settings/components/receipt-settings-card";
 import { SaleDateSelectionCard } from "@/features/settings/components/sale-date-selection-card";
 import { SaleEditingDeletionCard } from "@/features/settings/components/sale-editing-deletion-card";
 import { SaleNumberTemplateCard } from "@/features/settings/components/sale-number-template-card";
@@ -87,6 +88,13 @@ export default async function SettingsPage({
     orderWelcomeMessage,
     orderDeliveryFeeNotice,
     orderCompletionMessage,
+    receiptShowLogo,
+    receiptWidth,
+    receiptBackgroundColor,
+    receiptTextColor,
+    receiptShowCustomerMobile,
+    receiptShowDeliveryPerson,
+    receiptFooterMessage,
     inventoryEnabledSetting,
     inventoryAddon,
     inventoryPlans,
@@ -126,6 +134,13 @@ export default async function SettingsPage({
     tenantService.getSetting<string>(tenantId, "order_welcome_message"),
     tenantService.getSetting<string>(tenantId, "order_delivery_fee_notice"),
     tenantService.getSetting<string>(tenantId, "order_completion_message"),
+    tenantService.getSetting<boolean>(tenantId, "receipt_show_logo"),
+    tenantService.getSetting<string>(tenantId, "receipt_width"),
+    tenantService.getSetting<string>(tenantId, "receipt_background_color"),
+    tenantService.getSetting<string>(tenantId, "receipt_text_color"),
+    tenantService.getSetting<boolean>(tenantId, "receipt_show_customer_mobile"),
+    tenantService.getSetting<boolean>(tenantId, "receipt_show_delivery_person"),
+    tenantService.getSetting<string>(tenantId, "receipt_footer_message"),
     tenantService.getSetting<boolean>(tenantId, "inventory_enabled"),
     addonBillingService.getAddonSubscription(tenantId, "inventory"),
     addonBillingService.listAddonPlans("inventory"),
@@ -228,6 +243,19 @@ export default async function SettingsPage({
         initialDeliveryFeeNotice={orderDeliveryFeeNotice ?? null}
         initialCompletionMessage={orderCompletionMessage ?? null}
       />
+      {ordersEnabled && (
+        <ReceiptSettingsCard
+          tenantId={tenantId}
+          tenantSlug={tenantSlug}
+          initialShowLogo={receiptShowLogo ?? true}
+          initialWidth={receiptWidth ?? null}
+          initialBackgroundColor={receiptBackgroundColor ?? null}
+          initialTextColor={receiptTextColor ?? null}
+          initialShowCustomerMobile={receiptShowCustomerMobile ?? true}
+          initialShowDeliveryPerson={receiptShowDeliveryPerson ?? true}
+          initialFooterMessage={receiptFooterMessage ?? null}
+        />
+      )}
       {expensesEnabled && (
         <ExpenseReceiptRequirementCard
           tenantId={tenantId}

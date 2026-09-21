@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { BackLink } from "@/components/shared/back-link";
 
 import { OrderActionPanel } from "@/features/orders/components/order-action-panel";
+import { OrderReceiptDialog } from "@/features/orders/components/order-receipt-dialog";
 import { OrderStatusBadge, ORDER_STATUS_LABEL } from "@/features/orders/components/order-status-badge";
 import { OrderService } from "@/services/OrderService";
 import { TenantService } from "@/services/TenantService";
@@ -41,15 +42,18 @@ export default async function OrderDetailPage({
     notFound();
   }
 
-  const [canView, canViewAll, ordersEnabled, canAttend, canMarkOnDelivery, canComplete, canCancel] = await Promise.all([
-    can("orders.view", { tenantId: tenant.id }),
-    can("orders.view_all", { tenantId: tenant.id }),
-    new TenantService(supabase).getSetting<boolean>(tenant.id, "orders_enabled"),
-    can("orders.attend", { tenantId: tenant.id }),
-    can("orders.mark_on_delivery", { tenantId: tenant.id }),
-    can("orders.complete", { tenantId: tenant.id }),
-    can("orders.cancel", { tenantId: tenant.id }),
-  ]);
+  const [canView, canViewAll, ordersEnabled, canAttend, canMarkOnDelivery, canComplete, canCancel, canViewReceipts, canDownloadReceipts] =
+    await Promise.all([
+      can("orders.view", { tenantId: tenant.id }),
+      can("orders.view_all", { tenantId: tenant.id }),
+      new TenantService(supabase).getSetting<boolean>(tenant.id, "orders_enabled"),
+      can("orders.attend", { tenantId: tenant.id }),
+      can("orders.mark_on_delivery", { tenantId: tenant.id }),
+      can("orders.complete", { tenantId: tenant.id }),
+      can("orders.cancel", { tenantId: tenant.id }),
+      can("orders.view_receipts", { tenantId: tenant.id }),
+      can("orders.download_receipts", { tenantId: tenant.id }),
+    ]);
   if (!ordersEnabled || (!canView && !canViewAll)) {
     redirect(`/t/${tenantSlug}/more`);
   }
@@ -114,7 +118,10 @@ export default async function OrderDetailPage({
           <h1 className="text-xl font-semibold">{order.orderNumber ?? "Order"}</h1>
           <p className="text-xs text-muted-foreground">{new Date(order.createdAt).toLocaleString()}</p>
         </div>
-        <OrderStatusBadge status={order.status} />
+        <div className="flex flex-col items-end gap-2">
+          <OrderStatusBadge status={order.status} />
+          {canViewReceipts && <OrderReceiptDialog tenantId={tenant.id} orderId={order.id} canDownload={canDownloadReceipts} />}
+        </div>
       </div>
 
       <div className="mb-4 space-y-1 rounded-lg border p-4">

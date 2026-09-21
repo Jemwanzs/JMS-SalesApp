@@ -1,6 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { TenantService } from "@/services/TenantService";
 import type { Database, OrderStatus } from "@/types/database.types";
+
+const DEFAULT_RECEIPT_BACKGROUND_COLOR = "#0F7A3D";
+const DEFAULT_RECEIPT_TEXT_COLOR = "#FFFFFF";
+const DEFAULT_RECEIPT_FOOTER_MESSAGE = "Thank you for ordering with us. We appreciate your business.";
 
 const ORDER_SELECT =
   "id, tenant_id, order_number, tracking_token, customer_id, customer_name_snapshot, customer_mobile_snapshot, delivery_location, delivery_directions, order_notes, order_total, status, attended_by, attended_at, delivery_person_name, delivery_person_mobile, delivery_notes, dispatched_at, completed_by, completed_at, cancelled_by, cancelled_at, cancellation_reason, created_at, updated_at";
@@ -93,6 +98,41 @@ export interface OrderCustomerListItem {
 export interface OrderCustomerDetail extends OrderCustomerListItem {
   totalOrdered: number;
   orders: OrderListItem[];
+}
+
+export interface OrderReceiptItem {
+  name: string;
+  amount: number;
+}
+
+/**
+ * Deliberately information-minimized to exactly what spec section 9's
+ * own "Include"/"Do not expose" split calls for -- no ids, no actor
+ * names, no internal notes (order_notes/delivery_notes) -- even though
+ * this is fetched by staff, not the public: the receipt itself leaves
+ * the app (download/share), so it gets the same discipline as the
+ * public tracking DTO (PublicOrderingService.TrackedOrder).
+ */
+export interface OrderReceiptData {
+  outletName: string;
+  logoUrl: string | null;
+  receiptWidth: "80mm" | "58mm";
+  backgroundColor: string;
+  textColor: string;
+  showCustomerMobile: boolean;
+  showDeliveryPerson: boolean;
+  footerMessage: string;
+  orderNumber: string | null;
+  createdAt: string;
+  status: OrderStatus;
+  customerName: string;
+  customerMobile: string;
+  deliveryLocation: string;
+  items: OrderReceiptItem[];
+  orderTotal: number;
+  deliveryPersonName: string | null;
+  deliveryPersonMobile: string | null;
+  cancellationReason: string | null;
 }
 
 function toOrderListItem(row: {
@@ -391,6 +431,73 @@ export class OrderService {
       lastOrderAt: customer.last_order_at,
       totalOrdered,
       orders: orderList,
+    };
+  }
+
+  /**
+   * Feeds both the receipt preview dialog and buildOrderReceiptPdf() --
+   * one flat DTO so the two never drift out of sync with each other.
+   * Reuses the same tenant.name / order_outlet_name fallback chain the
+   * public storefront already established (PublicOrderingService.
+   * getStorefront), and the same "receipt_footer_message falls back to
+   * order_completion_message, then a hardcoded default" chain the
+   * receipt settings card's own placeholder documents.
+   */
+  async getOrderReceiptData(tenantId: string, orderId: string): Promise<OrderReceiptData | null> {
+    const [{ data: tenant }, { data: order }, settings] = await Promise.all([
+      this.supabase.from("tenants").select("name, logo_url").eq("id", tenantId).maybeSingle(),
+      this.supabase
+        .from("orders")
+        .select(
+          "order_number, created_at, status, customer_name_snapshot, customer_mobile_snapshot, delivery_location, order_total, delivery_person_name, delivery_person_mobile, cancellation_reason"
+        )
+        .eq("tenant_id", tenantId)
+        .eq("id", orderId)
+        .maybeSingle(),
+      new TenantService(this.supabase).getSettings(tenantId, [
+        "order_outlet_name",
+        "order_completion_message",
+        "receipt_show_logo",
+        "receipt_width",
+        "receipt_background_color",
+        "receipt_text_color",
+        "receipt_show_customer_mobile",
+        "receipt_show_delivery_person",
+        "receipt_footer_message",
+      ]),
+    ]);
+
+    if (!order) {
+      return null;
+    }
+
+    const { data: items } = await this.supabase.from("order_items").select("product_name_snapshot, requested_amount").eq("order_id", orderId);
+
+    const showLogo = (settings.receipt_show_logo as boolean | undefined) ?? true;
+
+    return {
+      outletName: (settings.order_outlet_name as string | undefined) || tenant?.name || "",
+      logoUrl: showLogo ? (tenant?.logo_url ?? null) : null,
+      receiptWidth: ((settings.receipt_width as string | undefined) === "58mm" ? "58mm" : "80mm") as "80mm" | "58mm",
+      backgroundColor: (settings.receipt_background_color as string | undefined) || DEFAULT_RECEIPT_BACKGROUND_COLOR,
+      textColor: (settings.receipt_text_color as string | undefined) || DEFAULT_RECEIPT_TEXT_COLOR,
+      showCustomerMobile: (settings.receipt_show_customer_mobile as boolean | undefined) ?? true,
+      showDeliveryPerson: (settings.receipt_show_delivery_person as boolean | undefined) ?? true,
+      footerMessage:
+        (settings.receipt_footer_message as string | undefined) ||
+        (settings.order_completion_message as string | undefined) ||
+        DEFAULT_RECEIPT_FOOTER_MESSAGE,
+      orderNumber: order.order_number,
+      createdAt: order.created_at,
+      status: order.status,
+      customerName: order.customer_name_snapshot,
+      customerMobile: order.customer_mobile_snapshot,
+      deliveryLocation: order.delivery_location,
+      items: (items ?? []).map((i) => ({ name: i.product_name_snapshot, amount: Number(i.requested_amount) })),
+      orderTotal: Number(order.order_total),
+      deliveryPersonName: order.delivery_person_name,
+      deliveryPersonMobile: order.delivery_person_mobile,
+      cancellationReason: order.cancellation_reason,
     };
   }
 }
