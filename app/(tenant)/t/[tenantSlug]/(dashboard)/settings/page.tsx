@@ -83,6 +83,10 @@ export default async function SettingsPage({
     expensesEnabled,
     ordersEnabled,
     publicOrderingEnabled,
+    orderOutletName,
+    orderWelcomeMessage,
+    orderDeliveryFeeNotice,
+    orderCompletionMessage,
     inventoryEnabledSetting,
     inventoryAddon,
     inventoryPlans,
@@ -118,6 +122,10 @@ export default async function SettingsPage({
     tenantService.getSetting<boolean>(tenantId, "expenses_enabled"),
     tenantService.getSetting<boolean>(tenantId, "orders_enabled"),
     tenantService.getSetting<boolean>(tenantId, "public_ordering_enabled"),
+    tenantService.getSetting<string>(tenantId, "order_outlet_name"),
+    tenantService.getSetting<string>(tenantId, "order_welcome_message"),
+    tenantService.getSetting<string>(tenantId, "order_delivery_fee_notice"),
+    tenantService.getSetting<string>(tenantId, "order_completion_message"),
     tenantService.getSetting<boolean>(tenantId, "inventory_enabled"),
     addonBillingService.getAddonSubscription(tenantId, "inventory"),
     addonBillingService.listAddonPlans("inventory"),
@@ -215,6 +223,10 @@ export default async function SettingsPage({
         tenantSlug={tenantSlug}
         initialOrdersEnabled={ordersEnabled ?? false}
         initialPublicOrderingEnabled={publicOrderingEnabled ?? false}
+        initialOrderOutletName={orderOutletName ?? null}
+        initialWelcomeMessage={orderWelcomeMessage ?? null}
+        initialDeliveryFeeNotice={orderDeliveryFeeNotice ?? null}
+        initialCompletionMessage={orderCompletionMessage ?? null}
       />
       {expensesEnabled && (
         <ExpenseReceiptRequirementCard
