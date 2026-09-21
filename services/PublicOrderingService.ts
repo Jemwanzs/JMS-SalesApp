@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { TenantService } from "@/services/TenantService";
-import type { Database } from "@/types/database.types";
+import type { Database, OrderStatus } from "@/types/database.types";
 
 const DEFAULT_DELIVERY_FEE_NOTICE =
   "Your order will be delivered using a motorbike/courier service. The applicable delivery fee will be paid separately on delivery and is not included in the order total.";
@@ -47,6 +47,29 @@ export interface SubmitOrderResult {
   trackingToken: string;
   orderTotal: number;
   replayed: boolean;
+}
+
+export interface TrackedOrderItem {
+  productNameSnapshot: string;
+  requestedAmount: number;
+}
+
+export interface TrackedOrderStatusEvent {
+  toStatus: OrderStatus;
+  changedAt: string;
+}
+
+export interface TrackedOrder {
+  orderNumber: string | null;
+  status: OrderStatus;
+  orderTotal: number;
+  deliveryLocation: string;
+  deliveryPersonName: string | null;
+  deliveryPersonMobile: string | null;
+  cancellationReason: string | null;
+  createdAt: string;
+  items: TrackedOrderItem[];
+  statusHistory: TrackedOrderStatusEvent[];
 }
 
 /**
@@ -122,6 +145,75 @@ export class PublicOrderingService {
         description: p.description,
         imageUrl: p.image_url,
         minimumOrderAmount: Number(p.minimum_order_amount),
+      })),
+    };
+  }
+
+  /**
+   * Phase 2d: the public tracking page (`/order/{slug}/track/{token}`).
+   * Looked up ONLY by the opaque `tracking_token` (migration 0092's own
+   * header comment: "never looked up by a sequential id"), never the
+   * human-facing order number, so this can't be brute-forced by
+   * guessing sequential numbers. Gated on `orders_enabled` only, NOT
+   * `public_ordering_enabled` -- a tenant can pause taking NEW orders
+   * while still letting customers track ones already placed, these are
+   * different concerns. Returns null on any failure (tenant inactive/
+   * module off/token doesn't match), same "no distinguishing not-found
+   * vs disabled" posture as getStorefront -- an invalid token gives no
+   * signal about whether it was ever valid.
+   *
+   * Deliberately omits `changed_by`/actor identity from the status
+   * history and the customer's own name/mobile snapshot from the
+   * returned shape -- this is a public, unauthenticated page, and
+   * internal staff identities have no reason to be visible on it. The
+   * delivery person's name/mobile IS included once dispatched -- the
+   * customer legitimately needs to know who is bringing their order.
+   */
+  async getOrderByTrackingToken(tenantSlug: string, trackingToken: string): Promise<TrackedOrder | null> {
+    const { data: tenant } = await this.supabase.from("tenants").select("id, status").eq("slug", tenantSlug).maybeSingle();
+    if (!tenant || tenant.status !== "active") {
+      return null;
+    }
+
+    const ordersEnabled = await new TenantService(this.supabase).getSetting<boolean>(tenant.id, "orders_enabled");
+    if (!ordersEnabled) {
+      return null;
+    }
+
+    const { data: order } = await this.supabase
+      .from("orders")
+      .select(
+        "order_number, status, order_total, delivery_location, delivery_person_name, delivery_person_mobile, cancellation_reason, created_at, id"
+      )
+      .eq("tenant_id", tenant.id)
+      .eq("tracking_token", trackingToken)
+      .maybeSingle();
+
+    if (!order) {
+      return null;
+    }
+
+    const [{ data: items }, { data: history }] = await Promise.all([
+      this.supabase.from("order_items").select("product_name_snapshot, requested_amount").eq("order_id", order.id),
+      this.supabase.from("order_status_history").select("to_status, changed_at").eq("order_id", order.id).order("changed_at", { ascending: true }),
+    ]);
+
+    return {
+      orderNumber: order.order_number,
+      status: order.status,
+      orderTotal: Number(order.order_total),
+      deliveryLocation: order.delivery_location,
+      deliveryPersonName: order.delivery_person_name,
+      deliveryPersonMobile: order.delivery_person_mobile,
+      cancellationReason: order.cancellation_reason,
+      createdAt: order.created_at,
+      items: (items ?? []).map((i) => ({
+        productNameSnapshot: i.product_name_snapshot,
+        requestedAmount: Number(i.requested_amount),
+      })),
+      statusHistory: (history ?? []).map((h) => ({
+        toStatus: h.to_status,
+        changedAt: h.changed_at,
       })),
     };
   }
