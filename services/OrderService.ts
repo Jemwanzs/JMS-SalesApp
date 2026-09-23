@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { TenantService } from "@/services/TenantService";
+import { rankCustomers, type CustomerTier } from "@/lib/utils/customer-ranking";
 import type { Database, OrderStatus } from "@/types/database.types";
 
 const DEFAULT_RECEIPT_BACKGROUND_COLOR = "#0F7A3D";
@@ -94,10 +95,26 @@ export interface OrderCustomerListItem {
   orderCount: number;
   firstOrderAt: string | null;
   lastOrderAt: string | null;
+  /**
+   * Completed-order performance, ranked via lib/utils/customer-ranking.ts
+   * -- cancelled/rejected/still-in-progress orders never contribute
+   * (spec section 5's own "only successfully Completed Orders" rule).
+   * Computed live at read time (no cached column anywhere on
+   * order_customers), matching this codebase's existing product-
+   * ranking precedent (AnalyticsService.getProductPerformance also
+   * aggregates `sales` fresh on every read).
+   */
+  completedOrderCount: number;
+  completedOrderValue: number;
+  tier: CustomerTier | null;
+  rank: number;
+  isTopCustomer: boolean;
 }
 
 export interface OrderCustomerDetail extends OrderCustomerListItem {
   totalOrdered: number;
+  averageCompletedOrderValue: number;
+  lastCompletedOrderAt: string | null;
   orders: OrderListItem[];
 }
 
@@ -369,22 +386,33 @@ export class OrderService {
     }
   }
 
-  async listCustomers(tenantId: string, search?: string): Promise<OrderCustomerListItem[]> {
+  /**
+   * `dateFrom`/`dateTo` filter by `orders.completed_at` (when the
+   * order's value was actually realized), not `created_at` -- matches
+   * Phase A's own "sale_date = completion date, not creation date"
+   * convention. Omitted = All Time (spec section 9's own default),
+   * matching how every other unfiltered view in this app treats "no
+   * range given" rather than forcing an artificial bound.
+   */
+  async listCustomers(tenantId: string, options: { search?: string; dateFrom?: string; dateTo?: string } = {}): Promise<OrderCustomerListItem[]> {
     let query = this.supabase
       .from("order_customers")
       .select("id, name, mobile_number, default_delivery_location, order_count, first_order_at, last_order_at")
-      .eq("tenant_id", tenantId)
-      .order("last_order_at", { ascending: false });
+      .eq("tenant_id", tenantId);
 
-    if (search) {
-      query = query.or(`name.ilike.%${search}%,mobile_number.ilike.%${search}%`);
+    if (options.search) {
+      query = query.or(`name.ilike.%${options.search}%,mobile_number.ilike.%${options.search}%`);
     }
 
-    const { data, error } = await query;
+    const [{ data, error }, completedTotals] = await Promise.all([
+      query,
+      this.getCompletedOrderTotalsByCustomer(tenantId, options.dateFrom, options.dateTo),
+    ]);
     if (error) {
       throw new Error(`OrderService.listCustomers: ${error.message}`);
     }
-    return (data ?? []).map((c) => ({
+
+    const customers = (data ?? []).map((c) => ({
       id: c.id,
       name: c.name,
       mobileNumber: c.mobile_number,
@@ -393,9 +421,54 @@ export class OrderService {
       firstOrderAt: c.first_order_at,
       lastOrderAt: c.last_order_at,
     }));
+
+    return rankCustomers(customers, completedTotals.valueByCustomerId).map((c) => ({
+      ...c,
+      completedOrderCount: completedTotals.countByCustomerId.get(c.id) ?? 0,
+      completedOrderValue: c.completedValue,
+    }));
   }
 
-  async getCustomerDetail(tenantId: string, customerId: string): Promise<OrderCustomerDetail | null> {
+  /** Shared aggregation behind listCustomers/getCustomerDetail -- one place computing "completed orders only, in this date range, per customer." */
+  private async getCompletedOrderTotalsByCustomer(
+    tenantId: string,
+    dateFrom?: string,
+    dateTo?: string
+  ): Promise<{ valueByCustomerId: Map<string, number>; countByCustomerId: Map<string, number> }> {
+    let query = this.supabase
+      .from("orders")
+      .select("customer_id, order_total")
+      .eq("tenant_id", tenantId)
+      .eq("status", "completed")
+      .not("customer_id", "is", null);
+
+    if (dateFrom) {
+      query = query.gte("completed_at", `${dateFrom}T00:00:00.000Z`);
+    }
+    if (dateTo) {
+      query = query.lte("completed_at", `${dateTo}T23:59:59.999Z`);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      throw new Error(`OrderService.getCompletedOrderTotalsByCustomer: ${error.message}`);
+    }
+
+    const valueByCustomerId = new Map<string, number>();
+    const countByCustomerId = new Map<string, number>();
+    for (const row of data ?? []) {
+      if (!row.customer_id) continue;
+      valueByCustomerId.set(row.customer_id, (valueByCustomerId.get(row.customer_id) ?? 0) + Number(row.order_total));
+      countByCustomerId.set(row.customer_id, (countByCustomerId.get(row.customer_id) ?? 0) + 1);
+    }
+    return { valueByCustomerId, countByCustomerId };
+  }
+
+  async getCustomerDetail(
+    tenantId: string,
+    customerId: string,
+    options: { dateFrom?: string; dateTo?: string } = {}
+  ): Promise<OrderCustomerDetail | null> {
     const { data: customer, error } = await this.supabase
       .from("order_customers")
       .select("id, name, mobile_number, default_delivery_location, order_count, first_order_at, last_order_at")
@@ -410,12 +483,19 @@ export class OrderService {
       return null;
     }
 
-    const { data: orders, error: ordersError } = await this.supabase
-      .from("orders")
-      .select("id, order_number, customer_name_snapshot, customer_mobile_snapshot, delivery_location, order_total, status, created_at")
-      .eq("tenant_id", tenantId)
-      .eq("customer_id", customerId)
-      .order("created_at", { ascending: false });
+    const [{ data: orders, error: ordersError }, rankedCustomers] = await Promise.all([
+      this.supabase
+        .from("orders")
+        .select("id, order_number, customer_name_snapshot, customer_mobile_snapshot, delivery_location, order_total, status, created_at, completed_at")
+        .eq("tenant_id", tenantId)
+        .eq("customer_id", customerId)
+        .order("created_at", { ascending: false }),
+      // Rank/tier are inherently relative to every OTHER customer, not
+      // computable from this one customer's own rows -- reuses
+      // listCustomers' own ranking (same date range), then picks out
+      // just this customer's entry.
+      this.listCustomers(tenantId, { dateFrom: options.dateFrom, dateTo: options.dateTo }),
+    ]);
 
     if (ordersError) {
       throw new Error(`OrderService.getCustomerDetail: ${ordersError.message}`);
@@ -423,6 +503,20 @@ export class OrderService {
 
     const orderList = (orders ?? []).map(toOrderListItem);
     const totalOrdered = orderList.reduce((sum, o) => sum + o.orderTotal, 0);
+
+    const ranked = rankedCustomers.find((c) => c.id === customerId);
+    const completedOrderCount = ranked?.completedOrderCount ?? 0;
+    const completedOrderValue = ranked?.completedOrderValue ?? 0;
+    const averageCompletedOrderValue = completedOrderCount > 0 ? completedOrderValue / completedOrderCount : 0;
+
+    const completedRows = (orders ?? []).filter((o) => {
+      if (o.status !== "completed" || !o.completed_at) return false;
+      if (options.dateFrom && o.completed_at < `${options.dateFrom}T00:00:00.000Z`) return false;
+      if (options.dateTo && o.completed_at > `${options.dateTo}T23:59:59.999Z`) return false;
+      return true;
+    });
+    const lastCompletedOrderAt =
+      completedRows.length > 0 ? completedRows.reduce((latest, o) => (o.completed_at! > latest ? o.completed_at! : latest), completedRows[0].completed_at!) : null;
 
     return {
       id: customer.id,
@@ -432,7 +526,14 @@ export class OrderService {
       orderCount: customer.order_count,
       firstOrderAt: customer.first_order_at,
       lastOrderAt: customer.last_order_at,
+      completedOrderCount,
+      completedOrderValue,
+      tier: ranked?.tier ?? null,
+      rank: ranked?.rank ?? 0,
+      isTopCustomer: ranked?.isTopCustomer ?? false,
       totalOrdered,
+      averageCompletedOrderValue,
+      lastCompletedOrderAt,
       orders: orderList,
     };
   }

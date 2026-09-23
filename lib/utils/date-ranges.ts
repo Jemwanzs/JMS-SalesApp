@@ -14,7 +14,8 @@ export type DatePreset =
   | "this_week"
   | "last_week"
   | "this_month"
-  | "last_month";
+  | "last_month"
+  | "this_year";
 
 export interface DateRange {
   from: string;
@@ -71,6 +72,10 @@ export function resolvePreset(preset: DatePreset, timezone: string): DateRange {
       const start = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1));
       const end = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 0));
       return { from: ymd(start), to: ymd(end) };
+    }
+    case "this_year": {
+      const start = new Date(Date.UTC(today.getUTCFullYear(), 0, 1));
+      return { from: ymd(start), to: ymd(today) };
     }
   }
 }

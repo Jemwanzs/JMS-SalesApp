@@ -701,6 +701,7 @@ export interface Database {
           status: SaleStatus;
           idempotency_key: string;
           reversal_of_sale_id: string | null;
+          source_order_item_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -1352,6 +1353,7 @@ export interface Database {
           cancelled_by: string | null;
           cancelled_at: string | null;
           cancellation_reason: string | null;
+          posted_to_sales: boolean;
           created_at: string;
           updated_at: string;
         };

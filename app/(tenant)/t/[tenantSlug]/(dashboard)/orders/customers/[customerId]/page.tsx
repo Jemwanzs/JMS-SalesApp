@@ -4,6 +4,10 @@ import { notFound, redirect } from "next/navigation";
 import { BackLink } from "@/components/shared/back-link";
 import { WhatsAppButton } from "@/components/shared/whatsapp-button";
 
+import { Collapsible, CollapsibleTrigger, CollapsiblePanel } from "@/components/ui/collapsible";
+import { ChevronDown } from "lucide-react";
+
+import { CustomerTierBadge, TopCustomerStars } from "@/features/orders/components/customer-tier-badge";
 import { OrderStatusBadge } from "@/features/orders/components/order-status-badge";
 import { OrderService } from "@/services/OrderService";
 import { TenantService } from "@/services/TenantService";
@@ -68,6 +72,41 @@ export default async function OrderCustomerDetailPage({
           </div>
         </div>
       </div>
+
+      {/* Collapsed by default (spec section 8: "visible after clicking on the customer to see the collapsed information"). */}
+      <Collapsible className="mb-4 rounded-lg border p-4">
+        <CollapsibleTrigger className="group flex w-full items-center justify-between text-sm font-medium">
+          Customer Performance
+          <ChevronDown className="h-4 w-4 transition-transform group-data-open:rotate-180" />
+        </CollapsibleTrigger>
+        <CollapsiblePanel className="space-y-3 pt-3">
+          {customer.isTopCustomer && <TopCustomerStars className="block text-lg text-amber-500" />}
+          <p className="text-sm">
+            <CustomerTierBadge tier={customer.tier} />
+            {customer.tier && customer.rank > 0 && ` — #${customer.rank}`}
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <p className="text-lg font-semibold">{customer.completedOrderCount}</p>
+              <p className="text-xs text-muted-foreground">Completed Orders</p>
+            </div>
+            <div>
+              <p className="text-lg font-semibold">{customer.completedOrderValue.toFixed(2)}</p>
+              <p className="text-xs text-muted-foreground">Total Ordered</p>
+            </div>
+            <div>
+              <p className="text-lg font-semibold">{customer.averageCompletedOrderValue.toFixed(2)}</p>
+              <p className="text-xs text-muted-foreground">Average Order</p>
+            </div>
+            <div>
+              <p className="text-lg font-semibold">
+                {customer.lastCompletedOrderAt ? new Date(customer.lastCompletedOrderAt).toLocaleDateString() : "—"}
+              </p>
+              <p className="text-xs text-muted-foreground">Last Order</p>
+            </div>
+          </div>
+        </CollapsiblePanel>
+      </Collapsible>
 
       <p className="mb-2 text-sm font-medium">Order history</p>
       {customer.orders.length === 0 ? (
