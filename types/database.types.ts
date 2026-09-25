@@ -1350,6 +1350,8 @@ export interface Database {
           dispatched_at: string | null;
           completed_by: string | null;
           completed_at: string | null;
+          processed_by_employee_id: string | null;
+          processed_from_location_id: string | null;
           cancelled_by: string | null;
           cancelled_at: string | null;
           cancellation_reason: string | null;
@@ -1558,7 +1560,7 @@ export interface Database {
         Returns: Database["public"]["Tables"]["orders"]["Row"];
       };
       complete_order: {
-        Args: { p_order_id: string };
+        Args: { p_order_id: string; p_employee_id: string; p_location_id: string };
         Returns: Database["public"]["Tables"]["orders"]["Row"];
       };
       cancel_order: {

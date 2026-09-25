@@ -8,11 +8,14 @@ import { OrderWhatsAppButton } from "@/features/orders/components/order-whatsapp
 import { OrderStatusBadge, ORDER_STATUS_LABEL } from "@/features/orders/components/order-status-badge";
 import { OrderService } from "@/services/OrderService";
 import { TenantService } from "@/services/TenantService";
+import { UserService } from "@/services/UserService";
 import { buildOrderWhatsAppMessage } from "@/lib/utils/order-whatsapp-messages";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/current-user";
+import { resolveActiveLocationId } from "@/lib/tenant/resolve-active-location";
 import { getTenantBySlug } from "@/lib/tenant/resolve-tenant-by-slug";
+import { resolveUserBranches } from "@/lib/tenant/resolve-user-branches";
 
 export const metadata: Metadata = {
   title: "Order | JMS Sales App",
@@ -45,22 +48,51 @@ export default async function OrderDetailPage({
   }
 
   const tenantService = new TenantService(supabase);
-  const [canView, canViewAll, ordersEnabled, canAttend, canMarkOnDelivery, canComplete, canCancel, canViewReceipts, canDownloadReceipts, settings] =
-    await Promise.all([
-      can("orders.view", { tenantId: tenant.id }),
-      can("orders.view_all", { tenantId: tenant.id }),
-      tenantService.getSetting<boolean>(tenant.id, "orders_enabled"),
-      can("orders.attend", { tenantId: tenant.id }),
-      can("orders.mark_on_delivery", { tenantId: tenant.id }),
-      can("orders.complete", { tenantId: tenant.id }),
-      can("orders.cancel", { tenantId: tenant.id }),
-      can("orders.view_receipts", { tenantId: tenant.id }),
-      can("orders.download_receipts", { tenantId: tenant.id }),
-      tenantService.getSettings(tenant.id, ["order_outlet_name", "whatsapp_message_on_delivery", "whatsapp_message_completed"]),
-    ]);
+  const [
+    canView,
+    canViewAll,
+    ordersEnabled,
+    canAttend,
+    canMarkOnDelivery,
+    canComplete,
+    canCancel,
+    canViewReceipts,
+    canDownloadReceipts,
+    canReassignProcessedBy,
+    settings,
+    branchOptions,
+    activeLocationId,
+    tenantUsers,
+  ] = await Promise.all([
+    can("orders.view", { tenantId: tenant.id }),
+    can("orders.view_all", { tenantId: tenant.id }),
+    tenantService.getSetting<boolean>(tenant.id, "orders_enabled"),
+    can("orders.attend", { tenantId: tenant.id }),
+    can("orders.mark_on_delivery", { tenantId: tenant.id }),
+    can("orders.complete", { tenantId: tenant.id }),
+    can("orders.cancel", { tenantId: tenant.id }),
+    can("orders.view_receipts", { tenantId: tenant.id }),
+    can("orders.download_receipts", { tenantId: tenant.id }),
+    can("orders.reassign_processed_by", { tenantId: tenant.id }),
+    tenantService.getSettings(tenant.id, ["order_outlet_name", "whatsapp_message_on_delivery", "whatsapp_message_completed"]),
+    // Order Processing -- Employee & Branch Attribution: the "Processed
+    // From Branch" dropdown is scoped to the exact same branches the
+    // Multi-Branch User Access model already lets this actor operate
+    // in (resolveUserBranches -- tenant-wide null assignment = every
+    // branch, otherwise only their own), reused rather than inventing
+    // a second permission for branch selection. complete_order()
+    // independently re-validates this server-side -- this is only for
+    // populating the dropdown.
+    resolveUserBranches(supabase, tenant.id, user.id),
+    resolveActiveLocationId(supabase, tenant.id),
+    new UserService(supabase).listUsers(tenant.id, user.id),
+  ]);
   if (!ordersEnabled || (!canView && !canViewAll)) {
     redirect(`/t/${tenantSlug}/more`);
   }
+  const employeeOptions = tenantUsers
+    .filter((u) => u.status === "active")
+    .map((u) => ({ id: u.profileId, name: u.fullName ?? u.email, locationIds: u.locationIds }));
 
   const orderService = new OrderService(supabase);
 
@@ -189,6 +221,19 @@ export default async function OrderDetailPage({
         </div>
       )}
 
+      {order.status === "completed" && (order.processedByEmployeeName || order.processedFromLocationName) && (
+        <div className="mb-4 space-y-1 rounded-lg border p-4">
+          <p className="text-sm font-medium">Processed by</p>
+          <p className="text-sm text-muted-foreground">
+            {order.processedByEmployeeName ?? "—"}
+            {order.processedFromLocationName ? ` · ${order.processedFromLocationName}` : ""}
+          </p>
+          {order.completedByName && order.completedByName !== order.processedByEmployeeName && (
+            <p className="text-xs text-muted-foreground">Completed by {order.completedByName}</p>
+          )}
+        </div>
+      )}
+
       <div className="mb-4">
         <OrderActionPanel
           tenantSlug={tenantSlug}
@@ -198,6 +243,11 @@ export default async function OrderDetailPage({
           canMarkOnDelivery={canMarkOnDelivery}
           canComplete={canComplete}
           canCancel={canCancel}
+          currentUserId={user.id}
+          canReassignProcessedBy={canReassignProcessedBy}
+          branchOptions={branchOptions}
+          defaultLocationId={activeLocationId}
+          employeeOptions={employeeOptions}
         />
       </div>
 

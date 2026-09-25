@@ -9,7 +9,7 @@ const DEFAULT_RECEIPT_TEXT_COLOR = "#FFFFFF";
 const DEFAULT_RECEIPT_FOOTER_MESSAGE = "Thank you for ordering with us. We appreciate your business.";
 
 const ORDER_SELECT =
-  "id, tenant_id, order_number, tracking_token, customer_id, customer_name_snapshot, customer_mobile_snapshot, delivery_location, delivery_directions, order_notes, order_total, status, attended_by, attended_at, delivery_person_name, delivery_person_mobile, delivery_notes, dispatched_at, completed_by, completed_at, cancelled_by, cancelled_at, cancellation_reason, created_at, updated_at";
+  "id, tenant_id, order_number, tracking_token, customer_id, customer_name_snapshot, customer_mobile_snapshot, delivery_location, delivery_directions, order_notes, order_total, status, attended_by, attended_at, delivery_person_name, delivery_person_mobile, delivery_notes, dispatched_at, completed_by, completed_at, processed_by_employee_id, processed_from_location_id, cancelled_by, cancelled_at, cancellation_reason, created_at, updated_at";
 
 export interface OrderListItem {
   id: string;
@@ -70,6 +70,10 @@ export interface OrderDetail {
   completedBy: string | null;
   completedByName: string | null;
   completedAt: string | null;
+  processedByEmployeeId: string | null;
+  processedByEmployeeName: string | null;
+  processedFromLocationId: string | null;
+  processedFromLocationName: string | null;
   cancelledBy: string | null;
   cancelledByName: string | null;
   cancelledAt: string | null;
@@ -84,6 +88,8 @@ export interface OrderFilters {
   dateFrom?: string;
   dateTo?: string;
   search?: string; // matches order_number or customer_name_snapshot
+  locationId?: string; // processed_from_location_id -- branch performance filter
+  employeeId?: string; // processed_by_employee_id -- employee performance filter
   limit?: number;
 }
 
@@ -229,6 +235,12 @@ export class OrderService {
     if (filters.search) {
       query = query.or(`order_number.ilike.%${filters.search}%,customer_name_snapshot.ilike.%${filters.search}%`);
     }
+    if (filters.locationId) {
+      query = query.eq("processed_from_location_id", filters.locationId);
+    }
+    if (filters.employeeId) {
+      query = query.eq("processed_by_employee_id", filters.employeeId);
+    }
 
     const { data, error } = await query;
     if (error) {
@@ -278,16 +290,23 @@ export class OrderService {
     if (order.attended_by) actorIds.add(order.attended_by);
     if (order.completed_by) actorIds.add(order.completed_by);
     if (order.cancelled_by) actorIds.add(order.cancelled_by);
+    if (order.processed_by_employee_id) actorIds.add(order.processed_by_employee_id);
     for (const h of history ?? []) {
       if (h.changed_by) actorIds.add(h.changed_by);
     }
 
+    const [{ data: profiles }, { data: location }] = await Promise.all([
+      actorIds.size > 0
+        ? this.supabase.from("profiles").select("id, full_name").in("id", [...actorIds])
+        : Promise.resolve({ data: [] as { id: string; full_name: string | null }[] }),
+      order.processed_from_location_id
+        ? this.supabase.from("locations").select("name").eq("id", order.processed_from_location_id).maybeSingle()
+        : Promise.resolve({ data: null as { name: string } | null }),
+    ]);
+
     const nameById = new Map<string, string>();
-    if (actorIds.size > 0) {
-      const { data: profiles } = await this.supabase.from("profiles").select("id, full_name").in("id", [...actorIds]);
-      for (const p of profiles ?? []) {
-        if (p.full_name) nameById.set(p.id, p.full_name);
-      }
+    for (const p of profiles ?? []) {
+      if (p.full_name) nameById.set(p.id, p.full_name);
     }
 
     return {
@@ -312,6 +331,10 @@ export class OrderService {
       completedBy: order.completed_by,
       completedByName: order.completed_by ? (nameById.get(order.completed_by) ?? null) : null,
       completedAt: order.completed_at,
+      processedByEmployeeId: order.processed_by_employee_id,
+      processedByEmployeeName: order.processed_by_employee_id ? (nameById.get(order.processed_by_employee_id) ?? null) : null,
+      processedFromLocationId: order.processed_from_location_id,
+      processedFromLocationName: location?.name ?? null,
       cancelledBy: order.cancelled_by,
       cancelledByName: order.cancelled_by ? (nameById.get(order.cancelled_by) ?? null) : null,
       cancelledAt: order.cancelled_at,
@@ -372,8 +395,12 @@ export class OrderService {
     }
   }
 
-  async completeOrder(orderId: string): Promise<void> {
-    const { error } = await this.supabase.rpc("complete_order", { p_order_id: orderId });
+  async completeOrder(orderId: string, employeeId: string, locationId: string): Promise<void> {
+    const { error } = await this.supabase.rpc("complete_order", {
+      p_order_id: orderId,
+      p_employee_id: employeeId,
+      p_location_id: locationId,
+    });
     if (error) {
       throw new Error(`OrderService.completeOrder: ${error.message}`);
     }

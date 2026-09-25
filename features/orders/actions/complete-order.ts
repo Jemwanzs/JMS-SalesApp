@@ -14,7 +14,13 @@ export interface CompleteOrderState {
   success?: boolean;
 }
 
-export async function completeOrderAction(tenantId: string, tenantSlug: string, orderId: string): Promise<CompleteOrderState> {
+export async function completeOrderAction(
+  tenantId: string,
+  tenantSlug: string,
+  orderId: string,
+  employeeId: string,
+  locationId: string
+): Promise<CompleteOrderState> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -22,11 +28,14 @@ export async function completeOrderAction(tenantId: string, tenantSlug: string, 
   if (!user) {
     return { error: "Not signed in" };
   }
+  if (!employeeId || !locationId) {
+    return { error: "Select the employee and branch who processed this order" };
+  }
 
   try {
     await assertCan("orders.complete", { tenantId });
 
-    await new OrderService(supabase).completeOrder(orderId);
+    await new OrderService(supabase).completeOrder(orderId, employeeId, locationId);
 
     await new AuditService(createServiceRoleClient())
       .log({

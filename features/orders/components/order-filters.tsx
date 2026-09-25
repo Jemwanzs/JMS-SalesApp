@@ -6,7 +6,13 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { OrderStatus } from "@/types/database.types";
+
+interface FilterOption {
+  id: string;
+  name: string;
+}
 
 const STATUS_TABS: { value: OrderStatus | ""; label: string }[] = [
   { value: "", label: "All" },
@@ -20,10 +26,25 @@ const STATUS_TABS: { value: OrderStatus | ""; label: string }[] = [
 /**
  * window.location.assign, not router.push -- this codebase's own
  * standing bug for search-param-only, same-pathname navigations (see
- * ExpenseFilters' identical header comment). Deliberately lighter than
- * ExpenseFilters: Orders has no branch/category dimension to filter by.
+ * ExpenseFilters' identical header comment).
+ *
+ * Order Processing -- Employee & Branch Attribution: branch/employee
+ * are additive filter dimensions on top of the original status/date/
+ * search set, satisfying the spec's "available for ... branch/
+ * employee performance reporting" requirement without a separate
+ * report page -- filtering this same list by processed_from_location_id/
+ * processed_by_employee_id already answers "how did branch X / employee
+ * Y perform," combined with the existing order totals.
  */
-export function OrderFilters({ maxDate }: { maxDate: string }) {
+export function OrderFilters({
+  maxDate,
+  branchOptions,
+  employeeOptions,
+}: {
+  maxDate: string;
+  branchOptions: FilterOption[];
+  employeeOptions: FilterOption[];
+}) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [isPending, setIsPending] = useState(false);
@@ -32,8 +53,10 @@ export function OrderFilters({ maxDate }: { maxDate: string }) {
   const [q, setQ] = useState(searchParams.get("q") ?? "");
   const [dateFrom, setDateFrom] = useState(searchParams.get("dateFrom") ?? "");
   const [dateTo, setDateTo] = useState(searchParams.get("dateTo") ?? "");
+  const [branchId, setBranchId] = useState(searchParams.get("branchId") ?? "");
+  const [employeeId, setEmployeeId] = useState(searchParams.get("employeeId") ?? "");
 
-  const hasAnyFilter = Boolean(status || q || dateFrom || dateTo);
+  const hasAnyFilter = Boolean(status || q || dateFrom || dateTo || branchId || employeeId);
 
   function navigate(params: URLSearchParams) {
     setIsPending(true);
@@ -42,7 +65,7 @@ export function OrderFilters({ maxDate }: { maxDate: string }) {
 
   function buildParams(overrides: Record<string, string | null>) {
     const params = new URLSearchParams();
-    const current: Record<string, string | null> = { status, q, dateFrom, dateTo, ...overrides };
+    const current: Record<string, string | null> = { status, q, dateFrom, dateTo, branchId, employeeId, ...overrides };
     for (const [key, value] of Object.entries(current)) {
       if (value) params.set(key, value);
     }
@@ -62,6 +85,8 @@ export function OrderFilters({ maxDate }: { maxDate: string }) {
     setQ("");
     setDateFrom("");
     setDateTo("");
+    setBranchId("");
+    setEmployeeId("");
     setIsPending(true);
     window.location.assign(pathname);
   }
@@ -110,6 +135,59 @@ export function OrderFilters({ maxDate }: { maxDate: string }) {
             <Input id="order-date-to" type="date" max={maxDate} value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
           </div>
         </div>
+
+        {(branchOptions.length > 0 || employeeOptions.length > 0) && (
+          <div className="grid grid-cols-2 gap-2">
+            {branchOptions.length > 0 && (
+              <div className="space-y-1">
+                <Label htmlFor="order-branch" className="text-xs">
+                  Branch
+                </Label>
+                <Select
+                  items={[{ value: "", label: "All branches" }, ...branchOptions.map((b) => ({ value: b.id, label: b.name }))]}
+                  value={branchId}
+                  onValueChange={(value) => setBranchId(value ?? "")}
+                >
+                  <SelectTrigger id="order-branch" className="w-full">
+                    <SelectValue placeholder="All branches" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">All branches</SelectItem>
+                    {branchOptions.map((b) => (
+                      <SelectItem key={b.id} value={b.id}>
+                        {b.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {employeeOptions.length > 0 && (
+              <div className="space-y-1">
+                <Label htmlFor="order-employee" className="text-xs">
+                  Employee
+                </Label>
+                <Select
+                  items={[{ value: "", label: "All employees" }, ...employeeOptions.map((e) => ({ value: e.id, label: e.name }))]}
+                  value={employeeId}
+                  onValueChange={(value) => setEmployeeId(value ?? "")}
+                >
+                  <SelectTrigger id="order-employee" className="w-full">
+                    <SelectValue placeholder="All employees" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">All employees</SelectItem>
+                    {employeeOptions.map((e) => (
+                      <SelectItem key={e.id} value={e.id}>
+                        {e.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="flex gap-2">
           <Button type="submit" size="sm" disabled={isPending}>

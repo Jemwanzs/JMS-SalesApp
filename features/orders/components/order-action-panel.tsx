@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
@@ -10,7 +10,19 @@ import { markOrderOnDeliveryAction } from "@/features/orders/actions/mark-on-del
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { OrderStatus } from "@/types/database.types";
+
+interface BranchOption {
+  id: string;
+  name: string;
+}
+
+interface EmployeeOption {
+  id: string;
+  name: string;
+  locationIds: string[] | null;
+}
 
 const TEXTAREA_CLASSNAME =
   "w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-base transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm dark:bg-input/30";
@@ -33,6 +45,11 @@ export function OrderActionPanel({
   canMarkOnDelivery,
   canComplete,
   canCancel,
+  currentUserId,
+  canReassignProcessedBy,
+  branchOptions,
+  defaultLocationId,
+  employeeOptions,
 }: {
   tenantSlug: string;
   tenantId: string;
@@ -41,6 +58,11 @@ export function OrderActionPanel({
   canMarkOnDelivery: boolean;
   canComplete: boolean;
   canCancel: boolean;
+  currentUserId: string;
+  canReassignProcessedBy: boolean;
+  branchOptions: BranchOption[];
+  defaultLocationId: string | null;
+  employeeOptions: EmployeeOption[];
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -50,6 +72,26 @@ export function OrderActionPanel({
   const [deliveryPersonMobile, setDeliveryPersonMobile] = useState("");
   const [deliveryNotes, setDeliveryNotes] = useState("");
   const [cancelReason, setCancelReason] = useState("");
+
+  // Order Processing -- Employee & Branch Attribution: pre-select the
+  // actor's own active branch (falling back to their first selectable
+  // one -- e.g. a session that predates active_branch_sessions) and
+  // themselves as the employee, matching the spec's "default to the
+  // currently logged-in user where appropriate."
+  const [processedLocationId, setProcessedLocationId] = useState(defaultLocationId ?? branchOptions[0]?.id ?? "");
+  const [processedEmployeeId, setProcessedEmployeeId] = useState(currentUserId);
+
+  // Scoped to the currently-selected branch (tenant-wide null
+  // assignment = eligible everywhere) -- re-filters live as the branch
+  // changes, no extra round trip. complete_order() independently
+  // re-validates this server-side.
+  const eligibleEmployees = useMemo(
+    () => employeeOptions.filter((e) => e.locationIds === null || e.locationIds.includes(processedLocationId)),
+    [employeeOptions, processedLocationId]
+  );
+  const selectableEmployees = canReassignProcessedBy
+    ? eligibleEmployees
+    : eligibleEmployees.filter((e) => e.id === currentUserId);
 
   function submitMarkOnDelivery(e: React.FormEvent) {
     e.preventDefault();
@@ -77,8 +119,12 @@ export function OrderActionPanel({
 
   function submitComplete() {
     setError(null);
+    if (!processedEmployeeId || !processedLocationId) {
+      setError("Select the employee and branch who processed this order");
+      return;
+    }
     startTransition(async () => {
-      const result = await completeOrderAction(tenantId, tenantSlug, orderId);
+      const result = await completeOrderAction(tenantId, tenantSlug, orderId, processedEmployeeId, processedLocationId);
       if (result.error) {
         setError(result.error);
         return;
@@ -86,6 +132,15 @@ export function OrderActionPanel({
       toast.success("Order completed");
       router.refresh();
     });
+  }
+
+  function onBranchChange(locationId: string) {
+    setProcessedLocationId(locationId);
+    const current = employeeOptions.find((e) => e.id === processedEmployeeId);
+    const stillEligible = current && (current.locationIds === null || current.locationIds.includes(locationId));
+    if (!stillEligible) {
+      setProcessedEmployeeId(currentUserId);
+    }
   }
 
   function submitCancel(e: React.FormEvent) {
@@ -141,7 +196,54 @@ export function OrderActionPanel({
       {status === "on_delivery" && canComplete && !showCancelForm && (
         <div className="space-y-3">
           <p className="text-sm font-medium">This order is out for delivery.</p>
-          <Button type="button" onClick={submitComplete} disabled={isPending} className="w-full">
+
+          <div className="space-y-2">
+            <Label htmlFor="processed-branch">Processed from branch</Label>
+            <Select
+              items={branchOptions.map((b) => ({ value: b.id, label: b.name }))}
+              value={processedLocationId}
+              onValueChange={(value) => onBranchChange(value ?? "")}
+            >
+              <SelectTrigger id="processed-branch" className="w-full">
+                <SelectValue placeholder="Select branch" />
+              </SelectTrigger>
+              <SelectContent>
+                {branchOptions.map((b) => (
+                  <SelectItem key={b.id} value={b.id}>
+                    {b.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="processed-employee">Processed by</Label>
+            <Select
+              items={selectableEmployees.map((e) => ({ value: e.id, label: e.name }))}
+              value={processedEmployeeId}
+              onValueChange={(value) => setProcessedEmployeeId(value ?? "")}
+              disabled={!canReassignProcessedBy}
+            >
+              <SelectTrigger id="processed-employee" className="w-full">
+                <SelectValue placeholder="Select employee" />
+              </SelectTrigger>
+              <SelectContent>
+                {selectableEmployees.map((e) => (
+                  <SelectItem key={e.id} value={e.id}>
+                    {e.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <Button
+            type="button"
+            onClick={submitComplete}
+            disabled={isPending || !processedEmployeeId || !processedLocationId}
+            className="w-full"
+          >
             {isPending ? "Saving..." : "Mark as completed"}
           </Button>
         </div>

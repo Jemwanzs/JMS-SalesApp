@@ -7,7 +7,9 @@ import { OrderFilters } from "@/features/orders/components/order-filters";
 import { OrderStatusBadge } from "@/features/orders/components/order-status-badge";
 import { OrderWhatsAppButton } from "@/features/orders/components/order-whatsapp-button";
 import { OrderService, type OrderFilters as OrderFiltersInput } from "@/services/OrderService";
+import { LocationService } from "@/services/LocationService";
 import { TenantService } from "@/services/TenantService";
+import { UserService } from "@/services/UserService";
 import { buildOrderWhatsAppMessage } from "@/lib/utils/order-whatsapp-messages";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
@@ -41,7 +43,7 @@ export default async function OrdersDashboardPage({
   searchParams,
 }: {
   params: Promise<{ tenantSlug: string }>;
-  searchParams: Promise<{ status?: string; q?: string; dateFrom?: string; dateTo?: string }>;
+  searchParams: Promise<{ status?: string; q?: string; dateFrom?: string; dateTo?: string; branchId?: string; employeeId?: string }>;
 }) {
   const { tenantSlug } = await params;
   const query = await searchParams;
@@ -56,17 +58,29 @@ export default async function OrdersDashboardPage({
   }
 
   const tenantService = new TenantService(supabase);
-  const [canView, canViewAll, ordersEnabled, canDownloadReceipts, settings] = await Promise.all([
+  const [canView, canViewAll, ordersEnabled, canDownloadReceipts, settings, allLocations, tenantUsers] = await Promise.all([
     can("orders.view", { tenantId: tenant.id }),
     can("orders.view_all", { tenantId: tenant.id }),
     tenantService.getSetting<boolean>(tenant.id, "orders_enabled"),
     can("orders.download_receipts", { tenantId: tenant.id }),
     tenantService.getSettings(tenant.id, ["order_outlet_name", "whatsapp_message_on_delivery", "whatsapp_message_completed"]),
+    // Order Processing -- Employee & Branch Attribution: filter option
+    // lists for the Orders dashboard's branch/employee performance
+    // filters -- every active branch/member, not scoped to the
+    // viewer's own operating branch, since anyone who can already see
+    // every order (orders.view_all) should be able to filter by any
+    // of them.
+    new LocationService(supabase).listLocations(tenant.id),
+    new UserService(supabase).listUsers(tenant.id, user.id),
   ]);
   if (!ordersEnabled || (!canView && !canViewAll)) {
     redirect(`/t/${tenantSlug}/more`);
   }
   const outletName = (settings.order_outlet_name as string | undefined) || tenant.name;
+  const branchOptions = allLocations.filter((l) => l.status === "active").map((l) => ({ id: l.id, name: l.name }));
+  const employeeOptions = tenantUsers
+    .filter((u) => u.status === "active")
+    .map((u) => ({ id: u.profileId, name: u.fullName ?? u.email }));
 
   const orderService = new OrderService(supabase);
 
@@ -75,6 +89,8 @@ export default async function OrdersDashboardPage({
     search: query.q || undefined,
     dateFrom: query.dateFrom ? `${query.dateFrom}T00:00:00.000Z` : undefined,
     dateTo: query.dateTo ? `${query.dateTo}T23:59:59.999Z` : undefined,
+    locationId: query.branchId || undefined,
+    employeeId: query.employeeId || undefined,
   };
 
   const [counts, orders] = await Promise.all([orderService.getCounts(tenant.id), orderService.listOrders(tenant.id, filters)]);
@@ -102,7 +118,7 @@ export default async function OrdersDashboardPage({
         ))}
       </div>
 
-      <OrderFilters maxDate={today} />
+      <OrderFilters maxDate={today} branchOptions={branchOptions} employeeOptions={employeeOptions} />
 
       {orders.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center p-8 text-center">
