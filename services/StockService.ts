@@ -264,8 +264,17 @@ export class StockService {
     return data ? Number(data.balance) : 0;
   }
 
-  /** Every tracked product, joined against its current balance (0 for a product with no movements yet). */
-  async listBalances(tenantId: string): Promise<StockBalanceRow[]> {
+  /**
+   * Every tracked product, joined against its current balance (0 for a
+   * product with no movements yet). `locationId` sums only that
+   * branch's stock_balances rows instead of every location -- most
+   * existing balances carry a null location_id (per-branch stock
+   * tracking has never actually been used in most tenants, migration
+   * 0051's own header comment), so a specific-branch filter here can
+   * legitimately show near-zero until real per-branch movements exist;
+   * that's a pre-existing data-shape gap, not a bug in this filter.
+   */
+  async listBalances(tenantId: string, locationId?: string | null): Promise<StockBalanceRow[]> {
     const { data: products, error: productsError } = await this.supabase
       .from("products")
       .select("id, name, image_url, unit_of_measure, low_stock_threshold")
@@ -278,7 +287,7 @@ export class StockService {
     }
     if (!products || products.length === 0) return [];
 
-    const { data: balances, error: balancesError } = await this.supabase
+    let balancesQuery = this.supabase
       .from("stock_balances")
       .select("product_id, location_id, balance")
       .eq("tenant_id", tenantId)
@@ -286,6 +295,10 @@ export class StockService {
         "product_id",
         products.map((p) => p.id)
       );
+    if (locationId) {
+      balancesQuery = balancesQuery.eq("location_id", locationId);
+    }
+    const { data: balances, error: balancesError } = await balancesQuery;
 
     if (balancesError) {
       throw new Error(`StockService.listBalances: ${balancesError.message}`);
@@ -334,8 +347,8 @@ export class StockService {
     }));
   }
 
-  async listLowStock(tenantId: string): Promise<StockBalanceRow[]> {
-    const balances = await this.listBalances(tenantId);
+  async listLowStock(tenantId: string, locationId?: string | null): Promise<StockBalanceRow[]> {
+    const balances = await this.listBalances(tenantId, locationId);
     return balances.filter((b) => b.lowStockThreshold !== null && b.balance <= b.lowStockThreshold);
   }
 
@@ -465,13 +478,17 @@ export class StockService {
    * inventory.view), same reasoning AnalyticsService.getProductRevenueTotals
    * already uses for a tenant-wide read.
    */
-  async getMovementTrend(tenantId: string, range: DateRangeInput): Promise<DailyMovementPoint[]> {
-    const { data, error } = await this.supabase
+  async getMovementTrend(tenantId: string, range: DateRangeInput, locationId?: string | null): Promise<DailyMovementPoint[]> {
+    let query = this.supabase
       .from("stock_movements")
       .select("quantity, occurred_on")
       .eq("tenant_id", tenantId)
       .gte("occurred_on", range.from)
       .lte("occurred_on", range.to);
+    if (locationId) {
+      query = query.eq("location_id", locationId);
+    }
+    const { data, error } = await query;
 
     if (error) {
       throw new Error(`StockService.getMovementTrend: ${error.message}`);
@@ -489,6 +506,85 @@ export class StockService {
     return [...byDate.entries()]
       .map(([date, agg]) => ({ date, ...agg }))
       .sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  /**
+   * Branch Performance's Stock tab: received/sold/adjusted TOTALS over
+   * an arbitrary range (unlike getDailyOverviewSummary, which is a
+   * single-date snapshot) -- same movement_type categorization that
+   * method already established, just summed across the whole range
+   * instead of split into opening/on-date.
+   */
+  async getMovementTotals(
+    tenantId: string,
+    range: DateRangeInput,
+    locationId?: string | null
+  ): Promise<{ received: number; sold: number; adjusted: number }> {
+    let query = this.supabase
+      .from("stock_movements")
+      .select("movement_type, quantity")
+      .eq("tenant_id", tenantId)
+      .gte("occurred_on", range.from)
+      .lte("occurred_on", range.to);
+    if (locationId) {
+      query = query.eq("location_id", locationId);
+    }
+    const { data, error } = await query;
+    if (error) {
+      throw new Error(`StockService.getMovementTotals: ${error.message}`);
+    }
+
+    const NEW_TYPES = new Set(["opening_stock", "stock_in"]);
+    const SOLD_TYPES = new Set(["sale", "stock_out"]);
+    const ADJUSTED_TYPES = new Set(["adjustment_increase", "adjustment_decrease", "damaged", "expired", "lost", "reconciliation_variance"]);
+
+    let received = 0;
+    let sold = 0;
+    let adjusted = 0;
+    for (const m of data ?? []) {
+      const qty = Number(m.quantity);
+      if (NEW_TYPES.has(m.movement_type)) received += qty;
+      else if (SOLD_TYPES.has(m.movement_type)) sold += -qty;
+      else if (ADJUSTED_TYPES.has(m.movement_type)) adjusted += Math.abs(qty);
+    }
+    return { received, sold, adjusted };
+  }
+
+  /** Products with the most total movement volume (in + out, absolute) over the range -- "Top-Moving Products." */
+  async getTopMovingProducts(
+    tenantId: string,
+    range: DateRangeInput,
+    locationId?: string | null,
+    limit = 10
+  ): Promise<{ productId: string; name: string; totalMovedQuantity: number }[]> {
+    let query = this.supabase
+      .from("stock_movements")
+      .select("product_id, quantity")
+      .eq("tenant_id", tenantId)
+      .gte("occurred_on", range.from)
+      .lte("occurred_on", range.to);
+    if (locationId) {
+      query = query.eq("location_id", locationId);
+    }
+    const { data, error } = await query;
+    if (error) {
+      throw new Error(`StockService.getTopMovingProducts: ${error.message}`);
+    }
+    if (!data || data.length === 0) return [];
+
+    const byProduct = new Map<string, number>();
+    for (const m of data) {
+      byProduct.set(m.product_id, (byProduct.get(m.product_id) ?? 0) + Math.abs(Number(m.quantity)));
+    }
+
+    const productIds = [...byProduct.keys()];
+    const { data: products } = await this.supabase.from("products").select("id, name").in("id", productIds);
+    const nameById = new Map((products ?? []).map((p) => [p.id, p.name]));
+
+    return [...byProduct.entries()]
+      .map(([productId, totalMovedQuantity]) => ({ productId, name: nameById.get(productId) ?? "(deleted product)", totalMovedQuantity }))
+      .sort((a, b) => b.totalMovedQuantity - a.totalMovedQuantity)
+      .slice(0, limit);
   }
 
   /** Reconciliations with a real variance in range, biggest discrepancy first -- the actionable list. */
@@ -548,7 +644,7 @@ export class StockService {
    * occurred_on < date vs = date" approach, just aggregated across every
    * tracked product instead of one.
    */
-  async getDailyOverviewSummary(tenantId: string, date: string): Promise<StockDailyOverviewSummary> {
+  async getDailyOverviewSummary(tenantId: string, date: string, locationId?: string | null): Promise<StockDailyOverviewSummary> {
     const empty: StockDailyOverviewSummary = {
       date,
       productsTracked: 0,
@@ -589,11 +685,15 @@ export class StockService {
 
     // Live-only: current balance and low/out-of-stock counts, unaffected
     // by whichever date is selected -- "how much do I have right now."
-    const { data: balances, error: balancesError } = await this.supabase
+    let balancesQuery = this.supabase
       .from("stock_balances")
       .select("product_id, balance")
       .eq("tenant_id", tenantId)
       .in("product_id", productIds);
+    if (locationId) {
+      balancesQuery = balancesQuery.eq("location_id", locationId);
+    }
+    const { data: balances, error: balancesError } = await balancesQuery;
 
     if (balancesError) {
       throw new Error(`StockService.getDailyOverviewSummary: ${balancesError.message}`);
@@ -618,12 +718,16 @@ export class StockService {
 
     // Date-scoped: every movement up to and including `date`, split into
     // "before" (opening balance) and "on this date" (new/sold/adjusted).
-    const { data: movements, error: movementsError } = await this.supabase
+    let movementsQuery = this.supabase
       .from("stock_movements")
       .select("movement_type, quantity, unit_price_snapshot, occurred_on")
       .eq("tenant_id", tenantId)
       .in("product_id", productIds)
       .lte("occurred_on", date);
+    if (locationId) {
+      movementsQuery = movementsQuery.eq("location_id", locationId);
+    }
+    const { data: movements, error: movementsError } = await movementsQuery;
 
     if (movementsError) {
       throw new Error(`StockService.getDailyOverviewSummary: ${movementsError.message}`);
@@ -675,7 +779,7 @@ export class StockService {
     const closingStockValue = openingStockValue + newStockValue - soldValue + adjustedValue;
     const expectedSalesValue = openingStockValue + newStockValue;
 
-    const { data: sales, error: salesError } = await this.supabase
+    let salesQuery = this.supabase
       .from("sales")
       .select("actual_amount")
       .eq("tenant_id", tenantId)
@@ -684,6 +788,10 @@ export class StockService {
       .neq("status", "corrected")
       .neq("status", "deleted")
       .eq("sale_date", date);
+    if (locationId) {
+      salesQuery = salesQuery.eq("location_id", locationId);
+    }
+    const { data: sales, error: salesError } = await salesQuery;
 
     if (salesError) {
       throw new Error(`StockService.getDailyOverviewSummary: ${salesError.message}`);

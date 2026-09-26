@@ -11,10 +11,17 @@ import { KpiTileGrid } from "@/features/branch-performance/components/kpi-tile-g
 import { OrderTrendChartLazy } from "@/features/branch-performance/components/order-trend-chart-lazy";
 import { SimpleBreakdownList } from "@/features/branch-performance/components/simple-breakdown-list";
 import { resolveBranchScope } from "@/features/branch-performance/lib/resolve-branch-scope";
+import { ExpenseBreakdownList } from "@/features/expenses/components/expense-breakdown-list";
+import { ExpenseTrendChartLazy } from "@/features/expenses/components/expense-trend-chart-lazy";
+import { LowStockList } from "@/features/stock/components/low-stock-list";
+import { StockMovementChartLazy } from "@/features/stock/components/stock-movement-chart-lazy";
 import { AnalyticsService, type AnalyticsPermissions } from "@/services/AnalyticsService";
+import { ExpenseService } from "@/services/ExpenseService";
 import { OrderService } from "@/services/OrderService";
+import { StockService } from "@/services/StockService";
 import { TenantService } from "@/services/TenantService";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { getInventoryEntitlement } from "@/lib/inventory/entitlement";
 import { can } from "@/lib/permissions/can";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
@@ -40,12 +47,14 @@ const VALID_PRESETS: DatePreset[] = ["today", "yesterday", "this_week", "last_mo
  * view_analytics/inventory.view/orders.view_analytics) -- this page
  * builds no new per-tab permissions.
  *
- * Phase 1: only the Orders tab is wired (architecturally simplest --
- * no location-based RLS restriction on `orders` at all, unlike Sales/
- * Stock which need a service-role read for the cross-branch case,
- * landing in later phases). The Tabs shell already supports more than
- * one trigger; later phases just add TabsTrigger/TabsContent pairs
- * here, nothing about this structure needs to change.
+ * All four tabs are wired: Orders and Expenses use the normal RLS-
+ * respecting client (neither table has a current-branch-only lock --
+ * Orders by design, Expenses via its own real expenses.view_all cross-
+ * branch support). Sales and Stock both hit the SAME `current_active_
+ * location()`-only RLS lock (migrations 0051/0066), so both construct
+ * their service with a service-role client whenever the caller holds
+ * analytics.branch_performance -- see the inline comment at each
+ * client construction for the full reasoning.
  */
 export default async function BranchPerformancePage({
   params,
@@ -77,6 +86,10 @@ export default async function BranchPerformancePage({
     analyticsProducts,
     analyticsAllUsers,
     analyticsEnabled,
+    canViewExpensesTab,
+    expensesEnabled,
+    canViewStockTab,
+    inventoryEntitlement,
   ] = await Promise.all([
     can("analytics.branch_performance", { tenantId: tenant.id }),
     can("orders.view_analytics", { tenantId: tenant.id }),
@@ -87,6 +100,10 @@ export default async function BranchPerformancePage({
     can("analytics.products", { tenantId: tenant.id }),
     can("analytics.all_users", { tenantId: tenant.id }),
     tenantService.getSetting<boolean>(tenant.id, "analytics_enabled"),
+    can("expenses.view_analytics", { tenantId: tenant.id }),
+    tenantService.getSetting<boolean>(tenant.id, "expenses_enabled"),
+    can("inventory.view", { tenantId: tenant.id }),
+    getInventoryEntitlement(tenant.id),
   ]);
   if (!canViewModule) {
     redirect(`/t/${tenantSlug}/more`);
@@ -107,8 +124,16 @@ export default async function BranchPerformancePage({
 
   const showOrdersTab = canViewOrdersTab && ordersEnabled !== false;
   const showSalesTab = analyticsEnabled !== false;
-  const availableTabs = [...(showSalesTab ? ["sales" as const] : []), ...(showOrdersTab ? ["orders" as const] : [])];
-  const activeTab = availableTabs.includes(query.tab as "sales" | "orders") ? (query.tab as "sales" | "orders") : availableTabs[0];
+  const showExpensesTab = canViewExpensesTab && expensesEnabled !== false;
+  const showStockTab = canViewStockTab && inventoryEntitlement.enabled;
+  type TabKey = "sales" | "expenses" | "stock" | "orders";
+  const availableTabs: TabKey[] = [
+    ...(showSalesTab ? (["sales"] as const) : []),
+    ...(showExpensesTab ? (["expenses"] as const) : []),
+    ...(showStockTab ? (["stock"] as const) : []),
+    ...(showOrdersTab ? (["orders"] as const) : []),
+  ];
+  const activeTab = availableTabs.includes(query.tab as TabKey) ? (query.tab as TabKey) : availableTabs[0];
 
   const today = todayString(tenant.timezone);
   const selectedPreset = VALID_PRESETS.includes(query.preset as DatePreset) ? (query.preset as DatePreset) : null;
@@ -162,6 +187,57 @@ export default async function BranchPerformancePage({
     }
   }
 
+  // Expenses RLS (expenses_select, migration 0080) already permits a
+  // genuine cross-branch read for an expenses.view_all holder -- unlike
+  // Sales/Stock, no service-role workaround is needed here. A
+  // canPickAnyBranch holder who happens to lack expenses.view_all
+  // (an unusual custom-role combination; both default Tenant-
+  // Administrator-only) just gets RLS's own narrower result, the same
+  // fail-closed behavior it already provides everywhere else -- not a
+  // leak, just a quieter branch than the UI implied.
+  const expenseService = new ExpenseService(supabase);
+  let expensesErrorMessage: string | null = null;
+  let expenseTotals: Awaited<ReturnType<ExpenseService["getRangeTotals"]>> = { total: 0, count: 0 };
+  let expenseTrend: Awaited<ReturnType<ExpenseService["getTrend"]>> = [];
+  let expenseBreakdown: Awaited<ReturnType<ExpenseService["getBreakdown"]>> = [];
+
+  if (showExpensesTab) {
+    try {
+      [expenseTotals, expenseTrend, expenseBreakdown] = await Promise.all([
+        expenseService.getRangeTotals(tenant.id, { ...dateRange, locationId: branchScope.effectiveLocationId ?? undefined }),
+        expenseService.getTrend(tenant.id, { ...dateRange, locationId: branchScope.effectiveLocationId ?? undefined }),
+        expenseService.getBreakdown(tenant.id, "category", { ...dateRange, locationId: branchScope.effectiveLocationId ?? undefined }),
+      ]);
+    } catch (err) {
+      expensesErrorMessage = err instanceof Error ? err.message : "Could not load Expense analytics";
+    }
+  }
+
+  // Same service-role rationale as Sales (§ comment above) -- stock_movements
+  // RLS has the identical current-branch-only lock.
+  const stockClient = branchScope.canPickAnyBranch ? createServiceRoleClient() : supabase;
+  const stockService = new StockService(stockClient);
+  let stockErrorMessage: string | null = null;
+  let stockOverview: Awaited<ReturnType<StockService["getDailyOverviewSummary"]>> | null = null;
+  let stockMovementTrend: Awaited<ReturnType<StockService["getMovementTrend"]>> = [];
+  let stockMovementTotals: Awaited<ReturnType<StockService["getMovementTotals"]>> = { received: 0, sold: 0, adjusted: 0 };
+  let topMovingProducts: Awaited<ReturnType<StockService["getTopMovingProducts"]>> = [];
+  let lowStock: Awaited<ReturnType<StockService["listLowStock"]>> = [];
+
+  if (showStockTab) {
+    try {
+      [stockOverview, stockMovementTrend, stockMovementTotals, topMovingProducts, lowStock] = await Promise.all([
+        stockService.getDailyOverviewSummary(tenant.id, today, branchScope.effectiveLocationId),
+        stockService.getMovementTrend(tenant.id, dateRange, branchScope.effectiveLocationId),
+        stockService.getMovementTotals(tenant.id, dateRange, branchScope.effectiveLocationId),
+        stockService.getTopMovingProducts(tenant.id, dateRange, branchScope.effectiveLocationId),
+        stockService.listLowStock(tenant.id, branchScope.effectiveLocationId),
+      ]);
+    } catch (err) {
+      stockErrorMessage = err instanceof Error ? err.message : "Could not load Stock analytics";
+    }
+  }
+
   const orderService = new OrderService(supabase);
   let orderAnalytics: Awaited<ReturnType<OrderService["getOrderAnalytics"]>> | null = null;
   let orderTrend: Awaited<ReturnType<OrderService["getOrderTrend"]>> = [];
@@ -199,6 +275,8 @@ export default async function BranchPerformancePage({
           <div className="overflow-x-auto">
             <TabsList className="w-max">
               {showSalesTab && <TabsTrigger value="sales">Sales</TabsTrigger>}
+              {showExpensesTab && <TabsTrigger value="expenses">Expenses</TabsTrigger>}
+              {showStockTab && <TabsTrigger value="stock">Stock</TabsTrigger>}
               {showOrdersTab && <TabsTrigger value="orders">Orders</TabsTrigger>}
             </TabsList>
           </div>
@@ -222,6 +300,82 @@ export default async function BranchPerformancePage({
                       />
                     )}
                     {dailyTrend.length < 2 && productPerformance.length === 0 && salesByBranch.length === 0 && (
+                      <p className="text-center text-sm text-muted-foreground">Not enough activity yet to report on.</p>
+                    )}
+                  </>
+                )
+              )}
+            </TabsContent>
+          )}
+
+          {showExpensesTab && (
+            <TabsContent value="expenses" className="space-y-4">
+              {expensesErrorMessage ? (
+                <p className="text-sm text-destructive">{expensesErrorMessage}</p>
+              ) : (
+                <>
+                  <KpiTileGrid
+                    tiles={[
+                      { label: "Total Expenses", value: expenseTotals.total.toFixed(2) },
+                      { label: "Expense Transactions", value: String(expenseTotals.count) },
+                      { label: "Average Expense", value: expenseTotals.count > 0 ? (expenseTotals.total / expenseTotals.count).toFixed(2) : "0.00" },
+                    ]}
+                  />
+                  <ExpenseTrendChartLazy data={expenseTrend} />
+                  {expenseBreakdown.length > 0 && (
+                    <ExpenseBreakdownList
+                      title="Expenses by Category"
+                      entries={expenseBreakdown.map((e) => ({ key: e.key, label: e.label, total: e.total, count: e.count }))}
+                    />
+                  )}
+                  {expenseBreakdown.length > 0 && (
+                    <ExpenseBreakdownList
+                      title="Largest Expense Categories"
+                      entries={expenseBreakdown.slice(0, 5).map((e) => ({ key: `top-${e.key}`, label: e.label, total: e.total, count: e.count }))}
+                    />
+                  )}
+                  {expenseTrend.length < 2 && expenseBreakdown.length === 0 && (
+                    <p className="text-center text-sm text-muted-foreground">Not enough activity yet to report on.</p>
+                  )}
+                </>
+              )}
+            </TabsContent>
+          )}
+
+          {showStockTab && (
+            <TabsContent value="stock" className="space-y-4">
+              {stockErrorMessage ? (
+                <p className="text-sm text-destructive">{stockErrorMessage}</p>
+              ) : (
+                stockOverview && (
+                  <>
+                    <KpiTileGrid
+                      tiles={[
+                        { label: "Stock Value", value: stockOverview.currentStockValue.toFixed(2) },
+                        { label: "Items in Stock", value: String(stockOverview.currentStockQuantity) },
+                        { label: "Stock Received", value: String(stockMovementTotals.received) },
+                        { label: "Stock Sold", value: String(stockMovementTotals.sold) },
+                        { label: "Stock Adjustments", value: String(stockMovementTotals.adjusted) },
+                        { label: "Low-Stock Items", value: String(stockOverview.lowStockCount) },
+                      ]}
+                    />
+                    {branchScope.effectiveLocationId != null && (
+                      <p className="text-xs text-muted-foreground">
+                        Per-branch stock tracking is new -- figures for a single branch may read as zero until movements start
+                        recording a branch. Stock Value/Items in Stock reflect right now; Received/Sold/Adjustments reflect the
+                        selected period.
+                      </p>
+                    )}
+                    <StockMovementChartLazy data={stockMovementTrend} />
+                    {topMovingProducts.length > 0 && (
+                      <SimpleBreakdownList
+                        title="Top-Moving Products"
+                        entries={topMovingProducts.map((p) => ({ key: p.productId, label: p.name, value: p.totalMovedQuantity }))}
+                        valueFormatter={(v) => String(v)}
+                      />
+                    )}
+                    <LowStockList tenantSlug={tenantSlug} rows={lowStock} />
+                    {stockMovementTrend.length < 2 && topMovingProducts.length === 0 && lowStock.length === 0 && (
                       <p className="text-center text-sm text-muted-foreground">Not enough activity yet to report on.</p>
                     )}
                   </>

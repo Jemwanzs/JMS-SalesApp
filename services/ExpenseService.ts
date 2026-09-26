@@ -918,4 +918,35 @@ export class ExpenseService {
 
     return [...totalsByDate.entries()].map(([date, total]) => ({ date, total })).sort((a, b) => a.date.localeCompare(b.date));
   }
+
+  /**
+   * Branch Performance's Expenses tab: Total Expenses/Expense
+   * Transactions/Average Expense for an arbitrary range. Deliberately
+   * NOT derived from summing getBreakdown's entries -- that method
+   * silently skips a row with a null category_id/label (its own
+   * `bucket()` helper), which would undercount the true total for any
+   * tenant with uncategorized expenses. This is a plain, complete
+   * aggregate over every matching row instead.
+   */
+  async getRangeTotals(tenantId: string, filters: { from: string; to: string; locationId?: string | null }): Promise<{ total: number; count: number }> {
+    let query = this.supabase
+      .from("expenses")
+      .select("actual_amount")
+      .eq("tenant_id", tenantId)
+      .eq("status", "active")
+      .gte("expense_date", filters.from)
+      .lte("expense_date", filters.to);
+
+    if (filters.locationId) {
+      query = query.eq("location_id", filters.locationId);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      throw new Error(`ExpenseService.getRangeTotals: ${error.message}`);
+    }
+
+    const rows = data ?? [];
+    return { total: rows.reduce((sum, r) => sum + Number(r.actual_amount), 0), count: rows.length };
+  }
 }
