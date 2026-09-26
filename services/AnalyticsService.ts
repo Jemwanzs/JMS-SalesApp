@@ -87,6 +87,13 @@ export interface DailyTrendPoint {
   transactionCount: number;
 }
 
+export interface SalesByBranchItem {
+  locationId: string;
+  locationName: string;
+  totalSales: number;
+  transactionCount: number;
+}
+
 export class AnalyticsService {
   constructor(private readonly supabase: SupabaseClient<Database>) {}
 
@@ -124,7 +131,8 @@ export class AnalyticsService {
     range: DateRangeInput,
     timezoneToday: string,
     perms: AnalyticsPermissions,
-    currentUserId: string
+    currentUserId: string,
+    locationId?: string | null
   ) {
     this.assertRangeAllowed(range, timezoneToday, perms);
 
@@ -136,25 +144,62 @@ export class AnalyticsService {
     // correction, a reversed original's amount is still real, exactly
     // offset by its new negative row, so both need to keep counting for
     // the pair to correctly net to zero.
-    let query = this.supabase
-      .from("sales")
-      .select("product_id, actual_amount, recorded_by, product_name_snapshot, sale_date")
-      .eq("tenant_id", tenantId)
-      .gte("sale_date", range.from)
-      .lte("sale_date", range.to)
-      .neq("status", "voided")
-      .neq("status", "corrected")
-      .neq("status", "deleted");
+    //
+    // location_id is selected (not just filtered on) so a caller reading
+    // ALL branches at once (Branch Performance's Sales tab, via a
+    // service-role client -- see that page's own header comment on why
+    // it needs one) can group these same rows by branch in JS, one fetch
+    // instead of one query per branch.
+    const buildQuery = () => {
+      let query = this.supabase
+        .from("sales")
+        .select("product_id, actual_amount, recorded_by, product_name_snapshot, sale_date, location_id")
+        .eq("tenant_id", tenantId)
+        .gte("sale_date", range.from)
+        .lte("sale_date", range.to)
+        .neq("status", "voided")
+        .neq("status", "corrected")
+        .neq("status", "deleted");
 
-    if (!perms.viewAll) {
-      query = query.eq("recorded_by", currentUserId);
-    }
+      if (!perms.viewAll) {
+        query = query.eq("recorded_by", currentUserId);
+      }
+      if (locationId) {
+        query = query.eq("location_id", locationId);
+      }
+      return query;
+    };
 
-    const { data, error } = await query;
-    if (error) {
-      throw new Error(`AnalyticsService: ${error.message}`);
+    // PostgREST caps any single response at this project's configured
+    // max-rows (confirmed live: exactly 1000, even when a wider .range()
+    // is explicitly requested) -- a busy tenant/wide-range combination
+    // can genuinely exceed that (confirmed live: MaliSafi's May seed
+    // data alone is 10,180 rows), which silently truncated EVERY caller
+    // of this method (getKpis/getDailyTrend/getProductPerformance/
+    // getUserPerformance, and therefore the standalone Analytics page
+    // too, not just Branch Performance) to whatever the first page
+    // happened to contain -- a real, pre-existing correctness bug this
+    // feature's own live verification exposed, not something new to fix
+    // for. Page through everything rather than assuming one request is
+    // ever enough.
+    const PAGE_SIZE = 1000;
+    type SaleRow = NonNullable<Awaited<ReturnType<typeof buildQuery>>["data"]>[number];
+    const rows: SaleRow[] = [];
+    let offset = 0;
+    while (true) {
+      const { data, error } = await buildQuery().range(offset, offset + PAGE_SIZE - 1);
+      if (error) {
+        throw new Error(`AnalyticsService: ${error.message}`);
+      }
+      if (data && data.length > 0) {
+        rows.push(...data);
+      }
+      if (!data || data.length < PAGE_SIZE) {
+        break;
+      }
+      offset += PAGE_SIZE;
     }
-    return data ?? [];
+    return rows;
   }
 
   private getSystemProductId(tenantId: string): Promise<string | null> {
@@ -176,9 +221,10 @@ export class AnalyticsService {
     range: DateRangeInput,
     timezoneToday: string,
     perms: AnalyticsPermissions,
-    currentUserId: string
+    currentUserId: string,
+    locationId?: string | null
   ): Promise<Kpis> {
-    const sales = await this.fetchSales(tenantId, range, timezoneToday, perms, currentUserId);
+    const sales = await this.fetchSales(tenantId, range, timezoneToday, perms, currentUserId, locationId);
 
     if (sales.length === 0) {
       return {
@@ -232,9 +278,10 @@ export class AnalyticsService {
     range: DateRangeInput,
     timezoneToday: string,
     perms: AnalyticsPermissions,
-    currentUserId: string
+    currentUserId: string,
+    locationId?: string | null
   ): Promise<DailyTrendPoint[]> {
-    const sales = await this.fetchSales(tenantId, range, timezoneToday, perms, currentUserId);
+    const sales = await this.fetchSales(tenantId, range, timezoneToday, perms, currentUserId, locationId);
 
     const byDate = new Map<string, { totalSales: number; transactionCount: number }>();
     for (const sale of sales) {
@@ -249,19 +296,55 @@ export class AnalyticsService {
       .sort((a, b) => a.date.localeCompare(b.date));
   }
 
+  /**
+   * Branch Performance's "Sales by Branch" breakdown -- only meaningful
+   * in the All-Branches view, so this is never called with a locationId
+   * (the caller already knows which single branch it's looking at
+   * otherwise). One unfiltered fetchSales call, grouped by location_id
+   * in JS, rather than one getKpis call per branch -- cheaper, and this
+   * is the only place that needs every branch's rows in one shot.
+   */
+  async getSalesByBranch(
+    tenantId: string,
+    range: DateRangeInput,
+    timezoneToday: string,
+    perms: AnalyticsPermissions,
+    currentUserId: string
+  ): Promise<SalesByBranchItem[]> {
+    const sales = await this.fetchSales(tenantId, range, timezoneToday, perms, currentUserId);
+
+    const byLocation = new Map<string, { totalSales: number; transactionCount: number }>();
+    for (const sale of sales) {
+      const entry = byLocation.get(sale.location_id) ?? { totalSales: 0, transactionCount: 0 };
+      entry.totalSales += Number(sale.actual_amount);
+      entry.transactionCount += 1;
+      byLocation.set(sale.location_id, entry);
+    }
+
+    const locationIds = [...byLocation.keys()];
+    const { data: locations } =
+      locationIds.length > 0 ? await this.supabase.from("locations").select("id, name").in("id", locationIds) : { data: [] };
+    const nameById = new Map((locations ?? []).map((l) => [l.id, l.name]));
+
+    return [...byLocation.entries()]
+      .map(([locationId, agg]) => ({ locationId, locationName: nameById.get(locationId) ?? "Unknown branch", ...agg }))
+      .sort((a, b) => b.totalSales - a.totalSales);
+  }
+
   async getProductPerformance(
     tenantId: string,
     range: DateRangeInput,
     timezoneToday: string,
     perms: AnalyticsPermissions,
     currentUserId: string,
-    limit = 10
+    limit = 10,
+    locationId?: string | null
   ): Promise<ProductPerformanceItem[]> {
     if (!perms.products) {
       throw new Error("AnalyticsService.getProductPerformance: missing analytics.products");
     }
 
-    const sales = await this.fetchSales(tenantId, range, timezoneToday, perms, currentUserId);
+    const sales = await this.fetchSales(tenantId, range, timezoneToday, perms, currentUserId, locationId);
     if (sales.length === 0) return [];
 
     const systemProductId = await this.getSystemProductId(tenantId);
@@ -351,13 +434,14 @@ export class AnalyticsService {
     timezoneToday: string,
     perms: AnalyticsPermissions,
     currentUserId: string,
-    limit = 10
+    limit = 10,
+    locationId?: string | null
   ): Promise<UserPerformanceItem[]> {
     if (!perms.allUsers || !perms.viewAll) {
       throw new Error("AnalyticsService.getUserPerformance: missing analytics.all_users or analytics.view_all");
     }
 
-    const sales = await this.fetchSales(tenantId, range, timezoneToday, perms, currentUserId);
+    const sales = await this.fetchSales(tenantId, range, timezoneToday, perms, currentUserId, locationId);
     if (sales.length === 0) return [];
 
     const byUser = new Map<string, { revenue: number; count: number }>();
