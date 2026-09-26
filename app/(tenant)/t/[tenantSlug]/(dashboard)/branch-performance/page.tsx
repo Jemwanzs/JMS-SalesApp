@@ -6,6 +6,7 @@ import { KpiCards } from "@/features/analytics/components/kpi-cards";
 import { ProductPerformanceChartLazy } from "@/features/analytics/components/product-performance-chart-lazy";
 import { ProductPerformanceList } from "@/features/analytics/components/product-performance-list";
 import { SalesTrendChartLazy } from "@/features/analytics/components/sales-trend-chart-lazy";
+import { BranchComparisonTable } from "@/features/branch-performance/components/branch-comparison-table";
 import { BranchPeriodFilter } from "@/features/branch-performance/components/branch-period-filter";
 import { KpiTileGrid } from "@/features/branch-performance/components/kpi-tile-grid";
 import { OrderTrendChartLazy } from "@/features/branch-performance/components/order-trend-chart-lazy";
@@ -254,6 +255,35 @@ export default async function BranchPerformancePage({
     ]);
   }
 
+  // Branch Comparison: only in genuine "All Branches" mode, and only
+  // meaningful with 2+ branches. Reuses the EXACT same per-branch
+  // methods/service instances every tab above already built (including
+  // their service-role-vs-RLS client choice) -- one Promise.all across
+  // the tenant's (small number of) active branches, not a separate
+  // aggregation. Columns are whichever tabs are actually enabled.
+  const showComparison = branchScope.canPickAnyBranch && branchScope.effectiveLocationId === null && branchScope.allBranches.length > 1;
+  const comparisonColumns: { key: "sales" | "expenses" | "stock" | "orders"; label: string }[] = [
+    ...(showSalesTab ? [{ key: "sales" as const, label: "Sales" }] : []),
+    ...(showExpensesTab ? [{ key: "expenses" as const, label: "Expenses" }] : []),
+    ...(showStockTab ? [{ key: "stock" as const, label: "Stock" }] : []),
+    ...(showOrdersTab ? [{ key: "orders" as const, label: "Orders" }] : []),
+  ];
+  const comparisonRows = showComparison
+    ? await Promise.all(
+        branchScope.allBranches.map(async (branch) => {
+          const [sales, expenses, stock, orders] = await Promise.all([
+            showSalesTab ? analyticsService.getKpis(tenant.id, dateRange, today, analyticsPerms, user.id, branch.id).then((k) => k.totalSales) : Promise.resolve(undefined),
+            showExpensesTab
+              ? expenseService.getRangeTotals(tenant.id, { ...dateRange, locationId: branch.id }).then((r) => r.total)
+              : Promise.resolve(undefined),
+            showStockTab ? stockService.getDailyOverviewSummary(tenant.id, today, branch.id).then((s) => s.currentStockValue) : Promise.resolve(undefined),
+            showOrdersTab ? orderService.getOrderAnalytics(tenant.id, range, branch.id).then((o) => o.totalCompletedValue) : Promise.resolve(undefined),
+          ]);
+          return { locationId: branch.id, locationName: branch.name, sales, expenses, stock, orders };
+        })
+      )
+    : [];
+
   return (
     <div className="flex flex-1 flex-col p-6 pb-24">
       <BackLink href={`/t/${tenantSlug}/more`} label="More" />
@@ -267,6 +297,8 @@ export default async function BranchPerformancePage({
         to={query.to}
         activeTab={activeTab ?? "sales"}
       />
+
+      {showComparison && <div className="mb-4"><BranchComparisonTable rows={comparisonRows} columns={comparisonColumns} /></div>}
 
       {availableTabs.length === 0 ? (
         <p className="p-8 text-center text-sm text-muted-foreground">No analytics are available for your account yet.</p>
