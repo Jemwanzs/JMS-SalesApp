@@ -124,6 +124,45 @@ export interface OrderCustomerDetail extends OrderCustomerListItem {
   orders: OrderListItem[];
 }
 
+/**
+ * Branch Performance module. totalOrders/pendingOrders/onDeliveryOrders/
+ * cancelledOrders are deliberately ALWAYS tenant-wide, never filtered by
+ * locationId, even when a branch is selected -- processed_from_location_id
+ * (migration 0098) is only ever set on a COMPLETED order, so filtering
+ * these tenant-wide counts by branch would misreport "0 pending" for
+ * every branch (a pending order never has a location yet). Only the
+ * completed-order figures are meaningfully branch-scoped.
+ */
+export interface OrderAnalytics {
+  totalOrders: number;
+  completedOrders: number;
+  pendingOrders: number;
+  onDeliveryOrders: number;
+  cancelledOrders: number;
+  totalCompletedValue: number;
+  averageCompletedValue: number;
+}
+
+export interface OrderTrendPoint {
+  date: string;
+  completedCount: number;
+  completedValue: number;
+}
+
+export interface OrderBranchBreakdownItem {
+  locationId: string;
+  locationName: string;
+  completedCount: number;
+  completedValue: number;
+}
+
+export interface OrderEmployeeBreakdownItem {
+  employeeId: string;
+  employeeName: string;
+  completedCount: number;
+  completedValue: number;
+}
+
 export interface OrderReceiptItem {
   name: string;
   amount: number;
@@ -630,5 +669,169 @@ export class OrderService {
       deliveryPersonMobile: order.delivery_person_mobile,
       cancellationReason: order.cancellation_reason,
     };
+  }
+
+  /**
+   * Branch Performance's Orders tab. `range` bounds `created_at` (every
+   * order, regardless of status) for the tenant-wide counts, and
+   * `completed_at` for the completed-order value figures -- an order
+   * created in-range but completed outside it (or vice versa) is
+   * intentionally not double-counted between the two: totalOrders etc.
+   * reflect orders CREATED in range, totalCompletedValue reflects orders
+   * COMPLETED in range, matching how a staff member would actually read
+   * "orders this period" vs "value completed this period."
+   */
+  async getOrderAnalytics(
+    tenantId: string,
+    range: { from: string; to: string },
+    locationId?: string | null
+  ): Promise<OrderAnalytics> {
+    const [{ data: createdRows, error: createdError }, { data: completedRows, error: completedError }] = await Promise.all([
+      this.supabase
+        .from("orders")
+        .select("status")
+        .eq("tenant_id", tenantId)
+        .gte("created_at", range.from)
+        .lte("created_at", range.to),
+      this.supabase
+        .from("orders")
+        .select("order_total, processed_from_location_id")
+        .eq("tenant_id", tenantId)
+        .eq("status", "completed")
+        .gte("completed_at", range.from)
+        .lte("completed_at", range.to),
+    ]);
+    if (createdError) throw new Error(`OrderService.getOrderAnalytics: ${createdError.message}`);
+    if (completedError) throw new Error(`OrderService.getOrderAnalytics: ${completedError.message}`);
+
+    const all = createdRows ?? [];
+    const completed = (completedRows ?? []).filter((r) => !locationId || r.processed_from_location_id === locationId);
+    const totalCompletedValue = completed.reduce((sum, r) => sum + Number(r.order_total), 0);
+
+    return {
+      totalOrders: all.length,
+      completedOrders: completed.length,
+      pendingOrders: all.filter((r) => r.status === "received" || r.status === "being_attended").length,
+      onDeliveryOrders: all.filter((r) => r.status === "on_delivery").length,
+      cancelledOrders: all.filter((r) => r.status === "cancelled" || r.status === "rejected").length,
+      totalCompletedValue,
+      averageCompletedValue: completed.length > 0 ? totalCompletedValue / completed.length : 0,
+    };
+  }
+
+  /** Day-bucketed completed-order count/value, same shape as AnalyticsService.getDailyTrend. */
+  async getOrderTrend(
+    tenantId: string,
+    range: { from: string; to: string },
+    locationId?: string | null
+  ): Promise<OrderTrendPoint[]> {
+    let query = this.supabase
+      .from("orders")
+      .select("completed_at, order_total")
+      .eq("tenant_id", tenantId)
+      .eq("status", "completed")
+      .gte("completed_at", range.from)
+      .lte("completed_at", range.to);
+    if (locationId) {
+      query = query.eq("processed_from_location_id", locationId);
+    }
+
+    const { data, error } = await query;
+    if (error) throw new Error(`OrderService.getOrderTrend: ${error.message}`);
+
+    const byDate = new Map<string, { count: number; value: number }>();
+    for (const row of data ?? []) {
+      if (!row.completed_at) continue;
+      const date = row.completed_at.slice(0, 10);
+      const entry = byDate.get(date) ?? { count: 0, value: 0 };
+      entry.count += 1;
+      entry.value += Number(row.order_total);
+      byDate.set(date, entry);
+    }
+
+    return [...byDate.entries()]
+      .map(([date, { count, value }]) => ({ date, completedCount: count, completedValue: value }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  /** Completed orders grouped by processed_from_location_id -- the "All Branches" breakdown itself, not filtered by a single branch. */
+  async getOrdersByBranch(tenantId: string, range: { from: string; to: string }): Promise<OrderBranchBreakdownItem[]> {
+    const { data, error } = await this.supabase
+      .from("orders")
+      .select("processed_from_location_id, order_total")
+      .eq("tenant_id", tenantId)
+      .eq("status", "completed")
+      .not("processed_from_location_id", "is", null)
+      .gte("completed_at", range.from)
+      .lte("completed_at", range.to);
+    if (error) throw new Error(`OrderService.getOrdersByBranch: ${error.message}`);
+
+    const byLocation = new Map<string, { count: number; value: number }>();
+    for (const row of data ?? []) {
+      const locationId = row.processed_from_location_id!;
+      const entry = byLocation.get(locationId) ?? { count: 0, value: 0 };
+      entry.count += 1;
+      entry.value += Number(row.order_total);
+      byLocation.set(locationId, entry);
+    }
+
+    const locationIds = [...byLocation.keys()];
+    const { data: locations } =
+      locationIds.length > 0 ? await this.supabase.from("locations").select("id, name").in("id", locationIds) : { data: [] };
+    const nameById = new Map((locations ?? []).map((l) => [l.id, l.name]));
+
+    return [...byLocation.entries()]
+      .map(([locationId, agg]) => ({
+        locationId,
+        locationName: nameById.get(locationId) ?? "Unknown branch",
+        completedCount: agg.count,
+        completedValue: agg.value,
+      }))
+      .sort((a, b) => b.completedValue - a.completedValue);
+  }
+
+  /** Completed orders grouped by processed_by_employee_id, optionally scoped to one branch. */
+  async getOrdersByEmployee(
+    tenantId: string,
+    range: { from: string; to: string },
+    locationId?: string | null
+  ): Promise<OrderEmployeeBreakdownItem[]> {
+    let query = this.supabase
+      .from("orders")
+      .select("processed_by_employee_id, order_total")
+      .eq("tenant_id", tenantId)
+      .eq("status", "completed")
+      .not("processed_by_employee_id", "is", null)
+      .gte("completed_at", range.from)
+      .lte("completed_at", range.to);
+    if (locationId) {
+      query = query.eq("processed_from_location_id", locationId);
+    }
+
+    const { data, error } = await query;
+    if (error) throw new Error(`OrderService.getOrdersByEmployee: ${error.message}`);
+
+    const byEmployee = new Map<string, { count: number; value: number }>();
+    for (const row of data ?? []) {
+      const employeeId = row.processed_by_employee_id!;
+      const entry = byEmployee.get(employeeId) ?? { count: 0, value: 0 };
+      entry.count += 1;
+      entry.value += Number(row.order_total);
+      byEmployee.set(employeeId, entry);
+    }
+
+    const employeeIds = [...byEmployee.keys()];
+    const { data: profiles } =
+      employeeIds.length > 0 ? await this.supabase.from("profiles").select("id, full_name").in("id", employeeIds) : { data: [] };
+    const nameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name]));
+
+    return [...byEmployee.entries()]
+      .map(([employeeId, agg]) => ({
+        employeeId,
+        employeeName: nameById.get(employeeId) ?? "Unknown employee",
+        completedCount: agg.count,
+        completedValue: agg.value,
+      }))
+      .sort((a, b) => b.completedValue - a.completedValue);
   }
 }

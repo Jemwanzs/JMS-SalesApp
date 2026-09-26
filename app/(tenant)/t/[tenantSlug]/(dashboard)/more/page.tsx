@@ -1,5 +1,6 @@
 import Link from "next/link";
 import {
+  BarChart3,
   Building2,
   ChevronRight,
   CreditCard,
@@ -86,6 +87,7 @@ export default async function MorePage({
     canViewOrders,
     canViewAllOrders,
     canViewOrderCustomers,
+    canViewBranchPerformance,
   ] =
     tenant && user
       ? await Promise.all([
@@ -106,8 +108,9 @@ export default async function MorePage({
           can("orders.view", { tenantId: tenant.id }),
           can("orders.view_all", { tenantId: tenant.id }),
           can("orders.view_customers", { tenantId: tenant.id }),
+          can("analytics.branch_performance", { tenantId: tenant.id }),
         ])
-      : [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false];
+      : [false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false, false];
 
   const isBillingOwner = tenant?.billing_owner_profile_id === user?.id;
 
@@ -161,6 +164,10 @@ export default async function MorePage({
     // dashboard itself is the "Orders" row above, in everydayItems.
     ...(ordersEnabled && canManageOrderProducts ? [{ label: "Order Products", icon: ShoppingCart, href: "orders/products" }] : []),
     ...(ordersEnabled && canViewOrderCustomers ? [{ label: "Customers", icon: Users, href: "orders/customers" }] : []),
+    // Branch Performance (Company-Wide Reports): Tenant-Administrator-
+    // only by default (analytics.branch_performance) -- same "hidden,
+    // not shown-disabled" convention as every other conditional row here.
+    ...(canViewBranchPerformance ? [{ label: "Branch Performance", icon: BarChart3, href: "branch-performance" }] : []),
     ...(canManageSettings ? [{ label: "Settings", icon: Settings, href: "settings" }] : []),
   ];
 
