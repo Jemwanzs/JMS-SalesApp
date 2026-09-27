@@ -146,10 +146,18 @@ export function ProductGrid({
                 sibling target inside this div, not nested in another
                 button -- see product-photo-viewer.tsx's stopPropagation
                 note. */}
+            {/* Slightly smaller than the shared PRODUCT_THUMBNAIL_CLASSES
+                default (h-20/w-20) -- Record Sale specifically, to
+                reclaim a little row space on a long product list; every
+                other consumer of ProductPhotoThumbnail (Products,
+                Stock) keeps the shared default untouched. `!` forces
+                the override since PRODUCT_THUMBNAIL_CLASSES is applied
+                first in that component's own class string. */}
             <ProductPhotoThumbnail
               imageUrl={product.imageUrl}
               productName={product.name}
               showName={product.showNameInPhotoView}
+              className="!h-[76px] !w-[76px]"
             />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
