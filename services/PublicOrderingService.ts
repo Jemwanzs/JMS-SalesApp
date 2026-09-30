@@ -72,6 +72,21 @@ export interface TrackedOrder {
   statusHistory: TrackedOrderStatusEvent[];
 }
 
+export interface CustomerOrderSummaryItem {
+  orderNumber: string | null;
+  status: OrderStatus;
+  orderTotal: number;
+  createdAt: string;
+  trackingToken: string;
+}
+
+export interface CustomerOrderHistory {
+  /** order_customers.order_count -- every order ever placed with this mobile number, regardless of eventual status. */
+  totalOrderCount: number;
+  /** Most recent 3 only -- each links to the existing /track/{trackingToken} page for full detail, same as a fresh order's own success screen. */
+  recentOrders: CustomerOrderSummaryItem[];
+}
+
 /**
  * The ONLY service that ever touches Customer Orders data on behalf of
  * an anonymous public visitor -- always constructed with the service-
@@ -249,6 +264,64 @@ export class PublicOrderingService {
       statusHistory: (history ?? []).map((h) => ({
         toStatus: h.to_status,
         changedAt: h.changed_at,
+      })),
+    };
+  }
+
+  /**
+   * The storefront's "My Orders" landing gate -- looked up by mobile
+   * number alone (the customer's own registration-time identity, same
+   * exact-match `.eq("mobile_number", ...)` convention upsertCustomer
+   * already uses, deliberately not normalized, so a number that doesn't
+   * match verbatim what was typed at checkout just reads as "no orders
+   * yet" rather than silently merging two differently-formatted
+   * entries). Confirmed with the user: no second-factor verification
+   * (e.g. name-must-also-match) -- the caller (the server action) rate-
+   * limits lookups by IP instead, matching this app's existing sign-up/
+   * password-reset abuse-protection posture. `null` is reserved for
+   * "this tenant/module isn't available at all" (mirrors
+   * getOrderByTrackingToken's own convention) -- a real tenant with a
+   * mobile number that has never ordered still returns a valid, empty
+   * CustomerOrderHistory, not null.
+   */
+  async getCustomerOrderHistory(tenantSlug: string, mobileNumber: string): Promise<CustomerOrderHistory | null> {
+    const { data: tenant } = await this.supabase.from("tenants").select("id, status").eq("slug", tenantSlug).maybeSingle();
+    if (!tenant || tenant.status !== "active") {
+      return null;
+    }
+
+    const ordersEnabled = await new TenantService(this.supabase).getSetting<boolean>(tenant.id, "orders_enabled");
+    if (!ordersEnabled) {
+      return null;
+    }
+
+    const { data: customer } = await this.supabase
+      .from("order_customers")
+      .select("id, order_count")
+      .eq("tenant_id", tenant.id)
+      .eq("mobile_number", mobileNumber)
+      .maybeSingle();
+
+    if (!customer) {
+      return { totalOrderCount: 0, recentOrders: [] };
+    }
+
+    const { data: recentOrders } = await this.supabase
+      .from("orders")
+      .select("order_number, status, order_total, created_at, tracking_token")
+      .eq("tenant_id", tenant.id)
+      .eq("customer_id", customer.id)
+      .order("created_at", { ascending: false })
+      .limit(3);
+
+    return {
+      totalOrderCount: customer.order_count,
+      recentOrders: (recentOrders ?? []).map((o) => ({
+        orderNumber: o.order_number,
+        status: o.status,
+        orderTotal: Number(o.order_total),
+        createdAt: o.created_at,
+        trackingToken: o.tracking_token,
       })),
     };
   }

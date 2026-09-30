@@ -53,6 +53,20 @@ export const submitPublicOrderSchema = z.object({
 
 export type SubmitPublicOrderInput = z.infer<typeof submitPublicOrderSchema>;
 
+// Storefront landing gate -- "enter your mobile number" before My
+// Orders / Order Now. Same bare min(1)/max(30) shape as
+// submitPublicOrderSchema's own mobileNumber field -- this is a lookup
+// key, not a new validation rule, so it must accept exactly whatever a
+// customer might have typed at checkout (order_customers/upsertCustomer
+// match mobile_number verbatim, no normalization -- see
+// PublicOrderingService's own header comment).
+export const lookupCustomerOrdersSchema = z.object({
+  tenantSlug: z.string().trim().min(1),
+  mobileNumber: z.string().trim().min(1, "Enter your mobile number").max(30),
+});
+
+export type LookupCustomerOrdersInput = z.infer<typeof lookupCustomerOrdersSchema>;
+
 export const markOrderOnDeliverySchema = z.object({
   orderId: z.uuid(),
   deliveryPersonName: z.string().trim().min(1, "Enter the delivery person's name").max(200),

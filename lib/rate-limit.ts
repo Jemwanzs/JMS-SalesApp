@@ -44,6 +44,12 @@ function createLimiter(prefix: string, maxRequests: number, window: `${number} $
 // hour from one address).
 export const signUpRateLimit = createLimiter("sign-up", 5, "1 h");
 export const passwordResetRateLimit = createLimiter("password-reset", 5, "1 h");
+// Public storefront "My Orders" lookup by mobile number (Customer
+// Orders module) -- a looser 10/hour than sign-up/password-reset since
+// a legitimate returning customer might genuinely check a few times,
+// but still tight enough to block a scripted sweep trying to enumerate
+// real customers' order histories by guessing numbers.
+export const orderLookupRateLimit = createLimiter("order-lookup", 10, "1 h");
 
 export async function checkRateLimit(limiter: Ratelimit | null, identifier: string): Promise<{ allowed: boolean }> {
   if (!limiter) {

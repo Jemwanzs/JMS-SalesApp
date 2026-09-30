@@ -4,11 +4,14 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 
 import { CartView } from "@/features/public-ordering/components/cart-view";
+import { CustomerIdentifyForm } from "@/features/public-ordering/components/customer-identify-form";
+import { CustomerOrderChoice } from "@/features/public-ordering/components/customer-order-choice";
+import { CustomerOrderHistoryList } from "@/features/public-ordering/components/customer-order-history-list";
 import { DeliveryDetailsForm, type DeliveryDetails } from "@/features/public-ordering/components/delivery-details-form";
 import { OrderConfirmationSummary } from "@/features/public-ordering/components/order-confirmation-summary";
 import { OrderSuccessScreen } from "@/features/public-ordering/components/order-success-screen";
 import { ProductList } from "@/features/public-ordering/components/product-list";
-import type { Storefront } from "@/services/PublicOrderingService";
+import type { CustomerOrderHistory, Storefront } from "@/services/PublicOrderingService";
 import type { SubmitOrderResult } from "@/services/PublicOrderingService";
 
 export interface CartLine {
@@ -19,30 +22,42 @@ export interface CartLine {
   requestedAmount: number;
 }
 
-type Step = "browse" | "cart" | "delivery" | "confirm" | "success";
+type Step = "identify" | "choice" | "myOrders" | "browse" | "cart" | "delivery" | "confirm" | "success";
 
 /**
- * Owns the ENTIRE customer flow on ONE route -- browse -> cart ->
- * delivery details -> confirm -> success -- as client-side step state,
- * matching this app's own established "no intermediate navigation"
- * idiom (RecordSaleDialog's tap-product -> enter-amount -> confirm ->
- * back-to-capture flow, just for a public multi-step checkout instead
- * of one dialog). Cart + delivery details + the idempotency key all
- * persist to sessionStorage, keyed by tenant slug, so a refresh mid-
- * flow doesn't lose progress (spec: "cart should persist during the
- * customer's current ordering session") -- cleared only after a
- * successful submission.
+ * Owns the ENTIRE customer flow on ONE route -- identify (mobile
+ * number) -> choice (My Orders / Order Now) -> [myOrders, a dead end
+ * back to choice] or [browse -> cart -> delivery details -> confirm ->
+ * success] -- as client-side step state, matching this app's own
+ * established "no intermediate navigation" idiom (RecordSaleDialog's
+ * tap-product -> enter-amount -> confirm -> back-to-capture flow, just
+ * for a public multi-step checkout instead of one dialog). Cart +
+ * delivery details + the idempotency key all persist to sessionStorage,
+ * keyed by tenant slug, so a refresh mid-flow doesn't lose progress
+ * (spec: "cart should persist during the customer's current ordering
+ * session") -- cleared only after a successful submission. The mobile
+ * number identified up front is deliberately NOT persisted/auto-
+ * skipped across a fresh page load (every visit re-prompts, per spec)
+ * -- it's only kept in memory for the rest of THIS mount, to prefill
+ * DeliveryDetailsForm if the customer goes on to Order Now.
  */
 export function OrderingStorefront({ storefront }: { storefront: Storefront }) {
   const cartKey = `orders-cart:${storefront.tenantSlug}`;
   const deliveryKey = `orders-delivery:${storefront.tenantSlug}`;
   const idempotencyKeyStorageKey = `orders-idempotency:${storefront.tenantSlug}`;
 
-  const [step, setStep] = useState<Step>("browse");
+  const [step, setStep] = useState<Step>("identify");
   const [cart, setCart] = useState<CartLine[]>([]);
   const [delivery, setDelivery] = useState<DeliveryDetails | null>(null);
   const [idempotencyKey, setIdempotencyKey] = useState("");
   const [successResult, setSuccessResult] = useState<SubmitOrderResult | null>(null);
+  // Every visit starts at "identify", per spec -- deliberately not
+  // persisted/auto-skipped across page loads, unlike cart/delivery
+  // below. Kept once identified for the rest of THIS session only, so
+  // "Order Now" can prefill DeliveryDetailsForm's mobile field without
+  // asking the customer to type the same number twice in one flow.
+  const [mobileNumber, setMobileNumber] = useState("");
+  const [orderHistory, setOrderHistory] = useState<CustomerOrderHistory | null>(null);
 
   // Restore from sessionStorage on mount -- client-only, so this
   // deliberately runs in an effect rather than useState's initializer
@@ -132,6 +147,39 @@ export function OrderingStorefront({ storefront }: { storefront: Storefront }) {
         <p className="text-sm text-muted-foreground">{storefront.welcomeMessage || "Order directly from us. Your order will be attended to promptly by our team."}</p>
       </header>
 
+      {step === "identify" && (
+        <CustomerIdentifyForm
+          tenantSlug={storefront.tenantSlug}
+          initialMobileNumber={mobileNumber}
+          onIdentified={(number, history) => {
+            setMobileNumber(number);
+            setOrderHistory(history);
+            setStep("choice");
+          }}
+        />
+      )}
+
+      {step === "choice" && orderHistory && (
+        <CustomerOrderChoice
+          totalOrderCount={orderHistory.totalOrderCount}
+          onViewOrders={() => setStep("myOrders")}
+          onOrderNow={() => setStep("browse")}
+          onChangeNumber={() => {
+            setOrderHistory(null);
+            setStep("identify");
+          }}
+        />
+      )}
+
+      {step === "myOrders" && orderHistory && (
+        <CustomerOrderHistoryList
+          tenantSlug={storefront.tenantSlug}
+          history={orderHistory}
+          onBack={() => setStep("choice")}
+          onOrderNow={() => setStep("browse")}
+        />
+      )}
+
       {step === "browse" && (
         <ProductList
           products={storefront.products}
@@ -154,7 +202,7 @@ export function OrderingStorefront({ storefront }: { storefront: Storefront }) {
 
       {step === "delivery" && (
         <DeliveryDetailsForm
-          initial={delivery}
+          initial={delivery ?? (mobileNumber ? { name: "", mobileNumber, deliveryLocation: "", deliveryDirections: "", orderNotes: "" } : null)}
           deliveryFeeNotice={storefront.deliveryFeeNotice}
           onBack={() => setStep("cart")}
           onContinue={(details) => {
